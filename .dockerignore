@@ -6,7 +6,7 @@ node_modules
 web/node_modules
 public
 data.json
-data.json.tmp
+data.json.*
 ngrok-domain.txt
 *.log
 tests

@@ -6,8 +6,11 @@ import { state } from '../stores/app'
 import Btn from './Btn.vue'
 
 const route = useRoute()
-// Cảnh báo toàn cục: mất kết nối Facebook hoặc token sắp hết hạn (không hiện ở trang Cài đặt vì đã có thẻ trạng thái riêng)
+// Cảnh báo toàn cục: không ghi được dữ liệu lên nơi lưu trữ, mất kết nối Facebook hoặc token sắp hết hạn
+// (hai loại sau không hiện ở trang Cài đặt vì đã có thẻ trạng thái riêng)
 const alert = computed(() => {
+  const st = state.storage
+  if (st && st.lastError) return { tone: 'danger', icon: AlertTriangle, title: `Chưa lưu được dữ liệu lên ${st.provider || 'nơi lưu trữ'}.`, text: `${st.lastError}. Tool đang tự thử lại; nếu tool khởi động lại lúc này, thay đổi mới có thể mất.` }
   if (state.settings.mock || !state.conn || route.name === 'settings') return null
   if (!state.conn.ok) return { tone: 'danger', icon: AlertTriangle, title: 'Mất kết nối Facebook.', text: state.conn.error, cta: 'Sửa kết nối' }
   const t = state.conn.token
@@ -23,7 +26,7 @@ const alert = computed(() => {
     <div v-if="alert" class="al" :class="alert.tone" role="alert">
       <component :is="alert.icon" :size="19" />
       <p><b>{{ alert.title }}</b> {{ alert.text }}</p>
-      <RouterLink to="/settings/connection"><Btn size="sm">{{ alert.cta }}</Btn></RouterLink>
+      <RouterLink v-if="alert.cta" to="/settings/connection"><Btn size="sm">{{ alert.cta }}</Btn></RouterLink>
     </div>
   </Transition>
 </template>

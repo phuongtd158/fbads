@@ -95,7 +95,8 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
 
-  if (m === 'GET' && p === '/api/state') return send(res, 200, { settings: publicSettings(), schedules: d.schedules, rules: d.rules });
+  if (m === 'GET' && p === '/api/state') return send(res, 200, { settings: publicSettings(), schedules: d.schedules, rules: d.rules, storage: store.status() });
+  if (m === 'GET' && p === '/api/storage') return send(res, 200, store.status());
   if (m === 'GET' && p === '/api/objects') return send(res, 200, await fb.listObjects(url.searchParams.get('refresh') === '1'));
   if (m === 'GET' && p === '/api/logs') return send(res, 200, d.logs.slice(0, 300));
 
@@ -220,15 +221,30 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Mặc định chỉ lắng nghe trên máy bạn (127.0.0.1). Mở ra mạng mà không có mật khẩu thì từ chối chạy.
-if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !auth.enabled()) {
-  console.error('\n  ❌ HOST mở ra mạng nhưng chưa có mật khẩu.\n  Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự) rồi chạy lại.\n');
-  process.exit(1);
+const fatal = (msg) => { console.error(`\n  ❌ ${msg}\n`); process.exit(1); };
+
+// Tắt (Render gửi SIGTERM khi deploy/khởi động lại): ghi nốt thay đổi đang chờ lên nơi lưu trữ rồi mới thoát
+let closing = false;
+async function shutdown(sig) {
+  if (closing) return;
+  closing = true;
+  console.log(`\n  Nhận ${sig}, đang lưu dữ liệu trước khi tắt…`);
+  try { await Promise.race([store.flush(), new Promise((r) => setTimeout(r, 8000))]); } catch { /* đã ghi log lỗi */ }
+  process.exit(0);
 }
-import('./shared/validate.mjs').then((mod) => {
-  V = mod;
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
+
+(async () => {
+  try { V = await import('./shared/validate.mjs'); } catch (e) { return fatal(`Không nạp được shared/validate.mjs: ${e.message}`); }
+  // Nạp dữ liệu TRƯỚC khi kiểm tra mật khẩu: mật khẩu đặt trong Cài đặt nằm trong dữ liệu (nhất là khi lưu ở Upstash)
+  try { await store.init(); } catch (e) { return fatal(e.message); }
+  // Mặc định chỉ lắng nghe trên máy bạn (127.0.0.1). Mở ra mạng mà không có mật khẩu thì từ chối chạy.
+  if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !auth.enabled()) {
+    return fatal('HOST mở ra mạng nhưng chưa có mật khẩu.\n  Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự) rồi chạy lại.');
+  }
   server.listen(PORT, HOST, () => {
-    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
+    const st = store.status();
+    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : 'file data.json'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
     engine.start();
   });
-}).catch((e) => { console.error('Không nạp được shared/validate.mjs:', e.message); process.exit(1); });
+})();

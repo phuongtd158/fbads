@@ -55,13 +55,33 @@ Mở `https://bongbi.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào C
 - Dữ liệu (`data.json`) nằm trên volume `fbads_data` (`DATA_DIR=/data`), giữ nguyên khi deploy lại. Sao lưu: `fly ssh sftp get /data/data.json`.
 - Cập nhật code: `fly deploy --ha=false`. Xem log: `fly logs`.
 
-## Deploy lên Render (chạy 24/7)
-**Bắt buộc gói trả phí + ổ đĩa**: gói Free tự ngủ sau 15 phút không có truy cập và xoá dữ liệu mỗi lần khởi động lại, nên lịch/rule không chạy được.
-1. dashboard.render.com → **New → Blueprint** → chọn repo này, nhánh `dev`. Render đọc `render.yaml` (Docker, Singapore, ổ đĩa 1GB gắn vào `/data`).
-2. Khi được hỏi, nhập **`APP_PASSWORD`** (mật khẩu đăng nhập). Bấm Apply.
-3. Đợi deploy xong; log phải có `Facebook Ads Auto Tool đang chạy` và `Đăng nhập: BẬT`. Mở địa chỉ `https://….onrender.com`, đăng nhập rồi vào Cài đặt → Kết nối Facebook.
-- Chỉ chạy **1 instance** (có ổ đĩa thì Render không cho nhân bản). Đừng chạy song song bản Fly/ngrok với cùng token Facebook vì việc sẽ bị làm hai lần.
-- Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn). Service có ổ đĩa không deploy liền mạch nên sẽ ngắt vài chục giây.
+## Nơi lưu dữ liệu
+Tool có 2 chế độ lưu, chọn bằng biến môi trường:
+- **File `data.json`** (mặc định) trong `DATA_DIR`. Mỗi ngày tự giữ 1 bản sao `data.json.bak-<ngày>` (7 bản gần nhất). Nếu file bị hỏng, tool **không ghi đè**: đổi tên file hỏng thành `data.json.corrupt-<giờ>`, khôi phục từ bản sao gần nhất và ghi một dòng cảnh báo vào Nhật ký.
+- **Upstash Redis** (khi đặt `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` + `DATA_KEY`): dùng khi nơi chạy **không có ổ đĩa bền** (Render gói Free). Toàn bộ dữ liệu được nén và **mã hoá AES-256-GCM bằng `DATA_KEY`** trước khi gửi đi, nên Upstash không đọc được token hay cấu hình. Thay đổi được gộp và ghi sau ~1,5 giây, tự thử lại khi lỗi mạng (giao diện hiện cảnh báo đỏ khi chưa ghi được) và được ghi nốt khi tool bị tắt. Nếu lúc khởi động không đọc được dữ liệu (mạng lỗi, sai `DATA_KEY`) thì tool **dừng lại** thay vì chạy với dữ liệu trống rồi ghi đè.
+  - **Lưu `DATA_KEY` ở nơi khác** (trình quản lý mật khẩu). Mất khoá thì không giải mã được dữ liệu trên Upstash (token nhập lại được, lịch/rule phải tạo lại). Đừng đổi `DATA_KEY` khi đã có dữ liệu.
+  - Chỉ chạy **một nơi** dùng chung một Upstash: hai bản cùng chạy sẽ ghi đè nhau và làm việc hai lần trên cùng tài khoản Facebook.
+  - Lần đầu, nếu chạy ở máy có sẵn `data.json` thì dữ liệu đó được đưa lên Upstash (dùng để chuyển từ máy bạn lên Render).
+  - Đặt biến `UPSTASH_…` mà thiếu `DATA_KEY` (hoặc sai định dạng) thì tool từ chối khởi động và nói rõ thiếu gì.
+
+## Deploy lên Render
+### Cách A: gói Free + Upstash (không mất tiền)
+Gói Free không có ổ đĩa, nên dữ liệu để ở Upstash. Gói Free còn **tự ngủ sau 15 phút không có truy cập**, nên cần một dịch vụ bên ngoài gọi vào định kỳ để giữ tool thức (bước 4), nếu không lịch buổi sáng có thể không chạy đúng giờ.
+1. **Upstash**: đăng ký upstash.com → Create Database (Redis, chọn vùng gần Singapore) → tab **REST API**: sao chép `UPSTASH_REDIS_REST_URL` và `UPSTASH_REDIS_REST_TOKEN`.
+2. **Tạo `DATA_KEY`**: chuỗi ngẫu nhiên dài, ví dụ chạy `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`. Lưu nó vào trình quản lý mật khẩu.
+3. **Render**: dashboard.render.com → **New → Blueprint** → repo này, nhánh `dev`. Render đọc `render.yaml` (Docker, gói Free, Singapore). Khi được hỏi, nhập 4 biến: `APP_PASSWORD` (mật khẩu đăng nhập), `DATA_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`. Bấm Apply.
+   - Nếu đã tạo service tay: **Environment** → thêm 4 biến trên (và `TZ` = `Asia/Ho_Chi_Minh`), **xoá `DATA_DIR`** nếu có, rồi Deploy lại. Gói Free thì không gắn Disk.
+4. **Giữ tool thức**: dùng UptimeRobot (hoặc dịch vụ tương tự) tạo monitor HTTP(s) gọi `https://<tên>.onrender.com/api/auth` mỗi 5 phút. Bật cảnh báo qua Telegram/email để biết khi tool sập.
+5. Xem log deploy, cần có `Lưu dữ liệu: Upstash (đã mã hoá bằng DATA_KEY)` và `Đăng nhập: BẬT`. Mở địa chỉ tool, đăng nhập rồi vào Cài đặt → Kết nối Facebook. Ở Cài đặt → Chung có dòng "Nơi lưu dữ liệu" cho biết lần lưu cuối.
+
+Lưu ý gói Free: mỗi lần Render khởi động lại tool mất khoảng 1 phút, lịch trễ dưới 10 phút vẫn được chạy bù. Render có thể khởi động lại instance Free bất cứ lúc nào. Lịch phải chạy đúng giờ thì nên dùng cách B.
+
+### Cách B: gói trả phí + ổ đĩa
+Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) gắn vào `/data`. Trong `render.yaml`, bỏ đoạn "Cách A" và bỏ dấu `#` ở đoạn "Cách B" (gói trả phí + `disk` + `DATA_DIR=/data`), rồi Blueprint như trên (chỉ cần nhập `APP_PASSWORD`). Không có Disk thì `data.json` mất mỗi lần deploy.
+
+### Chung cho cả hai cách
+- Chỉ chạy **1 instance**. Đừng chạy song song bản Fly/ngrok/máy bạn với cùng token Facebook vì việc sẽ bị làm hai lần.
+- Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn).
 - IP người dùng lấy từ tiêu đề `CF-Connecting-IP` (tự nhận biết qua biến `RENDER`); có thể ép bằng biến `CLIENT_IP_HEADER`.
 
 ## Kiểm tra dữ liệu (validate)

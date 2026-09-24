@@ -14,6 +14,7 @@ export const state = reactive({
   objsAt: null,
   conn: null,
   connChecking: false,
+  storage: null, // { mode: 'file' | 'remote', provider, lastSavedAt, lastError, pending }
 })
 
 onUnauthorized(() => { state.auth.authed = false })
@@ -27,6 +28,12 @@ export async function loadState() {
   state.settings = s.settings
   state.schedules = s.schedules
   state.rules = s.rules
+  state.storage = s.storage || null
+}
+
+// Nơi lưu dữ liệu có đang ghi được không (chạy ngầm, chỉ cần khi lưu ở dịch vụ ngoài)
+export async function loadStorage() {
+  try { state.storage = await api('storage', 'GET', undefined, { bg: true }) } catch { /* mất kết nối tool: cảnh báo khác lo */ }
 }
 
 export async function loadObjs(force = false, bg = false) {

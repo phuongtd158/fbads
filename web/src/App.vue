@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { state, bootstrap, loadObjs, checkConn } from './stores/app'
+import { state, bootstrap, loadObjs, checkConn, loadStorage } from './stores/app'
 import { palette } from './stores/ui'
 import Sidebar from './components/Sidebar.vue'
 import MobileTabbar from './components/MobileTabbar.vue'
@@ -27,6 +27,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKey)
   // Tự làm mới số liệu mỗi 60 giây khi đang xem Tổng quan (chạy ngầm, không hiện thanh tiến trình)
   timer = setInterval(() => {
+    if (state.auth.authed && !document.hidden && state.storage && state.storage.mode === 'remote') loadStorage()
     if (route.name === 'overview' && !document.hidden && state.auth.authed && !state.objsLoading && !document.querySelector('.editing')) { loadObjs(true, true); checkConn() }
   }, 60000)
 })

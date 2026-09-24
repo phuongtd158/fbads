@@ -1,28 +1,61 @@
-# Render Blueprint: tạo web service từ Dockerfile, có ổ đĩa lưu dữ liệu.
-# Ổ đĩa bền vững (persistent disk) CHỈ có ở gói trả phí. Gói `free` sẽ tự ngủ sau 15 phút không có truy cập
-# và mất dữ liệu mỗi lần khởi động lại, nên KHÔNG dùng được cho tool này (lịch/rule cần chạy liên tục).
+# Render Blueprint: tạo web service từ Dockerfile.
+#
+# CÁCH A (đang bật): gói Free + lưu dữ liệu ở Upstash Redis (đã mã hoá bằng DATA_KEY). Không tốn tiền, không cần ổ đĩa.
+#   Gói Free tự ngủ sau 15 phút không có truy cập → cần dịch vụ ngoài (UptimeRobot…) gọi /api/auth mỗi 5 phút để giữ thức.
+#   Render sẽ hỏi 4 giá trị bí mật khi tạo: APP_PASSWORD, DATA_KEY, UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN.
+# CÁCH B: gói trả phí + ổ đĩa bền, dữ liệu ở data.json. Xem khối "CÁCH B" ở cuối file.
 services:
   - type: web
     name: fbads
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: singapore          # không đổi được sau khi tạo
-    plan: 0.5c-512mb           # gói trả phí nhỏ nhất (trước đây gọi là "Starter"); nếu Render báo sai tên gói, chọn gói này trong dashboard
+    plan: free
     branch: dev
     autoDeployTrigger: commit  # push lên nhánh dev thì tự deploy
     healthCheckPath: /api/auth
     envVars:
       - key: HOST
         value: 0.0.0.0         # Render yêu cầu nghe trên 0.0.0.0 (cổng lấy từ biến PORT do Render đặt)
-      - key: DATA_DIR
-        value: /data           # thư mục ổ đĩa: chứa data.json (token, lịch, rule, nhật ký)
       - key: TRUST_PROXY
         value: "1"             # lấy IP thật của người dùng từ proxy để giới hạn nhập sai mật khẩu
       - key: TZ
         value: Asia/Ho_Chi_Minh
       - key: APP_PASSWORD
         sync: false            # Render sẽ hỏi bạn nhập khi tạo; không lưu trong file này
-    disk:
-      name: fbads-data
-      mountPath: /data
-      sizeGB: 1
+      - key: DATA_KEY
+        sync: false            # khoá mã hoá dữ liệu gửi lên Upstash (≥ 16 ký tự). LƯU Ở NƠI KHÁC: mất khoá = không đọc lại được dữ liệu
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false            # dạng https://xxxx.upstash.io
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+
+# ---------------------------------------------------------------------------------------------------------------
+# CÁCH B: gói trả phí + ổ đĩa. Thay khối "services" ở trên bằng khối dưới (bỏ dấu # ở đầu dòng) và bỏ 3 biến DATA_KEY,
+# UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN. Ổ đĩa bền chỉ có ở gói trả phí; không có ổ đĩa thì data.json mất mỗi lần deploy.
+#
+# services:
+#   - type: web
+#     name: fbads
+#     runtime: docker
+#     dockerfilePath: ./Dockerfile
+#     region: singapore
+#     plan: starter            # nếu Render báo sai tên gói, chọn gói trả phí nhỏ nhất trong dashboard
+#     branch: dev
+#     autoDeployTrigger: commit
+#     healthCheckPath: /api/auth
+#     envVars:
+#       - key: HOST
+#         value: 0.0.0.0
+#       - key: DATA_DIR
+#         value: /data         # thư mục ổ đĩa: chứa data.json (token, lịch, rule, nhật ký)
+#       - key: TRUST_PROXY
+#         value: "1"
+#       - key: TZ
+#         value: Asia/Ho_Chi_Minh
+#       - key: APP_PASSWORD
+#         sync: false
+#     disk:
+#       name: fbads-data
+#       mountPath: /data
+#       sizeGB: 1
