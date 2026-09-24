@@ -1,0 +1,47 @@
+<script setup>
+import { reactive } from 'vue'
+import { Send, Save, FileText } from 'lucide-vue-next'
+import { state, saveSettings } from '../../stores/app'
+import { toast } from '../../stores/ui'
+import { api } from '../../lib/api'
+import Btn from '../../components/Btn.vue'
+import Field from '../../components/Field.vue'
+import Badge from '../../components/Badge.vue'
+
+const f = reactive({ token: '', chatId: state.settings.telegramChatId || '', reportTime: state.settings.reportTime || '08:00' })
+
+const save = async () => { await saveSettings({ telegramToken: f.token.trim(), telegramChatId: f.chatId.trim(), reportTime: f.reportTime }); f.token = ''; toast('Đã lưu cài đặt Telegram') }
+const test = async () => { await save(); await api('telegram/test', 'POST'); toast('Đã gửi tin thử — kiểm tra Telegram') }
+const report = async () => { await save(); await api('report', 'POST'); toast('Đã gửi báo cáo') }
+</script>
+
+<template>
+  <section class="card pad">
+    <h3>Thông báo Telegram</h3>
+    <p class="muted sub">Nhận tin mỗi khi tool thay đổi camp, kèm báo cáo tổng hợp mỗi sáng. Không bắt buộc.</p>
+    <div class="grid">
+      <Field label="Bot Token"><template #aside><Badge v-if="state.settings.has_telegramToken" tone="success">đã lưu</Badge></template>
+        <input v-model="f.token" class="input" type="password" autocomplete="off" :placeholder="state.settings.has_telegramToken ? 'Để trống = giữ token cũ' : '123456:ABC…'" /></Field>
+      <Field label="Chat ID"><input v-model="f.chatId" class="input" placeholder="Vd: 123456789" /></Field>
+      <Field label="Báo cáo hằng ngày lúc"><input v-model="f.reportTime" class="input" type="time" /></Field>
+    </div>
+    <div class="btns">
+      <Btn variant="primary" :icon="Save" :action="save">Lưu</Btn>
+      <Btn :icon="Send" :action="test">Gửi tin thử</Btn>
+      <Btn :icon="FileText" :action="report">Gửi báo cáo ngay</Btn>
+    </div>
+    <details>
+      <summary>Cách lấy Bot Token và Chat ID</summary>
+      <ol><li>Chat với <b>@BotFather</b>, gõ <code>/newbot</code> để lấy Bot Token.</li><li>Nhắn 1 tin bất kỳ cho bot vừa tạo.</li><li>Mở <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> và lấy số <code>chat.id</code>.</li></ol>
+    </details>
+  </section>
+</template>
+
+<style scoped>
+h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 20px; font-size: 14.5px; }
+.grid { display: grid; grid-template-columns: 1.4fr 1fr 170px; gap: 14px; }
+.btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+details { margin-top: 20px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+summary { cursor: pointer; font-weight: 600; font-size: 14px; } ol { margin: 10px 0 0; padding-left: 20px; font-size: 14.5px; } li { margin-bottom: 6px; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+</style>

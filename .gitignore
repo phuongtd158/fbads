@@ -1,0 +1,10 @@
+# Dữ liệu và bí mật (token Facebook, Telegram, mật khẩu) — KHÔNG đưa lên git
+data.json
+data.json.tmp
+.env
+*.log
+node_modules/
+
+# Giao diện Vue (build ra public/)
+web/node_modules/
+web/dist/

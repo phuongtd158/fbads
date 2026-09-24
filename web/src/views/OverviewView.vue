@@ -1,0 +1,255 @@
+<script setup>
+import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone } from 'lucide-vue-next'
+import { state, loadObjs } from '../stores/app'
+import { toast, toastError, confirm } from '../stores/ui'
+import { api } from '../lib/api'
+import { fmt, fmtDec, fmtCompact } from '../lib/format'
+import { STATUS } from '../lib/constants'
+import Btn from '../components/Btn.vue'
+import Switch from '../components/Switch.vue'
+import Badge from '../components/Badge.vue'
+import Segmented from '../components/Segmented.vue'
+import Skeleton from '../components/Skeleton.vue'
+import EmptyState from '../components/EmptyState.vue'
+import ProgressRing from '../components/ProgressRing.vue'
+import AnimatedNumber from '../components/AnimatedNumber.vue'
+import BudgetCell from '../components/BudgetCell.vue'
+
+const route = useRoute()
+const q = ref(String(route.query.q || ''))
+const filter = ref('all')
+const level = ref('campaign')
+const busy = reactive({})
+const bulkText = ref('')
+const searchEl = ref(null)
+
+watch(() => route.query.q, (v) => { if (v !== undefined) q.value = String(v) })
+// nếu dữ liệu bị xoá khi đang xem (đổi chế độ, đổi tài khoản…) thì tự tải lại
+watch(() => state.objsLoaded, (loaded) => { if (!loaded && !state.objsLoading) loadObjs() })
+onMounted(() => {
+  // đã có dữ liệu → làm mới ngầm (không nháy); chưa có → tải bình thường
+  state.objsLoaded ? loadObjs(true, true) : loadObjs()
+  window.addEventListener('keydown', slash)
+})
+const slash = (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); searchEl.value && searchEl.value.focus() } }
+onBeforeUnmount(() => window.removeEventListener('keydown', slash))
+
+const currency = computed(() => (state.conn && state.conn.currency) || 'VND')
+const camps = computed(() => state.objs.filter((o) => o.level === 'campaign'))
+const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
+const running = computed(() => camps.value.filter((o) => o.effective === 'ACTIVE'))
+const totalSpend = computed(() => camps.value.reduce((t, o) => t + o.metrics.spend, 0))
+const totalResults = computed(() => camps.value.reduce((t, o) => t + o.metrics.results, 0))
+const activeBudget = computed(() => running.value.reduce((t, o) => t + (o.dailyBudget || 0), 0))
+const budgetPct = computed(() => (activeBudget.value ? Math.min(100, (totalSpend.value / activeBudget.value) * 100) : 0))
+const avgCpa = computed(() => (totalResults.value ? totalSpend.value / totalResults.value : null))
+const avgRoas = computed(() => {
+  const w = camps.value.filter((o) => o.metrics.roas != null && o.metrics.spend > 0)
+  const s = w.reduce((t, o) => t + o.metrics.spend, 0)
+  return s ? w.reduce((t, o) => t + o.metrics.roas * o.metrics.spend, 0) / s : null
+})
+const top = computed(() => [...camps.value].filter((o) => o.metrics.spend > 0).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3))
+const topMax = computed(() => (top.value[0] ? top.value[0].metrics.spend : 1))
+
+const inLevel = computed(() => state.objs.filter((o) => o.level === level.value))
+const visible = computed(() => {
+  const s = q.value.trim().toLowerCase()
+  return inLevel.value.filter((o) => (filter.value === 'all' || (filter.value === 'on') === (o.effective === 'ACTIVE')) && (!s || o.name.toLowerCase().includes(s)))
+})
+const filterOptions = computed(() => [
+  { value: 'all', label: 'Tất cả', count: inLevel.value.length },
+  { value: 'on', label: 'Đang chạy', count: inLevel.value.filter((o) => o.effective === 'ACTIVE').length },
+  { value: 'off', label: 'Tạm dừng', count: inLevel.value.filter((o) => o.effective !== 'ACTIVE').length },
+])
+const levelOptions = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm QC' }]
+const footTotals = computed(() => visible.value.reduce((a, o) => ({ s: a.s + o.metrics.spend, r: a.r + o.metrics.results }), { s: 0, r: 0 }))
+
+const statusOf = (o) => STATUS[o.effective] || { label: o.effective, tone: 'warning' }
+const roasTone = (o) => (!o.metrics.spend || o.metrics.roas == null ? null : o.metrics.roas >= 2 ? 'success' : o.metrics.roas < 1 ? 'danger' : 'warning')
+const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
+
+async function toggle(o, on) {
+  const prev = { status: o.status, effective: o.effective }
+  o.status = on ? 'ACTIVE' : 'PAUSED'; if (settled(o)) o.effective = o.status // cập nhật ngay (optimistic)
+  busy[o.id] = true
+  try {
+    await api(`objects/${o.id}/status`, 'POST', { on, name: o.name })
+    toast((on ? 'Đã bật: ' : 'Đã tắt: ') + o.name)
+  } catch (e) { Object.assign(o, prev); toastError(e) } finally { busy[o.id] = false }
+}
+
+async function bulk(on) {
+  const list = visible.value.filter((o) => (o.status === 'ACTIVE') !== on)
+  if (!list.length) return toast(on ? 'Tất cả đã bật' : 'Tất cả đã tắt')
+  const names = list.slice(0, 4).map((o) => o.name).join(', ') + (list.length > 4 ? ` và ${list.length - 4} mục khác` : '')
+  if (!await confirm(`${on ? 'Bật' : 'Tắt'} ${list.length} mục?`, names, { ok: on ? 'Bật' : 'Tắt', danger: !on })) return
+  let n = 0
+  for (const o of list) {
+    bulkText.value = `${on ? 'Đang bật' : 'Đang tắt'} ${++n}/${list.length}…`
+    try { await api(`objects/${o.id}/status`, 'POST', { on, name: o.name }); o.status = on ? 'ACTIVE' : 'PAUSED'; if (settled(o)) o.effective = o.status } catch (e) { toastError(e) }
+  }
+  bulkText.value = ''
+  toast(`Đã ${on ? 'bật' : 'tắt'} ${list.length} mục`)
+}
+</script>
+
+<template>
+  <div>
+    <Teleport to="#page-actions" defer>
+      <Btn :icon="RefreshCw" :loading="state.objsLoading" :action="() => loadObjs(true)">Làm mới</Btn>
+    </Teleport>
+
+    <!-- Bento KPI -->
+    <div class="bento stagger">
+      <section class="card hero">
+        <template v-if="!state.objsLoaded"><Skeleton w="120px" /><Skeleton w="220px" h="38px" /><Skeleton w="80%" /></template>
+        <template v-else>
+          <div class="hero-l">
+            <p class="lbl">Chi tiêu hôm nay</p>
+            <p class="big"><AnimatedNumber :value="totalSpend" /><small>{{ currency }}</small></p>
+            <p class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${fmt(activeBudget)}` : 'Chưa có ngân sách cấp camp' }}</p>
+            <div v-if="top.length" class="tops">
+              <div v-for="t in top" :key="t.id" class="top"><span class="tn" :title="t.name">{{ t.name }}</span><i class="tbar"><b :style="{ width: (t.metrics.spend / topMax) * 100 + '%' }" /></i><em class="num">{{ fmtCompact(t.metrics.spend) }}</em></div>
+            </div>
+          </div>
+          <ProgressRing :value="budgetPct" :size="128" :stroke="12"><div class="rc"><b class="num">{{ Math.round(budgetPct) }}%</b><small class="faint">ngân sách</small></div></ProgressRing>
+        </template>
+      </section>
+
+      <section class="card kpi"><p class="lbl">Đang chạy</p>
+        <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
+        <template v-else><p class="val"><AnimatedNumber :value="running.length" /><small> / {{ camps.length }}</small></p><p class="sub faint">{{ camps.length - running.length ? `${camps.length - running.length} camp đang dừng` : 'Tất cả đang chạy' }}</p></template>
+      </section>
+      <section class="card kpi"><p class="lbl">Kết quả</p>
+        <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
+        <template v-else><p class="val"><AnimatedNumber :value="totalResults" /></p><p class="sub faint">theo “{{ state.settings.resultAction || 'purchase' }}”</p></template>
+      </section>
+      <section class="card kpi"><p class="lbl">CPA trung bình</p>
+        <Skeleton v-if="!state.objsLoaded" h="30px" w="110px" />
+        <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" /></template><template v-else>–</template></p><p class="sub faint">{{ avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
+      </section>
+      <section class="card kpi"><p class="lbl">ROAS trung bình</p>
+        <Skeleton v-if="!state.objsLoaded" h="30px" w="80px" />
+        <template v-else><p class="val" :class="avgRoas != null && (avgRoas >= 2 ? 'ok' : avgRoas < 1 ? 'bad' : 'warn')">{{ avgRoas != null ? fmtDec(avgRoas) : '–' }}</p><p class="sub faint">Doanh thu chia chi tiêu</p></template>
+      </section>
+    </div>
+
+    <!-- Bảng chiến dịch -->
+    <section class="card panel">
+      <div class="tb">
+        <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" placeholder="Tìm chiến dịch…" /><kbd>/</kbd></div>
+        <Segmented v-model="filter" :options="filterOptions" size="sm" />
+        <Segmented v-if="hasAdsets" v-model="level" :options="levelOptions" size="sm" />
+        <span class="sp" />
+        <Btn size="sm" :icon="Power" :action="() => bulk(true)">{{ bulkText.startsWith('Đang bật') ? bulkText : 'Bật tất cả' }}</Btn>
+        <Btn size="sm" variant="danger" :icon="Power" :action="() => bulk(false)">{{ bulkText.startsWith('Đang tắt') ? bulkText : 'Tắt tất cả' }}</Btn>
+      </div>
+
+      <div v-if="!state.objsLoaded" class="skel"><div v-for="i in 5" :key="i"><Skeleton h="44px" r="12px" /></div></div>
+      <EmptyState v-else-if="state.objsErr && !state.objs.length" :icon="PlugZap" tone="danger" title="Chưa tải được dữ liệu" :text="state.objsErr">
+        <RouterLink to="/settings/connection"><Btn variant="primary">Kiểm tra kết nối</Btn></RouterLink>
+      </EmptyState>
+      <EmptyState v-else-if="!visible.length" :icon="q ? SearchX : Megaphone" :title="q ? 'Không có kết quả phù hợp' : 'Chưa có chiến dịch nào'" :text="q ? 'Thử đổi từ khoá hoặc bộ lọc.' : 'Khi tài khoản có chiến dịch, chúng sẽ hiện ở đây.'" />
+
+      <div v-else class="table">
+        <div class="hd row">
+          <span /><span>{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}</span>
+          <div class="metrics"><span class="r">Ngân sách/ngày</span><span class="r">Chi tiêu</span><span class="r">Kết quả</span><span class="r">CPA</span><span class="r">ROAS</span></div>
+        </div>
+        <TransitionGroup name="row" tag="div">
+          <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
+            <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
+            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><Badge :tone="statusOf(o).tone" dot>{{ statusOf(o).label }}</Badge></div>
+            <div class="metrics">
+              <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
+              <div class="m r"><span class="ml">Chi tiêu</span><span class="num sp">{{ fmt(o.metrics.spend) }}</span>
+                <i v-if="o.dailyBudget" class="mini"><b :style="{ width: Math.min(100, (o.metrics.spend / o.dailyBudget) * 100) + '%' }" /></i></div>
+              <div class="m r"><span class="ml">Kết quả</span><span class="num">{{ o.metrics.results }}</span></div>
+              <div class="m r"><span class="ml">CPA</span><span class="num">{{ fmt(o.metrics.cpa) }}</span></div>
+              <div class="m r"><span class="ml">ROAS</span><Badge v-if="roasTone(o)" :tone="roasTone(o)" class="num">{{ fmtDec(o.metrics.roas) }}</Badge><span v-else class="faint">–</span></div>
+            </div>
+          </div>
+        </TransitionGroup>
+      </div>
+
+      <div v-if="state.objsLoaded && visible.length" class="foot faint">
+        <span><b class="num">{{ visible.length }}</b> mục</span>
+        <span>Chi tiêu <b class="num">{{ fmt(footTotals.s) }}</b></span>
+        <span>Kết quả <b class="num">{{ fmt(footTotals.r) }}</b></span>
+        <span v-if="state.objsAt" class="right">Cập nhật {{ state.objsAt.toLocaleTimeString('vi-VN') }}</span>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; margin-bottom: 20px; }
+.hero { grid-column: span 6; grid-row: span 2; padding: 24px 26px; display: flex; align-items: center; justify-content: space-between; gap: 20px; overflow: hidden; position: relative; }
+.hero::after { content: ''; position: absolute; inset: auto -60px -80px auto; width: 240px; height: 240px; border-radius: 50%; background: var(--accent-grad); opacity: .07; filter: blur(30px); pointer-events: none; }
+.hero-l { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.lbl { font-size: 13.5px; font-weight: 600; color: var(--text-2); }
+.big { font-size: 42px; font-weight: 750; letter-spacing: -.04em; line-height: 1.1; }
+.big small { font-size: 15px; font-weight: 600; color: var(--text-3); margin-left: 8px; letter-spacing: 0; }
+.sub { font-size: 13.5px; }
+.rc { display: flex; flex-direction: column; line-height: 1.1; } .rc b { font-size: 26px; letter-spacing: -.03em; } .rc small { font-size: 12px; margin-top: 3px; }
+.tops { margin-top: 16px; display: grid; gap: 9px; }
+.top { display: grid; grid-template-columns: minmax(0, 1.3fr) 1fr auto; gap: 12px; align-items: center; font-size: 13.5px; }
+.tn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.tbar { height: 6px; background: var(--surface-3); border-radius: 99px; overflow: hidden; }
+.tbar b { display: block; height: 100%; background: var(--accent-grad); border-radius: 99px; transition: width .8s var(--ease); }
+.top em { font-style: normal; font-weight: 650; min-width: 44px; text-align: right; }
+.kpi { grid-column: span 3; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px; transition: transform .2s var(--ease), box-shadow .2s; }
+.kpi:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.val { font-size: 30px; font-weight: 720; letter-spacing: -.03em; line-height: 1.1; }
+.val small { font-size: 15px; color: var(--text-3); font-weight: 600; letter-spacing: 0; }
+.val.ok { color: var(--success); } .val.bad { color: var(--danger); } .val.warn { color: var(--warning); }
+.kpi .sub { font-size: 13px; }
+
+.panel { overflow: hidden; }
+.tb { display: flex; align-items: center; gap: 12px; padding: 16px 18px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.tb .sp { flex: 1; }
+.search { position: relative; flex: 1 1 220px; max-width: 320px; }
+.search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
+.search .input { padding: 8px 40px 8px 36px; }
+.search kbd { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); }
+.skel { padding: 16px 18px; display: grid; gap: 12px; }
+
+/* bảng dạng lưới: máy tính = bảng; điện thoại = thẻ */
+.row { display: grid; grid-template-columns: 70px minmax(220px, 2fr) minmax(0, 3.6fr); align-items: center; padding: 0 18px; gap: 6px; }
+.metrics { display: grid; grid-template-columns: 1.15fr 1.15fr .7fr .9fr .8fr; gap: 10px; align-items: center; }
+.r { text-align: right; justify-self: end; }
+.hd { padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
+.hd .metrics span { width: 100%; text-align: right; }
+.item { min-height: 68px; border-bottom: 1px solid var(--border); transition: background .15s; }
+.item:last-child { border-bottom: 0; }
+.item:hover { background: var(--surface-2); }
+.item.off .c-nm b { color: var(--text-2); }
+.c-nm { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 0; }
+.c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }
+.m { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0; }
+.ml { display: none; font-size: 12px; color: var(--text-3); }
+.sp { font-weight: 600; }
+.mini { width: 74px; height: 4px; border-radius: 9px; background: var(--surface-3); overflow: hidden; }
+.mini b { display: block; height: 100%; background: var(--accent-grad); }
+.foot { display: flex; gap: 22px; flex-wrap: wrap; padding: 13px 20px; border-top: 1px solid var(--border); font-size: 13.5px; }
+.foot b { color: var(--text); } .foot .right { margin-left: auto; }
+.row-enter-active, .row-leave-active { transition: all .3s var(--ease); }
+.row-enter-from, .row-leave-to { opacity: 0; transform: translateX(-10px); }
+
+@media (max-width: 1100px) { .hero { grid-column: span 12; grid-row: auto; } .kpi { grid-column: span 6; } }
+@media (max-width: 860px) {
+  .hd { display: none; }
+  .row { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; gap: 10px 14px; }
+  .metrics { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .m { align-items: flex-start; } .r { justify-self: start; text-align: left; }
+  .ml { display: block; }
+  .c-nm { padding: 0; }
+  .item { min-height: 0; }
+  .big { font-size: 34px; }
+  .hero { flex-direction: column; align-items: flex-start; }
+  .kpi { grid-column: span 6; }
+  .tb .sp { display: none; }
+}
+</style>
