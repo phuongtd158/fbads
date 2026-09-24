@@ -38,6 +38,22 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. Cấ
 
 An toàn: file .bat từ chối mở đường hầm nếu đang có một bản tool chạy sẵn mà **không có mật khẩu**. Máy phải bật thì link mới dùng được; dùng lâu dài nên chuyển sang VPS.
 
+## Deploy lên Fly.io (chạy 24/7)
+Cần tài khoản Fly.io (có thẻ) và `flyctl`. Không cần cài Docker trên máy (Fly tự build).
+```powershell
+iwr https://fly.io/install.ps1 -useb | iex
+fly auth login
+# 1) sửa dòng app = ... trong fly.toml thành tên duy nhất của bạn, rồi:
+fly apps create TEN-APP
+fly volumes create fbads_data --region sin --size 1
+fly secrets set APP_PASSWORD="mat-khau-manh-cua-ban"
+fly deploy --ha=false
+```
+Mở `https://TEN-APP.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào Cài đặt → Kết nối Facebook.
+- **Chỉ chạy 1 máy** (`--ha=false`, kiểm tra bằng `fly status`): lịch và rule chạy trong tiến trình này, 2 máy sẽ làm trùng việc.
+- Dữ liệu (`data.json`) nằm trên volume `fbads_data` (`DATA_DIR=/data`), giữ nguyên khi deploy lại. Sao lưu: `fly ssh sftp get /data/data.json`.
+- Cập nhật code: `fly deploy --ha=false`. Xem log: `fly logs`.
+
 ## Kiểm tra dữ liệu (validate)
 - Luật nghiệp vụ nằm ở một nơi: `shared/validate.mjs`, dùng chung cho server (kiểm tra cứng, không tin trình duyệt) và giao diện (báo lỗi ngay khi nhập).
 - Chặn: lịch/rule thiếu giờ-ngày-camp, giảm ngân sách ≥ 100%, đổi ngân sách camp CBO, lịch bật/tắt xung đột, rule thiếu chi tiêu tối thiểu hoặc không có thời gian nghỉ, trần < sàn, khung giờ qua đêm, múi giờ/chu kỳ sai, token/Chat ID sai định dạng, mật khẩu yếu, chuyển Chạy thật khi chưa kết nối.

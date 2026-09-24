@@ -1,0 +1,35 @@
+# Cấu hình Fly.io. Đổi `app` thành một tên duy nhất của bạn (chữ thường, số, dấu gạch ngang).
+app = 'fbads-doi-ten-cua-ban'
+primary_region = 'sin' # Singapore, gần Việt Nam
+
+[build]
+
+[env]
+  HOST = '0.0.0.0'         # lắng nghe cho proxy của Fly (bắt buộc đặt secret APP_PASSWORD, nếu không tool từ chối chạy)
+  PORT = '3000'
+  DATA_DIR = '/data'       # thư mục volume: chứa data.json (token, lịch, rule, nhật ký)
+  TRUST_PROXY = '1'        # lấy IP thật của người dùng từ proxy để giới hạn nhập sai mật khẩu
+  TZ = 'Asia/Ho_Chi_Minh'
+
+# CHỈ chạy 1 máy: lịch và rule chạy trong tiến trình này, chạy 2 máy sẽ bị làm trùng việc.
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = 'off'   # không được tự tắt máy, nếu không lịch không chạy
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = '15s'
+    interval = '30s'
+    timeout = '5s'
+    method = 'GET'
+    path = '/api/auth'
+
+[[mounts]]
+  source = 'fbads_data'
+  destination = '/data'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '256mb'

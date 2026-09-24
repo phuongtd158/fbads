@@ -1,0 +1,17 @@
+# Không đưa vào image: dữ liệu/bí mật, thư viện cài sẵn, bản build cũ (sẽ build lại trong image)
+.git
+.idea
+.vscode
+node_modules
+web/node_modules
+public
+data.json
+data.json.tmp
+ngrok-domain.txt
+*.log
+tests
+scripts
+*.bat
+fly.toml
+Dockerfile
+.dockerignore
