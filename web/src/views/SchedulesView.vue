@@ -99,7 +99,7 @@ async function remove(s) {
     <section v-else class="card"><EmptyState :icon="CalendarClock" title="Chưa có lịch nào" text="Chọn một mẫu ở trên hoặc bấm “Thêm lịch”. Tool sẽ tự chạy đúng giờ, bạn không cần dậy sớm nữa.">
       <Btn variant="primary" :icon="Plus" @click="open(null)">Thêm lịch đầu tiên</Btn></EmptyState></section>
 
-    <p class="note faint">Giờ chạy tính theo múi giờ <b>{{ state.settings.timezone }}</b>. Nếu máy bật trễ tối đa 10 phút so với giờ hẹn, tool vẫn chạy bù.</p>
+    <p class="note faint">Giờ chạy tính theo múi giờ <b>{{ state.settings.timezone }}</b>. Nếu máy bật trễ tối đa 10 phút so với giờ hẹn, tool vẫn chạy bù. <RouterLink to="/help/schedules">Xem hướng dẫn về lịch →</RouterLink></p>
     <ScheduleEditor v-model="editor" :item="editing" @saved="refresh" />
   </div>
 </template>

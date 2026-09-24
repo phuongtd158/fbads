@@ -1,0 +1,350 @@
+// Validate nghiệp vụ dùng chung cho server (Node) và giao diện (Vue).
+// Server là nơi kiểm tra cứng (không tin dữ liệu từ trình duyệt); giao diện dùng cùng luật để báo lỗi ngay khi nhập.
+// Mỗi hàm trả về { ok, errors: { field: message }, warnings: [message], value, first }.
+
+export const LIMITS = {
+    nameMax: 80,
+    budgetMax: 1e10,
+    scheduleSetPctMax: 300, // lịch: tăng tối đa +300%
+    rulePctIncreaseMax: 100, // rule: tăng tối đa +100% mỗi lần
+    rulePctDecreaseMax: 90, // giảm tối đa -90% (không cho về 0)
+    bigPctWarn: 30, // thay đổi lớn hơn mức này thì cảnh báo
+    cooldownMax: 168,
+    intervalMin: 5,
+    intervalMax: 1440,
+}
+const METRICS = ['cpa', 'roas', 'spend', 'results']
+const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả'}
+const isBlank = (v) => v === '' || v === null || v === undefined
+const num = (v) => (isBlank(v) ? NaN : Number(v))
+const uniq = (a) => [...new Set(a)]
+const money = (n) => Math.round(n).toLocaleString('vi-VN')
+
+export const isTime = (s) => typeof s === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(s)
+
+export function isTimezone(tz) {
+    if (typeof tz !== 'string' || !tz.trim()) return false
+    try {
+        new Intl.DateTimeFormat('en-US', {timeZone: tz});
+        return true
+    } catch {
+        return false
+    }
+}
+
+const done = (errors, warnings, value) => ({
+    ok: Object.keys(errors).length === 0,
+    errors,
+    warnings,
+    value,
+    first: Object.values(errors)[0] || ''
+})
+
+function nameOf(objs, id) {
+    const o = objs && objs.find((x) => x.id === id)
+    return o ? o.name : id
+}
+
+const inter = (a, b) => a.filter((x) => b.includes(x))
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
+
+/* ------------------------------------------------------------------ Lịch */
+export function validateSchedule(input = {}, ctx = {}) {
+    const {objs = null, schedules = []} = ctx
+    const e = {}, w = []
+    const name = String(input.name ?? '').trim()
+    if (name.length > LIMITS.nameMax) e.name = `Tên tối đa ${LIMITS.nameMax} ký tự`
+
+    const action = input.action
+    if (!['on', 'off', 'budget'].includes(action)) e.action = 'Hành động không hợp lệ'
+
+    if (!isTime(input.time)) e.time = 'Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)'
+
+    const days = uniq((Array.isArray(input.days) ? input.days : []).map(Number)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
+    if (!days.length) e.days = 'Hãy chọn ít nhất 1 ngày trong tuần'
+
+    const targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
+    if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch'
+    else if (objs) {
+        const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
+        if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}. Hãy bỏ chọn chúng.`
+    }
+
+    let mode = input.mode === 'set' ? 'set' : 'percent'
+    let value = num(input.value)
+    if (action === 'budget') {
+        if (!Number.isFinite(value)) e.value = 'Nhập giá trị đổi ngân sách'
+        else if (mode === 'percent') {
+            if (value === 0) e.value = 'Phần trăm phải khác 0'
+            else if (value <= -100) e.value = 'Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -90%.'
+            else if (value < -LIMITS.rulePctDecreaseMax) e.value = `Giảm tối đa ${LIMITS.rulePctDecreaseMax}% mỗi lần`
+            else if (value > LIMITS.scheduleSetPctMax) e.value = `Tăng tối đa ${LIMITS.scheduleSetPctMax}% mỗi lần`
+            else if (Math.abs(value) >= 50) w.push(`${value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(value)}% một lần là thay đổi lớn, Facebook có thể học lại từ đầu.`)
+        } else {
+            if (value <= 0) e.value = 'Ngân sách phải lớn hơn 0'
+            else if (value > LIMITS.budgetMax) e.value = 'Ngân sách quá lớn, hãy kiểm tra lại số 0'
+            else value = Math.round(value)
+        }
+        if (!e.targets && objs) {
+            const cbo = targets.filter((id) => {
+                const o = objs.find((x) => x.id === id);
+                return o && o.dailyBudget == null
+            })
+            if (cbo.length) e.targets = `Các mục sau không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO): ${cbo.slice(0, 3).map((id) => nameOf(objs, id)).join(', ')}${cbo.length > 3 ? '…' : ''}. Hãy bỏ chúng hoặc chọn mục có ngân sách.`
+        }
+    }
+
+    // Xung đột với các lịch đang bật
+    const enabled = input.enabled !== false
+    if (enabled && !e.time && !e.days && !e.targets && !e.action) {
+        for (const o of schedules) {
+            if (o.id && o.id === input.id) continue
+            if (o.enabled === false || o.time !== input.time) continue
+            const sharedDays = inter(days, (o.days || []).map(Number)), sharedTargets = inter(targets, o.targets || [])
+            if (!sharedDays.length || !sharedTargets.length) continue
+            const names = sharedTargets.slice(0, 2).map((id) => nameOf(objs, id)).join(', ')
+            const opposite = (action === 'on' && o.action === 'off') || (action === 'off' && o.action === 'on')
+            const identical = action === o.action && (action !== 'budget' || (mode === (o.mode === 'set' ? 'set' : 'percent') && Number(o.value) === value)) && sameSet(days, (o.days || []).map(Number)) && sameSet(targets, o.targets || [])
+            if (opposite) {
+                e.conflict = `Xung đột với lịch “${o.name}”: cùng lúc ${input.time} nhưng làm điều ngược lại (${o.action === 'on' ? 'bật' : 'tắt'}) cho ${names}.`;
+                break
+            }
+            if (identical) {
+                e.conflict = `Đã có lịch giống hệt: “${o.name}”.`;
+                break
+            }
+            if (action === 'budget' && o.action === 'budget') w.push(`Lịch “${o.name}” cũng đổi ngân sách của ${names} lúc ${input.time}, kết quả có thể khó đoán.`)
+        }
+    }
+
+    return done(e, w, {
+        ...(input.id ? {id: String(input.id)} : {}),
+        name: name || 'Lịch mới',
+        action,
+        time: input.time,
+        days,
+        targets,
+        mode,
+        value: Number.isFinite(value) ? value : 0,
+        enabled,
+        ...(Number(input.max) > 0 ? {max: Number(input.max)} : {}), ...(Number(input.min) > 0 ? {min: Number(input.min)} : {}),
+    })
+}
+
+/* ------------------------------------------------------------------ Rule */
+function condRange(r) {
+    return r.op === '>' ? [Number(r.value), Infinity] : [-Infinity, Number(r.value)]
+}
+
+function condOverlap(a, b) {
+    if (a.op === b.op) return true
+    const [lo, hi] = a.op === '>' ? [Number(a.value), Number(b.value)] : [Number(b.value), Number(a.value)]
+    return lo < hi
+}
+
+export function validateRule(input = {}, ctx = {}) {
+    const {objs = null, rules = []} = ctx
+    const e = {}, w = []
+    const name = String(input.name ?? '').trim()
+    if (name.length > LIMITS.nameMax) e.name = `Tên tối đa ${LIMITS.nameMax} ký tự`
+
+    const metric = input.metric
+    if (!METRICS.includes(metric)) e.metric = 'Số liệu không hợp lệ'
+    const op = input.op === '<' ? '<' : input.op === '>' ? '>' : null
+    if (!op) e.op = 'Phép so sánh không hợp lệ'
+
+    const value = num(input.value)
+    if (!Number.isFinite(value)) e.value = 'Nhập ngưỡng so sánh'
+    else if (value < 0) e.value = 'Ngưỡng không được âm'
+    else if ((metric === 'cpa' || metric === 'spend') && op === '>' && value <= 0) e.value = `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`
+    else if (metric === 'roas' && value > 100) e.value = 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại'
+
+    const minSpend = isBlank(input.minSpend) ? 0 : num(input.minSpend)
+    if (!Number.isFinite(minSpend) || minSpend < 0) e.minSpend = 'Chi tiêu tối thiểu phải là số không âm'
+    else if (metric && metric !== 'spend' && minSpend <= 0) e.minSpend = 'Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.'
+
+    const action = input.action
+    if (!['pause', 'increase', 'decrease'].includes(action)) e.action = 'Hành động không hợp lệ'
+    let pct = num(input.pct)
+    if (action === 'increase' || action === 'decrease') {
+        if (!Number.isFinite(pct) || pct <= 0) e.pct = 'Nhập % thay đổi lớn hơn 0'
+        else if (action === 'decrease' && pct > LIMITS.rulePctDecreaseMax) e.pct = `Giảm tối đa ${LIMITS.rulePctDecreaseMax}% mỗi lần (giảm 100% là đưa ngân sách về 0)`
+        else if (action === 'increase' && pct > LIMITS.rulePctIncreaseMax) e.pct = `Tăng tối đa ${LIMITS.rulePctIncreaseMax}% mỗi lần`
+        else if (pct > LIMITS.bigPctWarn) w.push(`${action === 'increase' ? 'Tăng' : 'Giảm'} ${pct}% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.`)
+    } else pct = 0
+
+    const maxBudget = isBlank(input.maxBudget) ? 0 : num(input.maxBudget)
+    const minBudget = isBlank(input.minBudget) ? 0 : num(input.minBudget)
+    if (!Number.isFinite(maxBudget) || maxBudget < 0) e.maxBudget = 'Trần ngân sách phải là số không âm'
+    if (!Number.isFinite(minBudget) || minBudget < 0) e.minBudget = 'Sàn ngân sách phải là số không âm'
+    if (!e.maxBudget && !e.minBudget && maxBudget > 0 && minBudget > 0 && maxBudget < minBudget) e.maxBudget = 'Trần ngân sách phải lớn hơn hoặc bằng sàn'
+    if (action === 'increase' && !e.maxBudget && maxBudget <= 0) w.push('Chưa đặt trần ngân sách: ngân sách có thể tăng mãi qua nhiều ngày. Nên đặt trần.')
+    if (action === 'decrease' && !e.minBudget && minBudget <= 0) w.push('Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn.')
+
+    const cooldown = isBlank(input.cooldownHours) ? 0 : num(input.cooldownHours)
+    if (!Number.isFinite(cooldown) || cooldown < 0 || cooldown > LIMITS.cooldownMax) e.cooldownHours = `Thời gian nghỉ từ 0 đến ${LIMITS.cooldownMax} giờ`
+    else if ((action === 'increase' || action === 'decrease') && cooldown < 1) e.cooldownHours = 'Rule đổi ngân sách cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không ngân sách sẽ thay đổi liên tục mỗi lần kiểm tra.'
+
+    const from = input.from || '', to = input.to || ''
+    if (from || to) {
+        if (!from || !to) e.window = 'Hãy nhập cả giờ bắt đầu và giờ kết thúc (hoặc để trống cả hai)'
+        else if (!isTime(from) || !isTime(to)) e.window = 'Khung giờ không hợp lệ'
+        else if (from >= to) e.window = 'Giờ bắt đầu phải nhỏ hơn giờ kết thúc (chưa hỗ trợ khung giờ qua đêm)'
+    }
+
+    const allActive = input.allActive !== false
+    const targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
+    if (!allActive) {
+        if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 camp áp dụng'
+        else if (objs) {
+            const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
+            if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}.`
+        }
+    }
+
+    // Cảnh báo mâu thuẫn với rule khác đang bật
+    const enabled = input.enabled !== false
+    if (enabled && !e.metric && !e.op && !e.value && !e.action) {
+        const kind = (a) => (a === 'increase' ? 'up' : 'down') // pause & decrease đều là "giảm chi"
+        for (const o of rules) {
+            if (o.id && o.id === input.id) continue
+            if (o.enabled === false || o.metric !== metric || !(o.op === '>' || o.op === '<')) continue
+            const scopeOverlap = allActive || o.allActive !== false || inter(targets, o.targets || []).length > 0
+            if (!scopeOverlap) continue
+            if (kind(o.action) !== kind(action) && condOverlap({op, value}, o)) {
+                w.push(`Rule “${o.name}” có thể mâu thuẫn: cùng xét ${METRIC_LABEL[metric]} nhưng ${o.action === 'increase' ? 'tăng' : o.action === 'pause' ? 'tắt' : 'giảm'} ngân sách trong vùng giá trị chồng lấn.`)
+                break
+            }
+        }
+    }
+
+    return done(e, w, {
+        ...(input.id ? {id: String(input.id)} : {}),
+        name: name || 'Rule mới',
+        metric,
+        op,
+        value: Number.isFinite(value) ? value : 0,
+        minSpend: Number.isFinite(minSpend) ? minSpend : 0,
+        action,
+        pct: Number.isFinite(pct) ? pct : 0,
+        maxBudget: Number.isFinite(maxBudget) ? maxBudget : 0,
+        minBudget: Number.isFinite(minBudget) ? minBudget : 0,
+        cooldownHours: Number.isFinite(cooldown) ? cooldown : 0,
+        from: from && to ? from : '',
+        to: from && to ? to : '',
+        allActive,
+        level: 'campaign',
+        targets: allActive ? [] : targets,
+        enabled,
+    })
+}
+
+/* ------------------------------------------------------- Sửa ngân sách tay */
+
+// `old` là ngân sách hiện tại (nếu biết). confirm = câu cảnh báo cần người dùng xác nhận.
+export function validateBudget(next, old) {
+    const v = num(next)
+    if (!Number.isFinite(v)) return {ok: false, error: 'Nhập ngân sách hợp lệ (số)'}
+    if (v <= 0) return {ok: false, error: 'Ngân sách phải lớn hơn 0'}
+    if (v > LIMITS.budgetMax) return {ok: false, error: 'Ngân sách quá lớn, hãy kiểm tra lại số 0'}
+    const value = Math.round(v)
+    const o = Number(old)
+    let confirm = ''
+    if (o > 0) {
+        const ratio = value / o
+        if (ratio >= 2) confirm = `Ngân sách sẽ tăng từ ${money(o)} lên ${money(value)} (gấp ${ratio.toFixed(1).replace('.0', '')} lần).`
+        else if (ratio <= 0.5) confirm = `Ngân sách sẽ giảm từ ${money(o)} xuống ${money(value)} (giảm ${Math.round((1 - ratio) * 100)}%).`
+    }
+    return {ok: true, value, confirm}
+}
+
+/* ------------------------------------------------------------- Cài đặt */
+const TG_TOKEN = /^\d{6,}:[A-Za-z0-9_-]{30,}$/
+const TG_CHAT = /^(-?\d{5,}|@[A-Za-z0-9_]{5,})$/
+
+export function checkToken(t) {
+    const s = String(t ?? '').trim()
+    if (!s) return 'Hãy dán Access Token'
+    if (/\s/.test(s)) return 'Token không được chứa khoảng trắng hay xuống dòng'
+    if (s.length < 20) return 'Token quá ngắn, hãy sao chép đầy đủ (thường bắt đầu bằng EAA…)'
+    return ''
+}
+
+export const cleanAccountId = (v) => String(v ?? '').trim().replace(/^act_/i, '')
+export const checkAccountId = (v) => (/^\d{5,}$/.test(cleanAccountId(v)) ? '' : 'ID tài khoản quảng cáo chỉ gồm chữ số (ví dụ 1234567890)')
+export const checkAppId = (v) => (/^\d{8,}$/.test(String(v ?? '').trim()) ? '' : 'App ID chỉ gồm chữ số (ít nhất 8 số)')
+export const checkAppSecret = (v) => (/^[a-f0-9]{16,}$/i.test(String(v ?? '').trim()) ? '' : 'App Secret gồm chữ và số (thường 32 ký tự)')
+export const checkTelegramToken = (v) => (!v || TG_TOKEN.test(String(v).trim()) ? '' : 'Bot Token không đúng dạng (ví dụ 123456789:AAxxxxxxxx…)')
+export const checkTelegramChat = (v) => (!v || TG_CHAT.test(String(v).trim()) ? '' : 'Chat ID là một dãy số (có thể có dấu -) hoặc @tenkenh')
+
+// patch: dữ liệu client gửi lên; current: cài đặt hiện tại (server: đầy đủ; giao diện: truyền has_accessToken → accessToken dạng cờ)
+export function validateSettings(patch = {}, current = {}) {
+    const e = {}, v = {}
+    const has = (k) => Object.prototype.hasOwnProperty.call(patch, k)
+    if (has('timezone')) {
+        const t = String(patch.timezone ?? '').trim();
+        if (!isTimezone(t)) e.timezone = 'Múi giờ không hợp lệ (ví dụ Asia/Ho_Chi_Minh)'; else v.timezone = t
+    }
+    if (has('ruleIntervalMin')) {
+        const n = num(patch.ruleIntervalMin)
+        if (!Number.isInteger(n) || n < LIMITS.intervalMin || n > LIMITS.intervalMax) e.ruleIntervalMin = `Chu kỳ kiểm tra rule từ ${LIMITS.intervalMin} đến ${LIMITS.intervalMax} phút`
+        else v.ruleIntervalMin = n
+    }
+    if (has('reportTime')) {
+        const t = String(patch.reportTime ?? '');
+        if (t && !isTime(t)) e.reportTime = 'Giờ báo cáo không hợp lệ (HH:MM)'; else v.reportTime = t
+    }
+    if (has('telegramChatId')) {
+        const c = String(patch.telegramChatId ?? '').trim();
+        const m = checkTelegramChat(c);
+        if (m) e.telegramChatId = m; else v.telegramChatId = c
+    }
+    if (has('telegramToken')) {
+        const t = String(patch.telegramToken ?? '').trim();
+        const m = checkTelegramToken(t);
+        if (m) e.telegramToken = m; else if (t) v.telegramToken = t
+    }
+    if (has('adAccountId')) {
+        const a = cleanAccountId(patch.adAccountId);
+        if (a) {
+            const m = checkAccountId(a);
+            if (m) e.adAccountId = m; else v.adAccountId = a
+        } else v.adAccountId = ''
+    }
+    if (has('accessToken')) {
+        const t = String(patch.accessToken ?? '').trim();
+        if (t) {
+            const m = checkToken(t);
+            if (m) e.accessToken = m; else v.accessToken = t
+        }
+    }
+    if (has('resultAction')) {
+        const r = String(patch.resultAction ?? '').trim();
+        if (!/^[A-Za-z0-9_.]{2,100}$/.test(r)) e.resultAction = 'Loại kết quả không hợp lệ'; else v.resultAction = r
+    }
+    if (has('apiVersion')) {
+        const r = String(patch.apiVersion ?? '').trim();
+        if (!/^v\d+\.\d+$/.test(r)) e.apiVersion = 'Phiên bản API không hợp lệ (ví dụ v21.0)'; else v.apiVersion = r
+    }
+    if (has('mock')) v.mock = !!patch.mock
+    if (has('dryRun')) v.dryRun = !!patch.dryRun
+
+    const eff = {...current, ...v}
+    if (has('mock') || has('dryRun') || has('adAccountId') || has('accessToken')) {
+        if (eff.mock === false && (!eff.accessToken || !eff.adAccountId)) e.mock = 'Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.'
+    }
+    return done(e, [], v)
+}
+
+const WEAK = ['12345678', '123456789', '1234567890', 'password', 'matkhau123', 'qwertyui', '11111111', '00000000', 'abcd1234']
+
+export function validatePassword(next, current = '') {
+    const e = {}
+    const n = String(next ?? '')
+    if (n.length < 8) e.newPassword = 'Mật khẩu mới cần ít nhất 8 ký tự'
+    else if (n.length > 128) e.newPassword = 'Mật khẩu tối đa 128 ký tự'
+    else if (/^\d+$/.test(n)) e.newPassword = 'Không nên chỉ gồm chữ số, hãy thêm chữ cái hoặc ký tự khác'
+    else if (WEAK.includes(n.toLowerCase())) e.newPassword = 'Mật khẩu này quá phổ biến, hãy chọn mật khẩu khác'
+    else if (current && n === current) e.newPassword = 'Mật khẩu mới phải khác mật khẩu hiện tại'
+    return done(e, [], n)
+}

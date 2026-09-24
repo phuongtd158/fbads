@@ -5,5 +5,5 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   build: { outDir: '../public', emptyOutDir: true, chunkSizeWarningLimit: 900 },
-  server: { port: 5173, proxy: { '/api': process.env.API_TARGET || 'http://127.0.0.1:3000' } },
+  server: { fs: { allow: ['..'] }, port: 5173, proxy: { '/api': process.env.API_TARGET || 'http://127.0.0.1:3000' } },
 })

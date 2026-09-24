@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Search } from 'lucide-vue-next'
+import { Search, CircleHelp } from 'lucide-vue-next'
 import { palette } from '../stores/ui'
 import ThemeToggle from './ThemeToggle.vue'
 
@@ -18,6 +18,7 @@ const meta = computed(() => route.meta || {})
     <div class="right">
       <div id="page-actions" class="actions" />
       <button class="qs" aria-label="Tìm nhanh" @click="palette = true"><Search :size="18" /></button>
+      <RouterLink to="/help" class="qs" title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng"><CircleHelp :size="18" /></RouterLink>
       <ThemeToggle />
     </div>
   </header>

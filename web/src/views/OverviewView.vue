@@ -16,6 +16,9 @@ import EmptyState from '../components/EmptyState.vue'
 import ProgressRing from '../components/ProgressRing.vue'
 import AnimatedNumber from '../components/AnimatedNumber.vue'
 import BudgetCell from '../components/BudgetCell.vue'
+import InfoTip from '../components/InfoTip.vue'
+import OnboardingCard from '../components/OnboardingCard.vue'
+import { allDone, hidden as onboardHidden } from '../stores/onboarding'
 
 const route = useRoute()
 const q = ref(String(route.query.q || ''))
@@ -24,6 +27,7 @@ const level = ref('campaign')
 const busy = reactive({})
 const bulkText = ref('')
 const searchEl = ref(null)
+const showOnboarding = computed(() => !onboardHidden.value && !allDone.value)
 
 watch(() => route.query.q, (v) => { if (v !== undefined) q.value = String(v) })
 // nếu dữ liệu bị xoá khi đang xem (đổi chế độ, đổi tài khoản…) thì tự tải lại
@@ -69,6 +73,8 @@ const footTotals = computed(() => visible.value.reduce((a, o) => ({ s: a.s + o.m
 const statusOf = (o) => STATUS[o.effective] || { label: o.effective, tone: 'warning' }
 const roasTone = (o) => (!o.metrics.spend || o.metrics.roas == null ? null : o.metrics.roas >= 2 ? 'success' : o.metrics.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
+// Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
+const locked = (o) => ['ARCHIVED', 'DELETED', 'DISAPPROVED'].includes(o.effective)
 
 async function toggle(o, on) {
   const prev = { status: o.status, effective: o.effective }
@@ -101,6 +107,8 @@ async function bulk(on) {
       <Btn :icon="RefreshCw" :loading="state.objsLoading" :action="() => loadObjs(true)">Làm mới</Btn>
     </Teleport>
 
+    <OnboardingCard v-if="showOnboarding" />
+
     <!-- Bento KPI -->
     <div class="bento stagger">
       <section class="card hero">
@@ -122,15 +130,15 @@ async function bulk(on) {
         <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
         <template v-else><p class="val"><AnimatedNumber :value="running.length" /><small> / {{ camps.length }}</small></p><p class="sub faint">{{ camps.length - running.length ? `${camps.length - running.length} camp đang dừng` : 'Tất cả đang chạy' }}</p></template>
       </section>
-      <section class="card kpi"><p class="lbl">Kết quả</p>
+      <section class="card kpi"><p class="lbl">Kết quả <InfoTip tip="results" /></p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
         <template v-else><p class="val"><AnimatedNumber :value="totalResults" /></p><p class="sub faint">theo “{{ state.settings.resultAction || 'purchase' }}”</p></template>
       </section>
-      <section class="card kpi"><p class="lbl">CPA trung bình</p>
+      <section class="card kpi"><p class="lbl">CPA trung bình <InfoTip tip="cpa" /></p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="110px" />
         <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" /></template><template v-else>–</template></p><p class="sub faint">{{ avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
       </section>
-      <section class="card kpi"><p class="lbl">ROAS trung bình</p>
+      <section class="card kpi"><p class="lbl">ROAS trung bình <InfoTip tip="roas" /></p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="80px" />
         <template v-else><p class="val" :class="avgRoas != null && (avgRoas >= 2 ? 'ok' : avgRoas < 1 ? 'bad' : 'warn')">{{ avgRoas != null ? fmtDec(avgRoas) : '–' }}</p><p class="sub faint">Doanh thu chia chi tiêu</p></template>
       </section>
@@ -156,11 +164,11 @@ async function bulk(on) {
       <div v-else class="table">
         <div class="hd row">
           <span /><span>{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}</span>
-          <div class="metrics"><span class="r">Ngân sách/ngày</span><span class="r">Chi tiêu</span><span class="r">Kết quả</span><span class="r">CPA</span><span class="r">ROAS</span></div>
+          <div class="metrics"><span class="r">Ngân sách/ngày <InfoTip tip="budget" /></span><span class="r">Chi tiêu</span><span class="r">Kết quả</span><span class="r">CPA</span><span class="r">ROAS</span></div>
         </div>
         <TransitionGroup name="row" tag="div">
           <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
-            <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
+            <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
             <div class="c-nm"><b :title="o.name">{{ o.name }}</b><Badge :tone="statusOf(o).tone" dot>{{ statusOf(o).label }}</Badge></div>
             <div class="metrics">
               <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
@@ -221,7 +229,7 @@ async function bulk(on) {
 .metrics { display: grid; grid-template-columns: 1.15fr 1.15fr .7fr .9fr .8fr; gap: 10px; align-items: center; }
 .r { text-align: right; justify-self: end; }
 .hd { padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
-.hd .metrics span { width: 100%; text-align: right; }
+.hd .metrics > span { width: 100%; text-align: right; }
 .item { min-height: 68px; border-bottom: 1px solid var(--border); transition: background .15s; }
 .item:last-child { border-bottom: 0; }
 .item:hover { background: var(--surface-2); }

@@ -8,3 +8,7 @@ node_modules/
 # Giao diện Vue (build ra public/)
 web/node_modules/
 web/dist/
+
+# IDE
+.idea/
+.vscode/

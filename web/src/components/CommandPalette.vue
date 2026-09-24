@@ -1,10 +1,11 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, RefreshCw, Sun, LogOut, Play, Megaphone, KeyRound, CornerDownLeft } from 'lucide-vue-next'
+import { Search, LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, RefreshCw, Sun, LogOut, Play, Megaphone, KeyRound, CornerDownLeft, BookOpen } from 'lucide-vue-next'
 import { state, loadObjs, logout } from '../stores/app'
 import { palette, toggleTheme, toast, toastError } from '../stores/ui'
 import { api } from '../lib/api'
+import { TOPICS } from '../lib/help'
 
 const router = useRouter()
 const q = ref('')
@@ -19,10 +20,12 @@ const actions = computed(() => [
   { group: 'Đi tới', title: 'Nhật ký', icon: ScrollText, run: go('/logs') },
   { group: 'Đi tới', title: 'Cài đặt', icon: Settings, run: go('/settings') },
   { group: 'Đi tới', title: 'Kết nối Facebook', icon: KeyRound, run: go('/settings/connection') },
+  { group: 'Đi tới', title: 'Hướng dẫn sử dụng', icon: BookOpen, run: go('/help') },
   { group: 'Thao tác', title: 'Làm mới số liệu', icon: RefreshCw, run: async () => { await loadObjs(true); toast('Đã cập nhật số liệu') } },
   { group: 'Thao tác', title: 'Kiểm tra rule ngay', icon: Play, run: async () => { await api('rules/run', 'POST'); toast('Đã kiểm tra rule — xem Nhật ký') } },
   { group: 'Thao tác', title: 'Đổi giao diện sáng / tối', icon: Sun, run: toggleTheme },
   ...(state.auth.required ? [{ group: 'Thao tác', title: 'Đăng xuất', icon: LogOut, run: logout }] : []),
+  ...TOPICS.map((t) => ({ group: 'Hướng dẫn', title: t.title, icon: BookOpen, sub: t.summary, run: go('/help/' + t.id) })),
   ...state.objs.filter((o) => o.level === 'campaign').map((o) => ({
     group: 'Chiến dịch', title: o.name, icon: Megaphone, sub: o.effective === 'ACTIVE' ? 'Đang chạy' : 'Tạm dừng',
     run: () => router.push({ path: '/', query: { q: o.name } }),

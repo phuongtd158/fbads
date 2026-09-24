@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, TrendingUp, LogOut, Search } from 'lucide-vue-next'
+import { LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, TrendingUp, LogOut, Search, BookOpen } from 'lucide-vue-next'
 import { state, logout } from '../stores/app'
 import { palette, toastError } from '../stores/ui'
 
@@ -12,6 +12,7 @@ const nav = computed(() => [
   { to: '/rules', name: 'rules', label: 'Rule hiệu quả', icon: Zap, count: state.rules.length },
   { to: '/logs', name: 'logs', label: 'Nhật ký', icon: ScrollText },
   { to: '/settings', name: 'settings', label: 'Cài đặt', icon: Settings },
+  { to: '/help', name: 'help', label: 'Hướng dẫn', icon: BookOpen },
 ])
 
 // Trạng thái kết nối ở chân sidebar

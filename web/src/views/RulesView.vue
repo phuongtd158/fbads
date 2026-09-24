@@ -41,7 +41,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     </Teleport>
 
     <div class="info card">
-      <Timer :size="18" /><p>Tool kiểm tra rule mỗi <b>{{ state.settings.ruleIntervalMin }} phút</b> dựa trên số liệu <b>hôm nay</b>. Luôn đặt “chi tiêu tối thiểu” để không quyết định khi dữ liệu còn ít, và đặt trần ngân sách khi dùng rule tăng.</p>
+      <Timer :size="18" /><p>Tool kiểm tra rule mỗi <b>{{ state.settings.ruleIntervalMin }} phút</b> dựa trên số liệu <b>hôm nay</b>. Luôn đặt “chi tiêu tối thiểu” để không quyết định khi dữ liệu còn ít, và đặt trần ngân sách khi dùng rule tăng. <RouterLink to="/help/rules">Xem hướng dẫn về rule →</RouterLink></p>
     </div>
 
     <div class="presets">

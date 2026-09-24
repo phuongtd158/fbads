@@ -1,1 +1,0 @@
-import{bt as e,dt as t,kt as n,r,ut as i,vt as a}from"./index-CLD2CAG2.js";var o={key:0,class:`dot`},s=r({__name:`Badge`,props:{tone:{type:String,default:`neutral`},dot:Boolean},setup(r){return(s,c)=>(a(),t(`span`,{class:n([`badge`,r.tone])},[r.dot?(a(),t(`i`,o)):i(``,!0),e(s.$slots,`default`,{},void 0,!0)],2))}},[[`__scopeId`,`data-v-2017274c`]]);export{s as t};

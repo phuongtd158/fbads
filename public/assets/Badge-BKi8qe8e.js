@@ -1,0 +1,1 @@
+import{Dt as e,It as t,Tt as n,_t as r,s as i,vt as a}from"./index-sVvUecq0.js";var o={key:0,class:`dot`},s=i({__name:`Badge`,props:{tone:{type:String,default:`neutral`},dot:Boolean},setup(i){return(s,c)=>(n(),a(`span`,{class:t([`badge`,i.tone])},[i.dot?(n(),a(`i`,o)):r(``,!0),e(s.$slots,`default`,{},void 0,!0)],2))}},[[`__scopeId`,`data-v-2017274c`]]);export{s as t};

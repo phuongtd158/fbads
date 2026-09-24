@@ -8,6 +8,9 @@ const engine = require('./lib/engine');
 const notify = require('./lib/notify');
 const auth = require('./lib/auth');
 
+let V = null; // shared/validate.mjs (ES module, nạp bằng import() lúc khởi động)
+const bad = (res, r) => send(res, 400, { error: r.first || r.error, errors: r.errors || {} });
+
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1'; // deploy: đặt HOST=0.0.0.0 (bắt buộc phải có mật khẩu)
 const PUBLIC = path.join(__dirname, 'public');
@@ -24,7 +27,7 @@ const send = (res, code, body) => {
 };
 const readBody = (req) => new Promise((resolve) => {
   let s = '';
-  req.on('data', (c) => (s += c));
+  req.on('data', (c) => { s += c; if (s.length > 1e6) { s = ''; req.destroy(); } }); // chặn body quá lớn (1MB)
   req.on('end', () => { try { resolve(JSON.parse(s || '{}')); } catch { resolve({}); } });
 });
 
@@ -39,6 +42,20 @@ function upsert(list, item) {
   else { const i = list.findIndex((x) => x.id === item.id); if (i >= 0) list[i] = item; else list.push(item); }
   store.save();
   return item;
+}
+
+// Ghi nhật ký cho thao tác thủ công (kể cả khi lỗi) rồi ném lại lỗi cho giao diện
+async function manualAction(id, name, action, okDetail, after, fn) {
+  const s = store.get().settings;
+  const cur = (fb.peekObjects() || []).find((o) => o.id === id);
+  const base = { kind: 'manual', source: 'Thủ công', name: name || id, target: { id, name: name || id, level: cur && cur.level }, action, before: fb.snapshot(cur), mode: s.mock ? 'mock' : s.dryRun ? 'dry' : 'live' };
+  try {
+    await fn();
+    store.log({ ...base, detail: okDetail, ok: true, after });
+  } catch (e) {
+    store.log({ ...base, detail: e.message, ok: false, error: fb.describeError(e) });
+    throw e;
+  }
 }
 
 async function api(req, res, url) {
@@ -68,7 +85,8 @@ async function api(req, res, url) {
   if (m === 'POST' && p === '/api/password') {
     if (auth.envManaged()) return send(res, 400, { error: 'Mật khẩu đang được đặt bằng biến môi trường APP_PASSWORD trên server, không đổi ở đây được.' });
     const b = await readBody(req), next = String(b.newPassword || '');
-    if (next.length < 8) return send(res, 400, { error: 'Mật khẩu mới cần ít nhất 8 ký tự.' });
+    const pv = V.validatePassword(next, String(b.currentPassword || ''));
+    if (!pv.ok) return bad(res, pv);
     if (auth.enabled() && !auth.verify(String(b.currentPassword || ''))) return send(res, 400, { error: 'Mật khẩu hiện tại không đúng.' });
     auth.setPassword(next);
     auth.setCookie(req, res, auth.newSession(true), 30 * 86400); // đăng xuất mọi thiết bị khác
@@ -81,32 +99,40 @@ async function api(req, res, url) {
 
   if ((mt = p.match(/^\/api\/objects\/([^/]+)\/status$/)) && m === 'POST') {
     const b = await readBody(req);
-    await fb.setStatus(mt[1], !!b.on);
-    store.log({ source: 'Thủ công', name: b.name || mt[1], detail: b.on ? 'Bật camp' : 'Tắt camp', ok: true });
+    await manualAction(mt[1], b.name, { type: b.on ? 'on' : 'off' }, b.on ? 'Bật camp' : 'Tắt camp', { status: b.on ? 'ACTIVE' : 'PAUSED' }, () => fb.setStatus(mt[1], !!b.on));
     return send(res, 200, { ok: true });
   }
   if ((mt = p.match(/^\/api\/objects\/([^/]+)\/budget$/)) && m === 'POST') {
     const b = await readBody(req);
-    if (!(b.amount > 0)) return send(res, 400, { error: 'Ngân sách không hợp lệ' });
-    await fb.setBudget(mt[1], b.amount);
-    store.log({ source: 'Thủ công', name: b.name || mt[1], detail: `Đặt ngân sách ${Math.round(b.amount).toLocaleString('vi-VN')}`, ok: true });
+    const bv = V.validateBudget(b.amount);
+    if (!bv.ok) return bad(res, bv);
+    const cur = (fb.peekObjects() || []).find((o) => o.id === mt[1]);
+    if (cur && cur.dailyBudget == null) return send(res, 400, { error: 'Mục này không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO). Hãy chỉnh ở cấp có ngân sách.' });
+    await manualAction(mt[1], b.name, { type: 'budget', mode: 'set', value: bv.value }, `Đặt ngân sách ${bv.value.toLocaleString('vi-VN')}`, { dailyBudget: bv.value }, () => fb.setBudget(mt[1], bv.value));
     return send(res, 200, { ok: true });
   }
 
   if (m === 'POST' && p === '/api/settings') {
     const b = await readBody(req);
-    for (const k of Object.keys(d.settings)) {
-      if (!(k in b) || k === 'passwordHash') continue;
-      if (SECRETS.includes(k) && b[k] === '') continue; // để trống = giữ nguyên
-      d.settings[k] = typeof d.settings[k] === 'number' ? Number(b[k]) : b[k];
-    }
+    const sv = V.validateSettings(b, d.settings);
+    if (!sv.ok) return bad(res, sv);
+    // chỉ ghi các khóa đã được kiểm tra (sv.value) — không bao giờ ghi trực tiếp từ dữ liệu client
+    for (const [k, val] of Object.entries(sv.value)) if (k in d.settings && k !== 'passwordHash') d.settings[k] = val;
     store.save();
+    if ('mock' in sv.value || 'adAccountId' in sv.value || 'accessToken' in sv.value) fb.resetCache(); // đổi nguồn dữ liệu → bỏ cache cũ
     await fb.listObjects(true).catch(() => {});
     return send(res, 200, publicSettings());
   }
 
   for (const [name, list] of [['schedules', d.schedules], ['rules', d.rules]]) {
-    if (m === 'POST' && p === `/api/${name}`) return send(res, 200, upsert(list, await readBody(req)));
+    if (m === 'POST' && p === `/api/${name}`) {
+      const b = await readBody(req);
+      const ctx = { objs: fb.peekObjects(), [name]: list };
+      const r = name === 'schedules' ? V.validateSchedule(b, ctx) : V.validateRule(b, ctx);
+      if (!r.ok) return bad(res, r);
+      if (!r.value.id && list.length >= 200) return send(res, 400, { error: 'Đã đạt giới hạn 200 mục. Hãy xoá bớt trước khi thêm mới.' });
+      return send(res, 200, { ...upsert(list, r.value), warnings: r.warnings });
+    }
     if ((mt = p.match(new RegExp(`^/api/${name}/([^/]+)$`))) && m === 'DELETE') {
       const i = list.findIndex((x) => x.id === mt[1]);
       if (i >= 0) list.splice(i, 1);
@@ -128,14 +154,16 @@ async function api(req, res, url) {
   if (m === 'POST' && p === '/api/fb/accounts') {
     const b = await readBody(req);
     const token = (b.token || '').trim() || d.settings.accessToken;
-    if (!token) return send(res, 400, { error: 'Hãy dán Access Token trước.' });
+    const tm = V.checkToken(token);
+    if (tm) return send(res, 400, { error: tm });
     return send(res, 200, await fb.listAccounts(token));
   }
   // Đổi token ngắn hạn thành ~60 ngày. App ID/Secret chỉ dùng 1 lần, không lưu.
   if (m === 'POST' && p === '/api/fb/extend') {
     const b = await readBody(req);
     const token = (b.token || '').trim() || d.settings.accessToken;
-    if (!token || !b.appId || !b.appSecret) return send(res, 400, { error: 'Cần Access Token, App ID và App Secret.' });
+    const em = V.checkToken(token) || V.checkAppId(b.appId) || V.checkAppSecret(b.appSecret);
+    if (em) return send(res, 400, { error: em });
     const long = await fb.extendToken(String(b.appId).trim(), String(b.appSecret).trim(), token);
     d.settings.accessToken = long; store.save();
     return send(res, 200, { ok: true, token: await fb.inspectToken(long) });
@@ -183,7 +211,10 @@ if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !auth.enabled()) {
   console.error('\n  ❌ HOST mở ra mạng nhưng chưa có mật khẩu.\n  Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự) rồi chạy lại.\n');
   process.exit(1);
 }
-server.listen(PORT, HOST, () => {
-  console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
-  engine.start();
-});
+import('./shared/validate.mjs').then((mod) => {
+  V = mod;
+  server.listen(PORT, HOST, () => {
+    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
+    engine.start();
+  });
+}).catch((e) => { console.error('Không nạp được shared/validate.mjs:', e.message); process.exit(1); });

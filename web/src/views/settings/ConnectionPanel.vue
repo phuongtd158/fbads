@@ -4,9 +4,11 @@ import { CheckCircle2, AlertTriangle, FlaskConical, Loader2, KeyRound, RefreshCw
 import { state, checkConn, loadState, resetData } from '../../stores/app'
 import { toast, toastError } from '../../stores/ui'
 import { api } from '../../lib/api'
+import { checkToken, checkAppId, checkAppSecret, checkAccountId, cleanAccountId } from '../../lib/validate'
 import Btn from '../../components/Btn.vue'
 import Badge from '../../components/Badge.vue'
 import Segmented from '../../components/Segmented.vue'
+import InfoTip from '../../components/InfoTip.vue'
 
 const wizOpen = ref(false)
 const method = ref('fast')
@@ -17,6 +19,8 @@ const manual = ref('')
 const loading = ref(false)
 const ext = reactive({ appId: '', secret: '' })
 const wiz = ref(null)
+const tokErr = ref('')
+const manualErr = ref('')
 
 const s = computed(() => state.settings)
 const conn = computed(() => state.conn)
@@ -40,7 +44,8 @@ defineExpose({ openWiz })
 
 async function verify() {
   const t = token.value.trim()
-  if (!t && !s.value.has_accessToken) return toast('Hãy dán Access Token trước', 'error')
+  tokErr.value = t || !s.value.has_accessToken ? checkToken(t) : '' // dán mới thì kiểm tra định dạng; bỏ trống thì dùng token đã lưu
+  if (tokErr.value) return
   loading.value = true; info.value = null
   try {
     info.value = await api('fb/accounts', 'POST', { token: t })
@@ -48,7 +53,8 @@ async function verify() {
   } catch (e) { toastError(e) } finally { loading.value = false }
 }
 async function extend() {
-  if (!ext.appId.trim() || !ext.secret.trim()) return toast('Nhập App ID và App Secret', 'error')
+  const bad = checkToken(token.value.trim() || (s.value.has_accessToken ? 'x'.repeat(20) : '')) || checkAppId(ext.appId) || checkAppSecret(ext.secret)
+  if (bad) return toast(bad, 'error')
   loading.value = true
   try {
     await api('fb/extend', 'POST', { token: token.value.trim(), appId: ext.appId.trim(), appSecret: ext.secret.trim() })
@@ -57,9 +63,14 @@ async function extend() {
   loading.value = false
   await verify()
 }
-function onManual() { acc.value = manual.value.trim().replace(/^act_/, '') }
+function onManual() {
+  const v = manual.value.trim()
+  manualErr.value = v ? checkAccountId(v) : ''
+  acc.value = v && !manualErr.value ? cleanAccountId(v) : ''
+}
 async function saveConn() {
-  if (!acc.value) return toast('Hãy chọn tài khoản quảng cáo', 'error')
+  if (!acc.value) return toast(manualErr.value || 'Hãy chọn tài khoản quảng cáo', 'error')
+  if (token.value.trim() && checkToken(token.value)) return toast(checkToken(token.value), 'error')
   const wasMock = s.value.mock
   const body = { adAccountId: acc.value, mock: false, dryRun: wasMock ? true : s.value.dryRun }
   if (token.value.trim()) body.accessToken = token.value.trim()
@@ -110,7 +121,7 @@ async function saveConn() {
         <div class="step">
           <span class="no">1</span>
           <div class="body">
-            <h4>Lấy Access Token</h4>
+            <h4>Lấy Access Token <InfoTip tip="token" /></h4>
             <p class="muted">Token là “chìa khoá” cho phép tool điều khiển quảng cáo của bạn. Chọn cách phù hợp:</p>
             <Segmented v-model="method" :options="[{ value: 'fast', label: 'Cách nhanh (60 ngày)' }, { value: 'stable', label: 'Cách ổn định (không hết hạn)' }]" />
             <ol v-if="method === 'fast'">
@@ -134,9 +145,10 @@ async function saveConn() {
             <h4>Dán token và kiểm tra</h4>
             <p class="muted">Tool sẽ kiểm tra token còn dùng được không và có đủ quyền không.</p>
             <div class="row">
-              <input v-model="token" class="input" type="password" autocomplete="off" :placeholder="s.has_accessToken ? 'Đã có token đã lưu — dán token mới hoặc bấm Kiểm tra' : 'Dán token vào đây (bắt đầu bằng EAA…)'" @keydown.enter="verify" />
+              <input v-model="token" class="input" type="password" autocomplete="off" :placeholder="s.has_accessToken ? 'Đã có token đã lưu — dán token mới hoặc bấm Kiểm tra' : 'Dán token vào đây (bắt đầu bằng EAA…)'" :class="{ bad: tokErr }" @input="tokErr = ''" @keydown.enter="verify" />
               <Btn variant="primary" :loading="loading" :action="verify">Kiểm tra token</Btn>
             </div>
+            <p v-if="tokErr" class="ferr">{{ tokErr }}</p>
             <div v-if="info" class="note ok"><CheckCircle2 :size="18" /><div><b>Token hợp lệ</b> — xin chào {{ info.user }}.<template v-if="info.token"> {{ info.token.daysLeft == null ? 'Token không hết hạn.' : info.token.daysLeft >= 1 ? `Còn ${info.token.daysLeft} ngày.` : 'Token sắp hết hạn.' }}</template></div></div>
             <div v-if="info && info.token && info.token.missing && info.token.missing.length" class="note bad"><AlertTriangle :size="18" /><div><b>Thiếu quyền: {{ info.token.missing.join(', ') }}.</b> Quay lại bước 1, thêm đủ quyền rồi tạo token mới.</div></div>
             <div v-if="isShort" class="note warn">
@@ -164,7 +176,8 @@ async function saveConn() {
             </div>
             <div v-else-if="info" class="note warn"><AlertTriangle :size="18" /><div><b>Token này chưa thấy tài khoản quảng cáo nào.</b> Hãy đảm bảo tài khoản đã được gán cho người dùng/token này, hoặc nhập ID thủ công bên dưới.</div></div>
             <details><summary>Nhập ID tài khoản thủ công</summary>
-              <div class="row"><input v-model="manual" class="input" placeholder="Vd: 1234567890" @input="onManual" /><small class="faint">ID nằm cạnh tên tài khoản trong Ads Manager.</small></div>
+              <div class="row"><input v-model="manual" class="input" placeholder="Vd: 1234567890" :class="{ bad: manualErr }" @input="onManual" /><small class="faint">ID nằm cạnh tên tài khoản trong Ads Manager.</small></div>
+              <p v-if="manualErr" class="ferr">{{ manualErr }}</p>
             </details>
           </div>
         </div>
@@ -216,6 +229,8 @@ li > div { flex: 1; min-width: 0; }
 details { margin-top: 10px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; }
 details summary { cursor: pointer; font-weight: 600; font-size: 14px; } details .row { margin-top: 10px; }
 .wz > footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; background: var(--surface-2); }
+.ferr { color: var(--danger); font-size: 13px; margin: 8px 0 0; }
+.input.bad { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
 .wz-enter-active, .wz-leave-active { transition: all .35s var(--ease); }
 .wz-enter-from, .wz-leave-to { opacity: 0; transform: translateY(-10px); }
 @media (max-width: 640px) { .step { flex-direction: column; gap: 10px; padding: 18px; } dt { width: 100px; } }
