@@ -12,3 +12,6 @@ web/dist/
 # IDE
 .idea/
 .vscode/
+.fastRequest/
+# Cấu hình ngrok cá nhân
+ngrok-domain.txt
