@@ -26,6 +26,10 @@ const route = useRoute()
 const q = ref(String(route.query.q || ''))
 const filter = ref('all')
 const level = ref('campaign')
+// Nhiều tài khoản quảng cáo: lọc theo tài khoản ('' = tất cả); trình duyệt nhớ lựa chọn
+const ACC_KEY = 'fbads.overviewAccount'
+const account = ref((() => { try { return localStorage.getItem(ACC_KEY) || '' } catch { return '' } })())
+watch(account, (v) => { try { localStorage.setItem(ACC_KEY, v) } catch { /* chế độ riêng tư */ } })
 const busy = reactive({})
 const bulkText = ref('')
 const bulkBudget = ref(false) // hộp thoại đổi ngân sách hàng loạt
@@ -44,8 +48,20 @@ const slash = (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(docume
 onBeforeUnmount(() => window.removeEventListener('keydown', slash))
 
 const staleWait = computed(() => { const t = state.objsMeta && state.objsMeta.blockedUntil; return t ? Math.max(1, Math.ceil((t - Date.now()) / 60000)) : 0 })
-const currency = computed(() => (state.conn && state.conn.currency) || 'VND')
-const camps = computed(() => state.objs.filter((o) => o.level === 'campaign'))
+const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
+const multiAcc = computed(() => accounts.value.length > 1)
+const accErrors = computed(() => (state.objsMeta && state.objsMeta.accountErrors) || [])
+// tài khoản đã chọn không còn trong danh sách (đổi kết nối) → về "tất cả"
+watch(accounts, (list) => { if (account.value && list.length && !list.some((a) => a.id === account.value)) account.value = '' })
+const inAcc = (o) => !account.value || o.accountId === account.value
+// Loại tiền cho các ô tổng: theo tài khoản đang xem; nhiều tài khoản khác loại tiền thì không cộng chung được
+const currency = computed(() => {
+  const list = account.value ? accounts.value.filter((a) => a.id === account.value) : accounts.value
+  const cur = [...new Set(list.map((a) => a.currency).filter(Boolean))]
+  return cur.length > 1 ? 'nhiều loại tiền' : cur[0] || (state.conn && state.conn.currency) || 'VND'
+})
+const accountOptions = computed(() => [{ id: '', name: `Tất cả tài khoản (${accounts.value.length})` }, ...accounts.value])
+const camps = computed(() => state.objs.filter((o) => o.level === 'campaign' && inAcc(o)))
 const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
 // Phân phối như Ads Manager (xét cả nhóm QC bên trong); "đang chạy" = thực sự đang phân phối
 const deliv = computed(() => deliveryMap(state.objs))
@@ -65,7 +81,7 @@ const avgRoas = computed(() => {
 const top = computed(() => [...camps.value].filter((o) => o.metrics.spend > 0).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3))
 const topMax = computed(() => (top.value[0] ? top.value[0].metrics.spend : 1))
 
-const inLevel = computed(() => state.objs.filter((o) => o.level === level.value))
+const inLevel = computed(() => state.objs.filter((o) => o.level === level.value && inAcc(o)))
 // ----- Sắp xếp theo cột (bấm tiêu đề cột: lần đầu theo chiều mặc định, bấm lại thì đảo chiều) -----
 // Giá trị trống (CPA khi chưa có kết quả, ngân sách CBO…) luôn nằm cuối, dù tăng hay giảm.
 const SORTS = {
@@ -197,6 +213,7 @@ async function bulk(on) {
       <div class="tb">
         <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" placeholder="Tìm chiến dịch…" /><kbd>/</kbd></div>
         <Segmented v-model="filter" :options="filterOptions" size="sm" />
+        <select v-if="multiAcc" v-model="account" class="input accsel" aria-label="Tài khoản quảng cáo"><option v-for="a in accountOptions" :key="a.id" :value="a.id">{{ a.name }}</option></select>
         <Segmented v-if="hasAdsets" v-model="level" :options="levelOptions" size="sm" />
         <select v-model="mobileSort" class="input msort" aria-label="Sắp xếp">
           <option v-for="[v, l] in mobileSortOptions" :key="v" :value="v">{{ l }}</option>
@@ -207,6 +224,11 @@ async function bulk(on) {
         <Btn size="sm" variant="danger" :icon="Power" :action="() => bulk(false)">{{ bulkText.startsWith('Đang tắt') ? bulkText : 'Tắt tất cả' }}</Btn>
       </div>
 
+      <Callout v-if="accErrors.length" tone="danger" class="stale">
+        <b>Không tải được {{ accErrors.length }} tài khoản:</b>
+        <template v-for="(x, i) in accErrors" :key="x.id">{{ i ? '; ' : ' ' }}{{ x.name }} ({{ x.error }})</template>.
+        Các tài khoản khác vẫn hiện bình thường. Kiểm tra quyền của token với tài khoản này ở Cài đặt → Kết nối Facebook.
+      </Callout>
       <Callout v-if="state.objsMeta && state.objsMeta.stale && state.objsAt" class="stale">
         <b>Facebook đang giới hạn số lần gọi</b>, nên đây là số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}, chưa phải số mới nhất.
         Tool tự tải lại{{ staleWait ? ` sau khoảng ${staleWait} phút` : ' khi được phép' }}, không cần bấm Làm mới. Lịch và rule vẫn chạy theo giờ; nếu Facebook từ chối thao tác, lỗi sẽ ghi ở Nhật ký.
@@ -232,7 +254,7 @@ async function bulk(on) {
         <TransitionGroup name="row" tag="div">
           <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
             <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
-            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><small v-if="multiAcc && !account" class="acc faint" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ o.accountName || o.accountId }}</small><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
             <div class="c-dl"><span class="dl" :class="deliveryOf(o).tone" :title="deliveryOf(o).label"><i />{{ deliveryOf(o).label }}</span></div>
             <div class="metrics">
               <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
@@ -255,7 +277,7 @@ async function bulk(on) {
         <span v-if="state.objsAt" :class="{ right: !(state.objsMeta && state.objsMeta.usage) }">Số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</span>
       </div>
     </section>
-    <BulkBudget v-model="bulkBudget" :level="level" />
+    <BulkBudget v-model="bulkBudget" :level="level" :account="account" />
   </div>
 </template>
 
@@ -325,6 +347,8 @@ async function bulk(on) {
 .foot { display: flex; gap: 22px; flex-wrap: wrap; padding: 13px 20px; border-top: 1px solid var(--border); font-size: 13.5px; }
 .foot b { color: var(--text); } .foot .right { margin-left: auto; } .foot b.warnc { color: var(--warning); }
 .stale { margin: 14px 18px 0; }
+.accsel { width: auto; max-width: 240px; padding: 7px 10px; font-size: 13.5px; }
+.c-nm .acc { font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
 .row-enter-active, .row-leave-active { transition: all .3s var(--ease); }
 .row-enter-from, .row-leave-to { opacity: 0; transform: translateX(-10px); }
 

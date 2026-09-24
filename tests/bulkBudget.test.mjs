@@ -1,7 +1,7 @@
 // Chọn theo điều kiện + đổi ngân sách hàng loạt (shared/bulk.mjs): dùng cho hộp thoại hàng loạt và lịch "Theo điều kiện".
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseMoney, readForm, planBulk, matchFilter, describeFilter } from '../shared/bulk.mjs'
+import { parseMoney, readForm, readFilter, readAction, budgetChange, planBulk, matchFilter, describeFilter } from '../shared/bulk.mjs'
 
 test('đọc số tiền kiểu Việt', () => {
   assert.equal(parseMoney('500000'), 500000)
@@ -58,4 +58,31 @@ test('form sai thì báo lỗi', () => {
   assert.ok(readForm({ op: 'any', mode: 'set', value: '0' }).errors.value)
   assert.ok(readForm({ op: 'any', mode: 'percent', value: '-95' }).errors.value)
   assert.ok(readForm({ op: 'any', mode: 'add', value: 'x' }).errors.value)
+})
+
+test('lọc trước, nhập ngân sách sau: phần lọc hợp lệ khi chưa có ngân sách mới', () => {
+  const f = { level: 'adset', op: 'lt', x: '100k', name: '', onlyRunning: false, mode: 'set', value: '' }
+  const fl = readFilter(f)
+  assert.deepEqual(fl.errors, {}) // danh sách hiện được ngay
+  assert.deepEqual(matchFilter(objs, fl.filter).map((o) => o.id), ['a1', 'a3'])
+  assert.ok(readAction(f).errors.value) // chưa nhập ngân sách mới
+  assert.ok(readFilter({ ...f, x: '' }).errors.x) // chưa nhập mức lọc → chưa có danh sách
+  assert.ok(readAction({ mode: 'percent', value: '' }).errors.value)
+})
+
+test('ngân sách mới của từng mục: đổi / giữ nguyên / không hợp lệ', () => {
+  assert.deepEqual(budgetChange({ dailyBudget: 80000 }, { mode: 'set', value: 500000 }), { to: 500000, kind: 'change' })
+  assert.equal(budgetChange({ dailyBudget: 500000 }, { mode: 'set', value: 500000 }).kind, 'same')
+  assert.equal(budgetChange({ dailyBudget: 30000 }, { mode: 'add', value: -50000 }).kind, 'invalid')
+  assert.equal(budgetChange({ dailyBudget: 100000 }, { mode: 'percent', value: 20 }).to, 120000)
+})
+
+test('lọc theo tài khoản quảng cáo', () => {
+  const multi = [
+    { id: 'x1', level: 'campaign', name: 'A1', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 1, accountId: '111' },
+    { id: 'x2', level: 'campaign', name: 'B1', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 1, accountId: '222' },
+  ]
+  assert.deepEqual(matchFilter(multi, { level: 'campaign', op: 'any', account: '222' }).map((o) => o.id), ['x2'])
+  assert.deepEqual(matchFilter(multi, { level: 'campaign', op: 'any', account: '' }).map((o) => o.id), ['x1', 'x2'])
+  assert.equal(describeFilter({ level: 'campaign', op: 'any', account: '222' }, (id) => (id === '222' ? 'TK Mỹ' : id)), 'Chiến dịch · tài khoản TK Mỹ')
 })

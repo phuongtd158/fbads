@@ -36,17 +36,19 @@ const money = (n) => Math.round(n).toLocaleString('vi-VN')
 const COND_TEXT = { lt: 'dưới', lte: 'từ %x trở xuống', gt: 'trên', gte: 'từ %x trở lên' }
 
 // Mô tả điều kiện cho người đọc, vd "Nhóm QC ngân sách dưới 100.000 · tên chứa “Phương” · đang chạy"
-export function describeFilter(f = {}) {
+// accountName(id) (không bắt buộc): tên tài khoản quảng cáo để hiện thay cho mã số
+export function describeFilter(f = {}, accountName = (id) => id) {
   const parts = [f.level === 'adset' ? 'Nhóm QC' : 'Chiến dịch']
   if (f.op === 'between') parts[0] += ` ngân sách từ ${money(Math.min(f.x, f.y))} đến ${money(Math.max(f.x, f.y))}`
   else if (COND_TEXT[f.op]) parts[0] += ` ngân sách ${COND_TEXT[f.op].includes('%x') ? COND_TEXT[f.op].replace('%x', money(f.x)) : `${COND_TEXT[f.op]} ${money(f.x)}`}`
   if (f.name) parts.push(`tên chứa “${f.name}”`)
   if (f.onlyRunning) parts.push('đang chạy')
+  if (f.account) parts.push(`tài khoản ${accountName(f.account)}`)
   if (parts.length === 1 && (!f.op || f.op === 'any')) parts[0] = f.level === 'adset' ? 'Mọi nhóm QC' : 'Mọi chiến dịch'
   return parts.join(' · ')
 }
 
-// Các mục khớp điều kiện { level, op, x, y, name, onlyRunning }. Bỏ qua mục đã lưu trữ/xoá.
+// Các mục khớp điều kiện { level, op, x, y, name, onlyRunning, account }. Bỏ qua mục đã lưu trữ/xoá.
 // "Đang chạy" tính như cột Phân phối (xét cả nhóm QC bên trong camp).
 export function matchFilter(objs, f = {}, now = Date.now()) {
   const level = f.level === 'adset' ? 'adset' : 'campaign'
@@ -55,6 +57,7 @@ export function matchFilter(objs, f = {}, now = Date.now()) {
   const dm = f.onlyRunning ? deliveryMap(objs, now) : null
   return objs.filter((o) => o.level === level
     && !['ARCHIVED', 'DELETED'].includes(o.effective)
+    && (!f.account || o.accountId === f.account)
     && (!dm || (DELIVERY[dm[o.id]] || {}).running)
     && (!q || String(o.name).toLowerCase().includes(q))
     && (c === CONDS.any || (o.dailyBudget != null && c.test(o.dailyBudget, f.x, f.y))))
@@ -65,28 +68,47 @@ export function nextBudget(cur, { mode, value }) {
   return Math.round(n)
 }
 
-// Đọc form "Đổi ngân sách hàng loạt" (chữ người gõ) → { errors, filter, action } với số đã đọc
-export function readForm(f) {
+// Đọc form "Đổi ngân sách hàng loạt" (chữ người gõ). Tách 2 phần để danh sách lọc hiện ra
+// (và chọn được) trước khi nhập ngân sách mới.
+// Phần lọc → { errors, filter }
+export function readFilter(f) {
   const e = {}
-  const x = parseMoney(f.x), y = parseMoney(f.y), v = f.mode === 'percent' ? Number(String(f.value).replace(',', '.')) : parseMoney(f.value)
+  const x = parseMoney(f.x), y = parseMoney(f.y)
   if (f.op !== 'any' && !(x >= 0)) e.x = 'Nhập mức ngân sách để so sánh (vd 100000 hoặc 100k)'
   if (f.op === 'between' && !(y >= 0)) e.y = 'Nhập mức thứ hai của khoảng'
+  return { errors: e, filter: { level: f.level, op: f.op, x, y, name: f.name || '', onlyRunning: !!f.onlyRunning, account: f.account || '' } }
+}
+// Phần "đổi thành" → { errors, action }
+export function readAction(f) {
+  const e = {}
+  const v = f.mode === 'percent' ? Number(String(f.value ?? '').replace(',', '.') || NaN) : parseMoney(f.value)
   if (!Number.isFinite(v)) e.value = f.mode === 'percent' ? 'Nhập số % (âm để giảm, vd -20)' : 'Nhập số tiền (vd 500000 hoặc 500k)'
   else if (f.mode === 'set' && v <= 0) e.value = 'Ngân sách mới phải lớn hơn 0'
   else if (f.mode === 'percent' && (v === 0 || v < -LIMITS.rulePctDecreaseMax || v > LIMITS.scheduleSetPctMax)) e.value = `% phải khác 0, từ -${LIMITS.rulePctDecreaseMax} đến +${LIMITS.scheduleSetPctMax}`
   else if (f.mode === 'add' && v === 0) e.value = 'Số tiền cộng/trừ phải khác 0'
-  return { errors: e, filter: { level: f.level, op: f.op, x, y, name: f.name || '', onlyRunning: !!f.onlyRunning }, action: { mode: f.mode, value: v } }
+  return { errors: e, action: { mode: f.mode, value: v } }
+}
+export function readForm(f) {
+  const a = readFilter(f), b = readAction(f)
+  return { errors: { ...a.errors, ...b.errors }, filter: a.filter, action: b.action }
 }
 
-// Lọc + tính ngân sách mới. Trả { items: [{ o, from, to }], skipped: { noBudget, same, invalid } }
+// Ngân sách mới của 1 mục: kind 'change' (sẽ đổi), 'same' (đã đúng mức, bỏ qua), 'invalid' (về ≤ 0 hoặc quá lớn, bỏ qua)
+export function budgetChange(o, action) {
+  const to = nextBudget(o.dailyBudget, action)
+  if (!(to > 0) || to > LIMITS.budgetMax) return { to, kind: 'invalid' }
+  if (to === Math.round(o.dailyBudget)) return { to, kind: 'same' }
+  return { to, kind: 'change' }
+}
+
+// Lọc + tính ngân sách mới cho mọi mục khớp. Trả { items: [{ o, from, to }], skipped: { noBudget, same, invalid } }
 export function planBulk(objs, { filter, action }, now = Date.now()) {
   const items = [], skipped = { noBudget: 0, same: 0, invalid: 0 }
   for (const o of matchFilter(objs, filter, now)) {
     if (o.dailyBudget == null) { skipped.noBudget++; continue } // CBO / ngân sách trọn đời: không đổi được ở cấp này
-    const to = nextBudget(o.dailyBudget, action)
-    if (!(to > 0) || to > LIMITS.budgetMax) { skipped.invalid++; continue }
-    if (to === Math.round(o.dailyBudget)) { skipped.same++; continue }
-    items.push({ o, from: o.dailyBudget, to })
+    const c = budgetChange(o, action)
+    if (c.kind !== 'change') { skipped[c.kind]++; continue }
+    items.push({ o, from: o.dailyBudget, to: c.to })
   }
   return { items, skipped }
 }

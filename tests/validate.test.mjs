@@ -220,3 +220,22 @@ test('lịch theo điều kiện: không cần chọn từng mục, kiểm tra �
   assert.equal(add.ok, true); assert.equal(add.value.mode, 'add')
   assert.ok(validateSchedule({ ...base, mode: 'add', value: 0, filter: { level: 'adset', op: 'any', name: 'x' } }, { objs }).errors.value)
 })
+
+test('lịch tự động theo điều kiện: lưu các mục bỏ tích (loại trừ); lịch chọn từng mục thì không có', () => {
+  const base = { name: 'Nâng nhóm nhỏ', action: 'on', time: '06:00', days: [1], targetMode: 'filter', filter: { level: 'campaign', op: 'any', name: 'camp' } }
+  assert.deepEqual(validateSchedule({ ...base, exclude: ['c2', 'c2', 7] }, { objs }).value.exclude, ['c2', '7'])
+  assert.equal(validateSchedule(base, { objs }).value.exclude, undefined)
+  assert.equal(validateSchedule({ ...okSchedule, exclude: ['c1'] }, { objs }).value.exclude, undefined)
+})
+
+test('cài đặt: nhiều tài khoản quảng cáo', () => {
+  const r = validateSettings({ adAccountIds: ['act_1234567', '7654321', '1234567'] }, {})
+  assert.deepEqual(r.value.adAccountIds, ['1234567', '7654321']) // bỏ act_, bỏ trùng
+  assert.equal(r.value.adAccountId, '1234567') // tài khoản đầu tiên, cho phần cũ
+  assert.ok(validateSettings({ adAccountIds: ['123abc'] }, {}).errors.adAccountId)
+  assert.ok(validateSettings({ adAccountIds: Array.from({ length: 21 }, (_, i) => String(1000000 + i)) }, {}).errors.adAccountId)
+  assert.deepEqual(validateSettings({ adAccountId: '5555555' }, {}).value.adAccountIds, ['5555555']) // kiểu cũ vẫn nhận
+  // chuyển sang dữ liệu thật mà chưa chọn tài khoản nào → báo lỗi
+  assert.ok(validateSettings({ mock: false, adAccountIds: [] }, { accessToken: 'x' }).errors.mock)
+  assert.equal(validateSettings({ mock: false }, { accessToken: 'x', adAccountIds: ['1234567'] }).ok, true)
+})

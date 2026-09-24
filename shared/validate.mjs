@@ -15,6 +15,7 @@ export const LIMITS = {
     capPctMin: 5, // giới hạn tổng thay đổi ngân sách mỗi ngày do rule (%)
     capPctMax: 100,
     scheduleTimesMax: 24, // một lịch chạy tối đa 24 lần mỗi ngày
+    accountsMax: 20, // số tài khoản quảng cáo quản lý cùng lúc
 }
 
 // Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
@@ -69,7 +70,8 @@ export function checkFilter(f = {}) {
     if (op === 'between' && !(y >= 0)) e.y = 'Nhập mức thứ hai của khoảng'
     const name = String(f.name ?? '').trim()
     if (name.length > 100) e.name = 'Cụm tên tối đa 100 ký tự'
-    return { errors: e, value: { level, op, ...(op !== 'any' ? { x } : {}), ...(op === 'between' ? { y } : {}), name, onlyRunning: !!f.onlyRunning } }
+    const account = String(f.account ?? '').trim().slice(0, 40) // '' = mọi tài khoản quảng cáo
+    return { errors: e, value: { level, op, ...(op !== 'any' ? { x } : {}), ...(op === 'between' ? { y } : {}), name, onlyRunning: !!f.onlyRunning, ...(account ? { account } : {}) } }
 }
 
 export function validateSchedule(input = {}, ctx = {}) {
@@ -92,12 +94,14 @@ export function validateSchedule(input = {}, ctx = {}) {
 
     // Áp dụng cho: danh sách cố định (list) hoặc theo điều kiện (filter) — lọc lại mỗi lần chạy nên camp mới cũng được áp dụng
     const targetMode = input.targetMode === 'filter' ? 'filter' : 'list'
-    let targets = [], filter = null
+    let targets = [], filter = null, exclude = []
     if (targetMode === 'filter') {
         const fr = checkFilter(input.filter)
         filter = fr.value
         if (Object.keys(fr.errors).length) e.filter = Object.values(fr.errors)[0]
-        else if (filter.op === 'any' && !filter.name && !filter.onlyRunning) w.push(`Điều kiện đang khớp ${filter.level === 'adset' ? 'mọi nhóm QC' : 'mọi chiến dịch'} trên tài khoản.`)
+        // bỏ tích trong danh sách khớp = loại trừ mục đó (mục mới khớp về sau vẫn được áp dụng)
+        exclude = uniq((Array.isArray(input.exclude) ? input.exclude : []).map(String)).slice(0, 2000)
+        if (!e.filter && filter.op === 'any' && !filter.name && !filter.onlyRunning) w.push(`Điều kiện đang khớp ${filter.level === 'adset' ? 'mọi nhóm QC' : 'mọi chiến dịch'} trên tài khoản.`)
     } else {
         targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
         if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch'
@@ -173,6 +177,7 @@ export function validateSchedule(input = {}, ctx = {}) {
         targetMode,
         targets,
         ...(filter ? {filter} : {}),
+        ...(exclude.length ? {exclude} : {}),
         mode,
         value: Number.isFinite(value) ? value : 0,
         enabled,
@@ -327,6 +332,8 @@ export function checkToken(t) {
 }
 
 export const cleanAccountId = (v) => String(v ?? '').trim().replace(/^act_/i, '')
+// Các tài khoản quảng cáo đang quản lý (bản cũ chỉ có adAccountId). lib/fb.js có bản CommonJS tương tự.
+export const accountIdsOf = (s = {}) => uniq((Array.isArray(s.adAccountIds) && s.adAccountIds.length ? s.adAccountIds : s.adAccountId ? [s.adAccountId] : []).map(cleanAccountId).filter(Boolean))
 export const checkAccountId = (v) => (/^\d{5,}$/.test(cleanAccountId(v)) ? '' : 'ID tài khoản quảng cáo chỉ gồm chữ số (ví dụ 1234567890)')
 export const checkAppId = (v) => (/^\d{8,}$/.test(String(v ?? '').trim()) ? '' : 'App ID chỉ gồm chữ số (ít nhất 8 số)')
 export const checkAppSecret = (v) => (/^[a-f0-9]{16,}$/i.test(String(v ?? '').trim()) ? '' : 'App Secret gồm chữ và số (thường 32 ký tự)')
@@ -361,12 +368,14 @@ export function validateSettings(patch = {}, current = {}) {
         const m = checkTelegramToken(t);
         if (m) e.telegramToken = m; else if (t) v.telegramToken = t
     }
-    if (has('adAccountId')) {
-        const a = cleanAccountId(patch.adAccountId);
-        if (a) {
-            const m = checkAccountId(a);
-            if (m) e.adAccountId = m; else v.adAccountId = a
-        } else v.adAccountId = ''
+    // Tài khoản quảng cáo: quản lý được nhiều tài khoản (adAccountIds). adAccountId = tài khoản đầu tiên, giữ cho phần cũ.
+    if (has('adAccountIds') || has('adAccountId')) {
+        const raw = has('adAccountIds') ? (Array.isArray(patch.adAccountIds) ? patch.adAccountIds : []) : [patch.adAccountId]
+        const ids = uniq(raw.map(cleanAccountId).filter(Boolean))
+        const bad = ids.find((a) => checkAccountId(a))
+        if (bad) e.adAccountId = `${checkAccountId(bad)} — "${bad}"`
+        else if (ids.length > LIMITS.accountsMax) e.adAccountId = `Tối đa ${LIMITS.accountsMax} tài khoản quảng cáo`
+        else { v.adAccountIds = ids; v.adAccountId = ids[0] || '' }
     }
     if (has('accessToken')) {
         const t = String(patch.accessToken ?? '').trim();
@@ -400,8 +409,8 @@ export function validateSettings(patch = {}, current = {}) {
 
     const eff = {...current, ...v}
     if ((has('killSwitchEnabled') || has('dailySpendLimit')) && !e.dailySpendLimit && eff.killSwitchEnabled && !(Number(eff.dailySpendLimit) > 0)) e.dailySpendLimit = 'Hãy nhập mức chi tiêu tối đa mỗi ngày (lớn hơn 0) để bật dừng khẩn'
-    if (has('mock') || has('dryRun') || has('adAccountId') || has('accessToken')) {
-        if (eff.mock === false && (!eff.accessToken || !eff.adAccountId)) e.mock = 'Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.'
+    if (has('mock') || has('dryRun') || has('adAccountId') || has('adAccountIds') || has('accessToken')) {
+        if (eff.mock === false && (!eff.accessToken || !accountIdsOf(eff).length)) e.mock = 'Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.'
     }
     return done(e, [], v)
 }

@@ -140,7 +140,7 @@ export const TOPICS = [
   {
     id: 'connect', icon: 'KeyRound', title: 'Kết nối Facebook', summary: 'Lấy token, chọn tài khoản quảng cáo',
     blocks: [
-      { t: 'p', text: 'Để điều khiển quảng cáo thật, tool cần **Access Token** (chìa khoá do Facebook cấp) và biết **tài khoản quảng cáo** nào cần quản lý. Vào **Cài đặt → Kết nối Facebook → Kết nối Facebook** và làm theo trình hướng dẫn 3 bước.' },
+      { t: 'p', text: 'Để điều khiển quảng cáo thật, tool cần **Access Token** (chìa khoá do Facebook cấp) và biết **tài khoản quảng cáo** nào cần quản lý. Chọn được **nhiều tài khoản** cùng lúc: chiến dịch của mọi tài khoản hiện chung ở Tổng quan (lọc theo tài khoản được), lịch và rule chạy trên tất cả. Vào **Cài đặt → Kết nối Facebook → Kết nối Facebook** và làm theo trình hướng dẫn 3 bước.' },
       { t: 'table', head: ['Cách lấy token', 'Đặc điểm'], rows: [
         ['Đăng nhập Facebook', 'Dễ nhất khi dùng lâu dài: khai báo 1 lần App ID, App Secret và địa chỉ chuyển hướng trong ứng dụng Meta, sau đó chỉ cần bấm **Đăng nhập bằng Facebook**. Token tự gia hạn lên **60 ngày**, hết hạn thì bấm lại.'],
         ['Dán token (Graph API Explorer)', 'Mất vài phút. Token ban đầu chỉ sống vài giờ, tool giúp **gia hạn lên 60 ngày** nếu bạn nhập App ID và App Secret (chỉ dùng 1 lần, không lưu).'],

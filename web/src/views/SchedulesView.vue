@@ -46,7 +46,14 @@ const next = computed(() => list.value.filter((s) => s.enabled).map((s) => ({ s,
 const actionTone = (a) => (a === 'on' ? 'success' : a === 'off' ? 'danger' : 'info')
 const actionText = (s) => (s.action === 'on' ? 'Bật camp' : s.action === 'off' ? 'Tắt camp' : s.mode === 'percent' ? `${s.value > 0 ? '+' : ''}${s.value}% ngân sách` : s.mode === 'add' ? `${s.value > 0 ? '+' : '−'}${fmt(Math.abs(s.value))} ngân sách` : `Ngân sách = ${fmt(s.value)}`)
 // Lịch theo điều kiện: số mục đang khớp lúc này (lúc chạy tool lọc lại)
-const matchCount = (s) => (state.objsLoaded ? matchFilter(state.objs, s.filter).filter((o) => s.action !== 'budget' || o.dailyBudget != null).length : null)
+// tên tài khoản quảng cáo để mô tả điều kiện dễ đọc
+const accName = (id) => { const a = ((state.objsMeta && state.objsMeta.accounts) || []).find((x) => x.id === id); return a ? a.name : id }
+const describe = (s) => describeFilter(s.filter, accName)
+const matchCount = (s) => {
+  if (!state.objsLoaded) return null
+  const ex = new Set(s.exclude || []) // mục đã bỏ tích (loại trừ)
+  return matchFilter(state.objs, s.filter).filter((o) => !ex.has(o.id) && (s.action !== 'budget' || o.dailyBudget != null)).length
+}
 
 function open(item) { editing.value = item; editor.value = true }
 async function refresh() { await loadState() }
@@ -99,7 +106,7 @@ async function remove(s) {
         <h4>{{ s.name }}</h4>
         <div v-if="scheduleTimes(s).length > 1" class="tlist num">{{ scheduleTimes(s).join(' · ') }}</div>
         <div class="days"><span v-for="d in DAY_ORDER" :key="d" :class="{ on: s.days.includes(d) }">{{ DAY_LABEL[d] }}</span></div>
-        <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describeFilter(s.filter)">Theo điều kiện: {{ describeFilter(s.filter) }}</span><span v-if="matchCount(s) != null" class="tag">hiện khớp {{ matchCount(s) }}</span></div>
+        <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describe(s)">Theo điều kiện: {{ describe(s) }}</span><span v-if="s.exclude && s.exclude.length" class="tag">trừ {{ s.exclude.length }} mục</span><span v-if="matchCount(s) != null" class="tag">hiện áp dụng {{ matchCount(s) }}</span></div>
         <div v-else class="tags"><span v-for="id in s.targets.slice(0, 3)" :key="id" class="tag" :title="nameOf(id)">{{ nameOf(id) }}</span><span v-if="s.targets.length > 3" class="tag">+{{ s.targets.length - 3 }}</span></div>
         <div class="acts">
           <Btn size="sm" :icon="Play" :action="() => runNow(s)">Chạy ngay</Btn>

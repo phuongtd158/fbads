@@ -8,8 +8,10 @@ let raf = 0
 
 function run(to) {
   cancelAnimationFrame(raf)
-  const from = shown.value, t0 = performance.now(), dur = 700
+  const from = shown.value, dur = 700
+  let t0 = null // lấy mốc từ khung hình đầu tiên: cùng đồng hồ với các khung sau nên tiến độ không bao giờ âm
   const step = (t) => {
+    if (t0 === null) t0 = t
     const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3)
     shown.value = from + (to - from) * e
     if (p < 1) raf = requestAnimationFrame(step)

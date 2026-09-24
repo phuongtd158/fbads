@@ -174,7 +174,7 @@ async function api(req, res, url) {
     // chỉ ghi các khóa đã được kiểm tra (sv.value) — không bao giờ ghi trực tiếp từ dữ liệu client
     for (const [k, val] of Object.entries(sv.value)) if (k in d.settings && k !== 'passwordHash') d.settings[k] = val;
     store.save();
-    if ('mock' in sv.value || 'adAccountId' in sv.value || 'accessToken' in sv.value) fb.resetCache(); // đổi nguồn dữ liệu → bỏ cache cũ
+    if ('mock' in sv.value || 'adAccountId' in sv.value || 'adAccountIds' in sv.value || 'accessToken' in sv.value) fb.resetCache(); // đổi nguồn dữ liệu → bỏ cache cũ
     await fb.listObjects(true).catch(() => {});
     return send(res, 200, publicSettings());
   }

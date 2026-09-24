@@ -17,7 +17,7 @@ const wizOpen = ref(false)
 const method = ref('login')
 const token = ref('')
 const info = ref(null)
-const acc = ref('')
+const accs = ref([]) // các tài khoản quảng cáo được chọn (quản lý nhiều tài khoản cùng lúc)
 const manual = ref('')
 const loading = ref(false)
 const ext = reactive({ appId: '', secret: '' })
@@ -89,7 +89,7 @@ onMounted(() => {
 })
 
 async function recheck() { await checkConn(true); if (state.conn && state.conn.ok) toast('Kết nối hoạt động tốt') }
-function openWiz() { wizOpen.value = true; info.value = null; acc.value = s.value.adAccountId || ''; nextTick(() => wiz.value && wiz.value.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
+function openWiz() { wizOpen.value = true; info.value = null; accs.value = [...(s.value.adAccountIds && s.value.adAccountIds.length ? s.value.adAccountIds : s.value.adAccountId ? [s.value.adAccountId] : [])]; nextTick(() => wiz.value && wiz.value.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
 function closeWiz() { wizOpen.value = false; token.value = ''; info.value = null }
 defineExpose({ openWiz })
 
@@ -100,7 +100,7 @@ async function verify() {
   loading.value = true; info.value = null
   try {
     info.value = await api('fb/accounts', 'POST', { token: t })
-    if (!acc.value && info.value.accounts.length === 1) acc.value = info.value.accounts[0].id
+    if (!accs.value.length && info.value.accounts.length === 1) accs.value = [info.value.accounts[0].id]
   } catch (e) { toastError(e) } finally { loading.value = false }
 }
 async function extend() {
@@ -114,16 +114,28 @@ async function extend() {
   loading.value = false
   await verify()
 }
-function onManual() {
+const toggleAcc = (id) => { accs.value = accs.value.includes(id) ? accs.value.filter((x) => x !== id) : [...accs.value, id] }
+const listed = computed(() => (info.value ? info.value.accounts.map((a) => a.id) : []))
+const allAccs = computed(() => listed.value.length > 0 && listed.value.every((id) => accs.value.includes(id)))
+const someAccs = computed(() => !allAccs.value && listed.value.some((id) => accs.value.includes(id)))
+function toggleAllAccs() {
+  accs.value = allAccs.value ? accs.value.filter((id) => !listed.value.includes(id)) : [...new Set([...accs.value, ...listed.value])]
+}
+// ID nhập tay (hoặc đã chọn trước đây) nhưng không có trong danh sách token thấy được
+const extraIds = computed(() => accs.value.filter((id) => !listed.value.includes(id)))
+function addManual() {
   const v = manual.value.trim()
-  manualErr.value = v ? checkAccountId(v) : ''
-  acc.value = v && !manualErr.value ? cleanAccountId(v) : ''
+  manualErr.value = v ? checkAccountId(v) : 'Nhập ID tài khoản quảng cáo'
+  if (manualErr.value) return
+  const id = cleanAccountId(v)
+  if (!accs.value.includes(id)) accs.value = [...accs.value, id]
+  manual.value = ''
 }
 async function saveConn() {
-  if (!acc.value) return toast(manualErr.value || 'Hãy chọn tài khoản quảng cáo', 'error')
+  if (!accs.value.length) return toast('Hãy chọn ít nhất 1 tài khoản quảng cáo', 'error')
   if (token.value.trim() && checkToken(token.value)) return toast(checkToken(token.value), 'error')
   const wasMock = s.value.mock
-  const body = { adAccountId: acc.value, mock: false, dryRun: wasMock ? true : s.value.dryRun }
+  const body = { adAccountIds: accs.value, mock: false, dryRun: wasMock ? true : s.value.dryRun }
   if (token.value.trim()) body.accessToken = token.value.trim()
   await api('settings', 'POST', body)
   await loadState(); resetData(); closeWiz()
@@ -156,7 +168,13 @@ async function saveConn() {
         <p class="faint">Kiểm tra lúc {{ new Date(conn.checkedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</p>
         <dl>
           <div><dt>Người dùng</dt><dd>{{ conn.user }}</dd></div>
-          <div><dt>Tài khoản QC</dt><dd>{{ conn.name }} · {{ conn.currency }} <Badge :tone="conn.accountActive ? 'success' : 'warning'" dot>{{ conn.status }}</Badge></dd></div>
+          <div><dt>Tài khoản QC</dt><dd>
+            <ul v-if="conn.accounts && conn.accounts.length > 1" class="acclist">
+              <li v-for="a in conn.accounts" :key="a.id"><span class="an" :title="'ID ' + a.id">{{ a.name }}</span><small class="faint">{{ a.currency }}</small>
+                <Badge :tone="a.error ? 'danger' : a.active ? 'success' : 'warning'" dot :title="a.error || ''">{{ a.error ? 'Lỗi' : a.status }}</Badge></li>
+            </ul>
+            <template v-else>{{ conn.name }} · {{ conn.currency }} <Badge :tone="conn.accountActive ? 'success' : 'warning'" dot>{{ conn.status }}</Badge></template>
+          </dd></div>
           <div v-if="tk"><dt>Quyền truy cập</dt><dd><template v-if="tk.missing && tk.missing.length"><Badge tone="danger">Thiếu {{ tk.missing.join(', ') }}</Badge></template><template v-else>ads_management, ads_read <ShieldCheck :size="15" class="okc" /></template></dd></div>
           <div v-if="tk"><dt>Access Token</dt><dd><Badge :tone="tokenTone === 'ok' ? 'success' : tokenTone === 'warn' ? 'warning' : 'danger'">{{ tokenText }}</Badge></dd></div>
         </dl>
@@ -238,27 +256,35 @@ async function saveConn() {
           </div>
         </div>
 
-        <div class="step" :class="{ done: acc && info }">
-          <span class="no"><Check v-if="acc && info" :size="16" /><template v-else>3</template></span>
+        <div class="step" :class="{ done: accs.length && info }">
+          <span class="no"><Check v-if="accs.length && info" :size="16" /><template v-else>3</template></span>
           <div class="body">
             <h4>Chọn tài khoản quảng cáo</h4>
-            <p class="muted">{{ info ? 'Chọn tài khoản mà tool sẽ quản lý.' : 'Danh sách sẽ hiện ra sau khi kiểm tra token ở bước 2.' }}</p>
+            <p class="muted">{{ info ? 'Chọn một hoặc nhiều tài khoản. Tool quản lý chiến dịch của tất cả tài khoản đã chọn ở cùng một nơi.' : 'Danh sách sẽ hiện ra sau khi kiểm tra token ở bước 2.' }}</p>
+            <div v-if="info && info.accounts.length > 1" class="accbar">
+              <label class="chk"><input type="checkbox" :checked="allAccs" :indeterminate="someAccs" @change="toggleAllAccs" /> Chọn tất cả ({{ info.accounts.length }})</label>
+              <span class="faint">Đã chọn {{ accs.length }}</span>
+            </div>
             <div v-if="info && info.accounts.length" class="accs">
-              <label v-for="a in info.accounts" :key="a.id" class="acc" :class="{ on: acc === a.id }">
-                <input v-model="acc" type="radio" name="acc" :value="a.id" />
+              <label v-for="a in info.accounts" :key="a.id" class="acc" :class="{ on: accs.includes(a.id) }">
+                <input type="checkbox" :checked="accs.includes(a.id)" @change="toggleAcc(a.id)" />
                 <div class="x"><b>{{ a.name }}</b><small class="faint">ID {{ a.id }} · {{ a.currency }}</small></div>
                 <Badge :tone="a.active ? 'success' : 'warning'" dot>{{ a.status }}</Badge>
               </label>
             </div>
             <div v-else-if="info" class="note warn"><AlertTriangle :size="18" /><div><b>Token này chưa thấy tài khoản quảng cáo nào.</b> Hãy đảm bảo tài khoản đã được gán cho người dùng/token này, hoặc nhập ID thủ công bên dưới.</div></div>
-            <details><summary>Nhập ID tài khoản thủ công</summary>
-              <div class="row"><input v-model="manual" class="input" placeholder="Vd: 1234567890" :class="{ bad: manualErr }" @input="onManual" /><small class="faint">ID nằm cạnh tên tài khoản trong Ads Manager.</small></div>
+            <div v-if="extraIds.length" class="extra">
+              <span v-for="id in extraIds" :key="id" class="chip">ID {{ id }}<button type="button" :aria-label="'Bỏ tài khoản ' + id" @click="toggleAcc(id)"><X :size="13" /></button></span>
+            </div>
+            <details><summary>Thêm ID tài khoản thủ công</summary>
+              <div class="row"><input v-model="manual" class="input" placeholder="Vd: 1234567890" :class="{ bad: manualErr }" @input="manualErr = ''" @keydown.enter.prevent="addManual" /><Btn size="sm" @click="addManual">Thêm</Btn></div>
+              <small class="faint">ID nằm cạnh tên tài khoản trong Ads Manager. Thêm được nhiều ID.</small>
               <p v-if="manualErr" class="ferr">{{ manualErr }}</p>
             </details>
           </div>
         </div>
 
-        <footer><Btn @click="closeWiz">Huỷ</Btn><Btn variant="primary" :icon="Check" :disabled="!acc || !hasToken" :action="saveConn">Lưu & kết nối</Btn></footer>
+        <footer><Btn @click="closeWiz">Huỷ</Btn><Btn variant="primary" :icon="Check" :disabled="!accs.length || !hasToken" :action="saveConn">Lưu & kết nối{{ accs.length > 1 ? ` ${accs.length} tài khoản` : '' }}</Btn></footer>
       </section>
     </Transition>
   </div>
@@ -299,7 +325,14 @@ li > div { flex: 1; min-width: 0; }
 .note { display: flex; gap: 11px; padding: 12px 14px; border-radius: 12px; margin-top: 12px; font-size: 14.5px; }
 .note > div { flex: 1; min-width: 0; } .note svg { flex: none; margin-top: 2px; } .note small { display: block; margin-top: 6px; opacity: .85; }
 .note.ok { background: var(--success-soft); color: var(--success); } .note.bad { background: var(--danger-soft); color: var(--danger); } .note.warn { background: var(--warning-soft); color: var(--warning); }
-.accs { display: grid; gap: 8px; margin-bottom: 12px; }
+.accs { display: grid; gap: 8px; margin-bottom: 12px; max-height: 380px; overflow-y: auto; padding: 2px; }
+.accbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 14px; }
+.chk { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; } .chk input { accent-color: var(--accent); width: 17px; height: 17px; }
+.extra { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 5px 6px 5px 11px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 13px; }
+.chip button { border: 0; background: none; color: inherit; display: grid; place-items: center; padding: 2px; border-radius: 5px; cursor: pointer; } .chip button:hover { background: var(--accent); color: #fff; }
+.acclist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.acclist li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .acclist .an { font-weight: 600; }
 .acc { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border: 1.5px solid var(--border); border-radius: 14px; cursor: pointer; transition: .15s; }
 .acc:hover { border-color: var(--border-strong); } .acc.on { border-color: var(--accent); background: var(--accent-soft); }
 .acc input { accent-color: var(--accent); width: 18px; height: 18px; flex: none; }

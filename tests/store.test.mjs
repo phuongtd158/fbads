@@ -245,3 +245,12 @@ test('lần đầu có data.json cục bộ: được đưa lên Upstash', async
   assert.equal(other.get().rules[0].id, 'r9')
   s.close()
 })
+
+test('dữ liệu cũ chỉ có 1 tài khoản quảng cáo → tự chuyển sang danh sách nhiều tài khoản', async () => {
+  const dir = newDir()
+  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: { adAccountId: '9876543', mock: false } }))
+  const st = create({ dir, env: {} })
+  await st.init()
+  assert.deepEqual(st.get().settings.adAccountIds, ['9876543'])
+  assert.equal(st.get().settings.adAccountId, '9876543')
+})

@@ -288,3 +288,22 @@ test('lịch không khớp mục nào: ghi 1 dòng, không gửi gì', async () 
   const l = S().logs.find((x) => x.refId === 'f4')
   assert.ok(l.ok && l.detail.includes('Không có mục nào khớp'))
 })
+
+test('lịch theo điều kiện: bỏ qua mục đã loại trừ, vẫn áp dụng cho mục khớp còn lại', async () => {
+  await engine.runSchedule({ id: 'f5', name: 'Tắt trừ 1', action: 'off', targetMode: 'filter', targets: [], exclude: ['mock_1'],
+    filter: { level: 'campaign', op: 'gte', x: 500000 }, days: [0], times: ['06:00'], enabled: true })
+  assert.equal((await camp('mock_1')).effective, 'ACTIVE') // 500k nhưng bị loại trừ
+  assert.equal((await camp('mock_4')).effective, 'PAUSED') // 800k → tắt
+  const sum = S().logs.find((l) => l.refId === 'f5' && !l.after)
+  assert.ok(sum.detail.includes('trừ 1 mục') && sum.detail.includes('Khớp 1 mục'))
+})
+
+test('báo cáo: nhiều tài khoản quảng cáo → mỗi tài khoản một phần', async () => {
+  const notify = require('../lib/notify')
+  const orig = notify.telegram
+  let sent = ''
+  notify.telegram = async (t) => { sent = t; return true }
+  try { await engine.sendReport() } finally { notify.telegram = orig }
+  assert.ok(sent.includes('Tài khoản mẫu A') && sent.includes('Tài khoản mẫu B'))
+  assert.equal((sent.match(/Đang chạy:/g) || []).length, 2)
+})

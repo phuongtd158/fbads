@@ -45,7 +45,7 @@ export async function loadObjs(force = false, bg = false) {
     state.objsErr = ''
     // giờ số liệu được tải từ Facebook (server có thể trả lại bản vừa tải để tiết kiệm lượt gọi)
     state.objsAt = r.at ? new Date(r.at) : new Date()
-    state.objsMeta = { stale: !!r.stale, blockedUntil: r.blockedUntil || null, usage: r.usage || null }
+    state.objsMeta = { stale: !!r.stale, blockedUntil: r.blockedUntil || null, usage: r.usage || null, accounts: r.accounts || [], accountErrors: r.accountErrors || [] }
   } catch (e) {
     if (!e.silent) { if (!bg) state.objs = []; state.objsErr = e.message }
   } finally {

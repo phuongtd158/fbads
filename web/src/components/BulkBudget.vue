@@ -1,43 +1,59 @@
 <script setup>
-// Đổi ngân sách hàng loạt theo điều kiện: chọn điều kiện → xem trước danh sách (bỏ tick được từng mục) → xác nhận → chạy lần lượt.
+// Đổi ngân sách hàng loạt, 3 bước như Ads Manager:
+//  1. lọc theo điều kiện → 2. tick chọn chiến dịch trong danh sách khớp → 3. nhập ngân sách mới → xác nhận → chạy lần lượt.
 // Mỗi mục đi qua đúng API đổi ngân sách thủ công nên được kiểm tra, ghi Nhật ký và hoàn tác được như khi sửa từng camp.
 import { ref, reactive, computed, watch } from 'vue'
 import { Check, Square, Wallet, Play } from 'lucide-vue-next'
 import { state, setObjBudget } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { fmt } from '../lib/format'
-import { CONDS, MODES, parseMoney, readForm, planBulk } from '../lib/bulkBudget'
+import { MODES, parseMoney, readFilter, readAction, budgetChange } from '../lib/bulkBudget'
 import Modal from './Modal.vue'
 import Btn from './Btn.vue'
 import Field from './Field.vue'
 import Callout from './Callout.vue'
 import Segmented from './Segmented.vue'
+import FilterPicker from './FilterPicker.vue'
 
-const props = defineProps({ modelValue: Boolean, level: { type: String, default: 'campaign' } })
+const props = defineProps({ modelValue: Boolean, level: { type: String, default: 'campaign' }, account: { type: String, default: '' } })
 const emit = defineEmits(['update:modelValue'])
 
-const f = reactive({ level: 'campaign', op: 'lt', x: '', y: '', onlyRunning: false, name: '', mode: 'set', value: '' })
-const excluded = ref(new Set())
+const blankFilter = () => ({ level: 'campaign', op: 'lt', x: '', y: '', name: '', onlyRunning: false, account: '' })
+const filter = reactive(blankFilter())
+const act = reactive({ mode: 'set', value: '' })
+const selected = ref([])
 const run = ref(null) // { total, done, ok, fails: [{ name, msg }], remaining: [], rateLimited, running, stop }
 
-watch(() => props.modelValue, (open) => { if (open) { f.level = props.level; excluded.value = new Set(); run.value = null } })
-watch(() => [f.level, f.op, f.x, f.y, f.onlyRunning, f.name, f.mode, f.value], () => { excluded.value = new Set() })
+watch(() => props.modelValue, (open) => {
+  if (!open) return
+  Object.assign(filter, blankFilter(), { level: props.level, account: props.account })
+  Object.assign(act, { mode: 'set', value: '' })
+  selected.value = []; run.value = null
+})
 
-const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
-const levelName = computed(() => (f.level === 'adset' ? 'nhóm QC' : 'camp'))
-const form = computed(() => readForm(f))
-const touched = computed(() => (f.op === 'any' || f.x !== '') && f.value !== '')
-const errs = computed(() => (touched.value ? form.value.errors : {}))
-const plan = computed(() => (Object.keys(form.value.errors).length ? null : planBulk(state.objs, { filter: form.value.filter, action: form.value.action })))
-const chosen = computed(() => (plan.value ? plan.value.items.filter((i) => !excluded.value.has(i.o.id)) : []))
-const sum = (list, k) => list.reduce((t, i) => t + i[k], 0)
-const big = (i) => i.to / i.from >= 2 || i.to / i.from <= 0.5
-const bigCount = computed(() => chosen.value.filter(big).length)
-
+const levelName = computed(() => (filter.level === 'adset' ? 'nhóm QC' : 'chiến dịch'))
 const moneyHint = (v) => { const n = parseMoney(v); return Number.isFinite(n) && v !== '' ? fmt(n) : '' }
-const pct = (i) => `${i.to > i.from ? '+' : ''}${Math.round((i.to / i.from - 1) * 100)}%`
-function toggle(id) { const s = new Set(excluded.value); s.has(id) ? s.delete(id) : s.add(id); excluded.value = s }
-function toggleAll() { excluded.value = excluded.value.size ? new Set() : new Set(plan.value.items.map((i) => i.o.id)) }
+const fltOk = computed(() => !Object.keys(readFilter(filter).errors).length)
+
+// ----- Bước 3: ngân sách mới -----
+const action = computed(() => readAction(act))
+const actReady = computed(() => !Object.keys(action.value.errors).length)
+const actErr = computed(() => (act.value !== '' ? action.value.errors.value || '' : ''))
+const valueHint = computed(() => (act.mode === 'percent' ? `Số âm để giảm, vd -20${act.value !== '' ? ` → ${act.value}%` : ''}` : act.mode === 'add' ? `Số âm để trừ, vd -50k${moneyHint(act.value) ? ` → ${moneyHint(act.value)}` : ''}` : `Gõ được 500k, 1,5tr hoặc 500.000${moneyHint(act.value) ? ` → ${moneyHint(act.value)}` : ''}`))
+// cột "Ngân sách mới" trong danh sách chọn
+const change = computed(() => (actReady.value ? (o) => budgetChange(o, action.value.action) : null))
+
+// Sẽ đổi = mục đã chọn có ngân sách mới khác hiện tại
+const chosen = computed(() => { const s = new Set(selected.value); return state.objs.filter((o) => s.has(o.id) && o.dailyBudget != null) })
+const toRun = computed(() => (actReady.value ? chosen.value.map((o) => ({ o, ch: budgetChange(o, action.value.action) })).filter((r) => r.ch.kind === 'change') : []))
+const skipped = computed(() => (actReady.value ? chosen.value.length - toRun.value.length : 0))
+const sumFrom = computed(() => toRun.value.reduce((t, r) => t + r.o.dailyBudget, 0))
+const sumTo = computed(() => toRun.value.reduce((t, r) => t + r.ch.to, 0))
+const bigCount = computed(() => toRun.value.filter((r) => r.ch.to / r.o.dailyBudget >= 2 || r.ch.to / r.o.dailyBudget <= 0.5).length)
+const footHint = computed(() => (!fltOk.value ? 'Bước 1: đặt điều kiện lọc'
+  : !selected.value.length ? `Bước 2: tick chọn ${levelName.value}`
+    : !actReady.value ? 'Bước 3: nhập ngân sách mới'
+      : !toRun.value.length ? 'Các mục đã chọn đều không cần đổi' : ''))
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function execute(list) {
@@ -61,69 +77,42 @@ async function execute(list) {
 }
 
 async function start() {
-  const list = chosen.value
-  if (!list.length) return toast('Không có mục nào để đổi', 'error')
-  const msg = `Tổng ngân sách/ngày của ${list.length} ${levelName.value}: ${fmt(sum(list, 'from'))} → ${fmt(sum(list, 'to'))}.`
+  const list = toRun.value
+  if (!list.length) return toast(footHint.value || 'Không có mục nào để đổi', 'error')
+  const msg = `Tổng ngân sách/ngày của ${list.length} ${levelName.value}: ${fmt(sumFrom.value)} → ${fmt(sumTo.value)}.`
+    + (skipped.value ? ` Bỏ qua ${skipped.value} mục đã đúng mức hoặc không hợp lệ.` : '')
     + (bigCount.value ? ` ${bigCount.value} mục thay đổi từ gấp đôi hoặc giảm một nửa trở lên, Facebook có thể cho học lại.` : '')
     + (state.settings.mock ? '' : ' Thay đổi áp dụng thật lên Facebook ngay.')
   if (!await confirm(`Đổi ngân sách ${list.length} ${levelName.value}?`, msg, { ok: 'Đổi ngân sách' })) return
-  await execute(list.map((i) => ({ o: i.o, to: i.to })))
+  await execute(list.map((r) => ({ o: r.o, to: r.ch.to })))
 }
 const resume = () => execute(run.value.remaining)
+const again = () => { run.value = null; selected.value = [] }
 const close = () => { if (run.value && run.value.running) run.value.stop = true; emit('update:modelValue', false) }
 </script>
 
 <template>
-  <Modal :model-value="modelValue" title="Đổi ngân sách hàng loạt" subtitle="Chọn điều kiện, xem trước danh sách rồi đổi một lần." width="760px" @update:model-value="(v) => !v && close()">
+  <Modal :model-value="modelValue" title="Đổi ngân sách hàng loạt" subtitle="Lọc theo điều kiện, chọn chiến dịch, rồi nhập ngân sách mới." width="840px" @update:model-value="(v) => !v && close()">
     <template v-if="!run">
-      <Field v-if="hasAdsets" label="Áp dụng cho"><Segmented v-model="f.level" :options="[{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm quảng cáo' }]" /></Field>
+      <!-- Bước 1 + 2: lọc rồi tick chọn -->
+      <FilterPicker v-model="selected" v-model:filter="filter" numbered need-budget :change="change" />
 
-      <Field label="Ngân sách/ngày hiện tại" :error="errs.x || errs.y">
-        <div class="inl">
-          <select v-model="f.op" class="input op"><option v-for="(c, k) in CONDS" :key="k" :value="k">{{ c.label }}</option></select>
-          <template v-if="f.op !== 'any'">
-            <span class="mi"><input v-model="f.x" class="input" inputmode="decimal" placeholder="vd 100k" aria-label="Mức ngân sách" /><small class="faint">{{ moneyHint(f.x) }}</small></span>
-            <template v-if="f.op === 'between'"><span class="faint">và</span><span class="mi"><input v-model="f.y" class="input" inputmode="decimal" placeholder="vd 300k" aria-label="Mức thứ hai" /><small class="faint">{{ moneyHint(f.y) }}</small></span></template>
-          </template>
-        </div>
-      </Field>
-
-      <div class="two">
-        <Field label="Tên chứa (không bắt buộc)"><input v-model="f.name" class="input" placeholder="vd Phương" /></Field>
-        <Field label="Phân phối"><label class="chk"><input v-model="f.onlyRunning" type="checkbox" /> Chỉ mục đang chạy</label></Field>
-      </div>
-
-      <Field label="Đổi thành" :error="errs.value" :hint="f.mode === 'percent' ? 'Số âm để giảm, vd -20' : f.mode === 'add' ? 'Số âm để trừ, vd -50k' : 'Có thể gõ 500k, 1,5tr hoặc 500.000'">
-        <div class="inl">
-          <Segmented v-model="f.mode" :options="Object.entries(MODES).map(([value, label]) => ({ value, label }))" size="sm" />
-          <span class="mi"><input v-model="f.value" class="input" inputmode="decimal" :placeholder="f.mode === 'percent' ? 'vd 20' : 'vd 500k'" aria-label="Giá trị" />
-            <small class="faint">{{ f.mode === 'percent' ? (f.value !== '' ? `${f.value}%` : '') : moneyHint(f.value) }}</small></span>
-        </div>
-      </Field>
-
-      <div v-if="plan" class="pv">
-        <div class="pvh">
-          <b>{{ plan.items.length }} {{ levelName }} khớp điều kiện</b>
-          <span v-if="plan.skipped.noBudget || plan.skipped.same || plan.skipped.invalid" class="faint">· bỏ qua
-            <template v-if="plan.skipped.noBudget">{{ plan.skipped.noBudget }} mục dùng ngân sách cấp khác (CBO) </template>
-            <template v-if="plan.skipped.same">{{ plan.skipped.same }} mục đã đúng mức </template>
-            <template v-if="plan.skipped.invalid">{{ plan.skipped.invalid }} mục sẽ về 0 hoặc quá lớn</template>
-          </span>
-          <button v-if="plan.items.length" type="button" class="lnk" @click="toggleAll">{{ excluded.size ? 'Chọn tất cả' : 'Bỏ chọn tất cả' }}</button>
-        </div>
-        <div v-if="plan.items.length" class="list">
-          <label v-for="i in plan.items" :key="i.o.id" class="it" :class="{ offi: excluded.has(i.o.id) }">
-            <input type="checkbox" :checked="!excluded.has(i.o.id)" @change="toggle(i.o.id)" />
-            <span class="nm" :title="i.o.name">{{ i.o.name }}</span>
-            <span class="num ch">{{ fmt(i.from) }} → <b>{{ fmt(i.to) }}</b></span>
-            <span class="num dp" :class="{ bigc: big(i) }">{{ pct(i) }}</span>
-          </label>
-        </div>
-        <p v-else class="faint none">Không có {{ levelName }} nào khớp. Thử nới điều kiện.</p>
-        <p v-if="chosen.length" class="tot">Tổng ngân sách/ngày: <span class="num">{{ fmt(sum(chosen, 'from')) }}</span> → <b class="num">{{ fmt(sum(chosen, 'to')) }}</b></p>
-      </div>
-      <Callout v-if="bigCount" tone="warning">{{ bigCount }} mục thay đổi từ gấp đôi hoặc giảm một nửa trở lên. Thay đổi lớn có thể khiến Facebook cho nhóm quảng cáo học lại từ đầu.</Callout>
-      <Callout v-if="chosen.length > 60" tone="info">Đổi nhiều mục cùng lúc tốn nhiều lượt gọi Facebook. Nếu bị giới hạn, tool dừng lại và cho bạn chạy tiếp phần còn lại sau vài phút.</Callout>
+      <!-- Bước 3 -->
+      <section class="st">
+        <h4><span class="no">3</span>Ngân sách mới</h4>
+        <Field :error="actErr" :hint="valueHint">
+          <div class="inl">
+            <Segmented v-model="act.mode" :options="Object.entries(MODES).map(([value, label]) => ({ value, label }))" size="sm" />
+            <input v-model="act.value" class="input val" inputmode="decimal" :placeholder="act.mode === 'percent' ? 'vd 20' : 'vd 500k'" aria-label="Giá trị" />
+          </div>
+        </Field>
+        <p v-if="toRun.length" class="tot">
+          Tổng ngân sách/ngày của <b>{{ toRun.length }}</b> mục sẽ đổi: <span class="num">{{ fmt(sumFrom) }}</span> → <b class="num">{{ fmt(sumTo) }}</b>
+          <span v-if="skipped" class="faint"> · bỏ qua {{ skipped }} mục đã đúng mức hoặc không hợp lệ</span>
+        </p>
+        <Callout v-if="bigCount" tone="warning">{{ bigCount }} mục thay đổi từ gấp đôi hoặc giảm một nửa trở lên. Thay đổi lớn có thể khiến Facebook cho nhóm quảng cáo học lại từ đầu.</Callout>
+        <Callout v-if="toRun.length > 60" tone="info">Đổi nhiều mục cùng lúc tốn nhiều lượt gọi Facebook. Nếu bị giới hạn, tool dừng lại và cho bạn chạy tiếp phần còn lại sau vài phút.</Callout>
+      </section>
     </template>
 
     <div v-else class="res">
@@ -140,41 +129,34 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
 
     <template #footer>
       <template v-if="!run">
+        <span v-if="footHint" class="fh faint">{{ footHint }}</span>
         <Btn @click="close">Huỷ</Btn>
-        <Btn variant="primary" :icon="Wallet" :disabled="!chosen.length" :action="start">Đổi ngân sách {{ chosen.length || '' }} {{ levelName }}</Btn>
+        <Btn variant="primary" :icon="Wallet" :disabled="!toRun.length" :action="start">Đổi ngân sách{{ toRun.length ? ` ${toRun.length} ${levelName}` : '' }}</Btn>
       </template>
       <template v-else-if="run.running"><Btn :icon="Square" @click="run.stop = true">Dừng</Btn></template>
       <template v-else>
         <Btn @click="close">Đóng</Btn>
         <Btn v-if="run.remaining.length" variant="primary" :icon="Play" :action="resume">Chạy tiếp {{ run.remaining.length }} mục</Btn>
-        <Btn v-else variant="primary" :icon="Check" @click="run = null">Đổi đợt khác</Btn>
+        <Btn v-else variant="primary" :icon="Check" @click="again">Đổi đợt khác</Btn>
       </template>
     </template>
   </Modal>
 </template>
 
 <style scoped>
-.inl { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-.op { width: auto; }
-.mi { display: inline-flex; flex-direction: column; gap: 3px; } .mi .input { width: 150px; } .mi small { font-size: 12px; min-height: 15px; }
-.two { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start; }
-.chk { display: inline-flex; align-items: center; gap: 8px; height: 40px; font-size: 14.5px; cursor: pointer; } .chk input { accent-color: var(--accent); width: 17px; height: 17px; }
-.pv { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin: 6px 0 12px; }
-.pvh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 11px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 14px; }
-.lnk { margin-left: auto; border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13.5px; cursor: pointer; }
-.list { max-height: 300px; overflow-y: auto; }
-.it { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 56px; gap: 10px; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 14px; cursor: pointer; }
-.it:last-child { border-bottom: 0; } .it:hover { background: var(--surface-2); }
-.it input { accent-color: var(--accent); width: 16px; height: 16px; }
-.it.offi { opacity: .45; }
-.nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ch { color: var(--text-2); white-space: nowrap; } .ch b { color: var(--text); }
-.dp { text-align: right; font-weight: 650; color: var(--text-2); font-size: 13px; } .dp.bigc { color: var(--warning); }
-.none { padding: 14px; font-size: 14px; }
-.tot { padding: 10px 14px; margin: 0; border-top: 1px solid var(--border); font-size: 14px; background: var(--surface-2); }
+.st { margin-bottom: 20px; }
+.st h4 { display: flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 0 0 10px; letter-spacing: -.01em; }
+.no { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-grad); color: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; }
+.inl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.val { width: 150px; }
+.tot { font-size: 14px; margin: -4px 0 10px; }
+.fh { margin-right: auto; align-self: center; font-size: 13.5px; }
+
 .res { display: grid; gap: 12px; }
 .bar { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; } .bar i { display: block; height: 100%; background: var(--accent-grad); transition: width .3s var(--ease); }
 .big { font-size: 20px; font-weight: 700; margin: 0; }
 .fails { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; }
-@media (max-width: 560px) { .two { grid-template-columns: 1fr; } .it { grid-template-columns: auto minmax(0, 1fr) auto; } .dp { display: none; } }
+@media (max-width: 620px) {
+  .fh { display: none; }
+}
 </style>
