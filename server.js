@@ -66,7 +66,7 @@ async function api(req, res, url) {
   let mt;
 
   // ----- Đăng nhập -----
-  if (m === 'GET' && p === '/api/auth') return send(res, 200, { required: auth.enabled(), authed: auth.isAuthed(req), envManaged: auth.envManaged() });
+  if ((m === 'GET' || m === 'HEAD') && p === '/api/auth') return send(res, 200, { required: auth.enabled(), authed: auth.isAuthed(req), envManaged: auth.envManaged() });
   if (m === 'POST' && p === '/api/login') {
     const wait = auth.lockedMinutes(req);
     if (wait) return send(res, 429, { error: `Nhập sai quá nhiều lần. Thử lại sau ${wait} phút.` });
@@ -196,7 +196,8 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith('/api/')) {
       // Chặn gọi chéo từ trang web khác (CSRF): request ghi phải cùng origin và là JSON.
-      if (req.method !== 'GET') {
+      // HEAD chỉ được phép trên /api/auth: các dịch vụ theo dõi (UptimeRobot…) hay dùng HEAD để kiểm tra tool còn sống
+      if (req.method !== 'GET' && !(req.method === 'HEAD' && url.pathname === '/api/auth')) {
         const o = req.headers.origin;
         if (o && new URL(o).host !== req.headers.host) return send(res, 403, { error: 'Origin không hợp lệ' });
         if (!String(req.headers['content-type'] || '').includes('application/json')) return send(res, 415, { error: 'Cần Content-Type: application/json' });
