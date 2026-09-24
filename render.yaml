@@ -1,0 +1,28 @@
+# Render Blueprint: tạo web service từ Dockerfile, có ổ đĩa lưu dữ liệu.
+# Ổ đĩa bền vững (persistent disk) CHỈ có ở gói trả phí. Gói `free` sẽ tự ngủ sau 15 phút không có truy cập
+# và mất dữ liệu mỗi lần khởi động lại, nên KHÔNG dùng được cho tool này (lịch/rule cần chạy liên tục).
+services:
+  - type: web
+    name: fbads
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: singapore          # không đổi được sau khi tạo
+    plan: 0.5c-512mb           # gói trả phí nhỏ nhất (trước đây gọi là "Starter"); nếu Render báo sai tên gói, chọn gói này trong dashboard
+    branch: dev
+    autoDeployTrigger: commit  # push lên nhánh dev thì tự deploy
+    healthCheckPath: /api/auth
+    envVars:
+      - key: HOST
+        value: 0.0.0.0         # Render yêu cầu nghe trên 0.0.0.0 (cổng lấy từ biến PORT do Render đặt)
+      - key: DATA_DIR
+        value: /data           # thư mục ổ đĩa: chứa data.json (token, lịch, rule, nhật ký)
+      - key: TRUST_PROXY
+        value: "1"             # lấy IP thật của người dùng từ proxy để giới hạn nhập sai mật khẩu
+      - key: TZ
+        value: Asia/Ho_Chi_Minh
+      - key: APP_PASSWORD
+        sync: false            # Render sẽ hỏi bạn nhập khi tạo; không lưu trong file này
+    disk:
+      name: fbads-data
+      mountPath: /data
+      sizeGB: 1

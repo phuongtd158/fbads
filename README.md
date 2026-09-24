@@ -55,6 +55,15 @@ Mở `https://bongbi.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào C
 - Dữ liệu (`data.json`) nằm trên volume `fbads_data` (`DATA_DIR=/data`), giữ nguyên khi deploy lại. Sao lưu: `fly ssh sftp get /data/data.json`.
 - Cập nhật code: `fly deploy --ha=false`. Xem log: `fly logs`.
 
+## Deploy lên Render (chạy 24/7)
+**Bắt buộc gói trả phí + ổ đĩa**: gói Free tự ngủ sau 15 phút không có truy cập và xoá dữ liệu mỗi lần khởi động lại, nên lịch/rule không chạy được.
+1. dashboard.render.com → **New → Blueprint** → chọn repo này, nhánh `dev`. Render đọc `render.yaml` (Docker, Singapore, ổ đĩa 1GB gắn vào `/data`).
+2. Khi được hỏi, nhập **`APP_PASSWORD`** (mật khẩu đăng nhập). Bấm Apply.
+3. Đợi deploy xong; log phải có `Facebook Ads Auto Tool đang chạy` và `Đăng nhập: BẬT`. Mở địa chỉ `https://….onrender.com`, đăng nhập rồi vào Cài đặt → Kết nối Facebook.
+- Chỉ chạy **1 instance** (có ổ đĩa thì Render không cho nhân bản). Đừng chạy song song bản Fly/ngrok với cùng token Facebook vì việc sẽ bị làm hai lần.
+- Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn). Service có ổ đĩa không deploy liền mạch nên sẽ ngắt vài chục giây.
+- IP người dùng lấy từ tiêu đề `CF-Connecting-IP` (tự nhận biết qua biến `RENDER`); có thể ép bằng biến `CLIENT_IP_HEADER`.
+
 ## Kiểm tra dữ liệu (validate)
 - Luật nghiệp vụ nằm ở một nơi: `shared/validate.mjs`, dùng chung cho server (kiểm tra cứng, không tin trình duyệt) và giao diện (báo lỗi ngay khi nhập).
 - Chặn: lịch/rule thiếu giờ-ngày-camp, giảm ngân sách ≥ 100%, đổi ngân sách camp CBO, lịch bật/tắt xung đột, rule thiếu chi tiêu tối thiểu hoặc không có thời gian nghỉ, trần < sàn, khung giờ qua đêm, múi giờ/chu kỳ sai, token/Chat ID sai định dạng, mật khẩu yếu, chuyển Chạy thật khi chưa kết nối.

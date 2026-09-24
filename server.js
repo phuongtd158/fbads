@@ -12,7 +12,9 @@ let V = null; // shared/validate.mjs (ES module, nạp bằng import() lúc kh�
 const bad = (res, r) => send(res, 400, { error: r.first || r.error, errors: r.errors || {} });
 
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '127.0.0.1'; // deploy: đặt HOST=0.0.0.0 (bắt buộc phải có mật khẩu)
+// Mặc định chỉ nghe trên máy này. Trên Render/Fly (nền tảng bắt buộc nghe 0.0.0.0) tự mở ra; nơi khác đặt HOST=0.0.0.0
+// (bắt buộc phải có mật khẩu, nếu không server không khởi động).
+const HOST = process.env.HOST || (process.env.RENDER || process.env.FLY_APP_NAME ? '0.0.0.0' : '127.0.0.1');
 const PUBLIC = path.join(__dirname, 'public');
 const SECRETS = ['accessToken', 'telegramToken', 'passwordHash'];
 const MIME = {
