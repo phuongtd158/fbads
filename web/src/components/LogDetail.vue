@@ -44,7 +44,7 @@ const actionText = computed(() => {
   if (a.type === 'off') return 'Tắt camp'
   if (a.type === 'notify') return 'Chỉ gửi cảnh báo (không đổi camp)'
   if (a.type === 'budget') {
-    const parts = [a.mode === 'percent' ? `${a.value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(a.value)}% ngân sách` : `Đặt ngân sách = ${fmt(a.value)}`]
+    const parts = [a.mode === 'percent' ? `${a.value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(a.value)}% ngân sách` : a.mode === 'add' ? `${a.value > 0 ? 'Cộng thêm' : 'Trừ bớt'} ${fmt(Math.abs(a.value))} ngân sách` : `Đặt ngân sách = ${fmt(a.value)}`]
     if (a.max) parts.push(`trần ${fmt(a.max)}`)
     if (a.min) parts.push(`sàn ${fmt(a.min)}`)
     return parts.join(', ')

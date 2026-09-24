@@ -1,12 +1,12 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt, fmtDec, fmtCompact } from '../lib/format'
-import { STATUS } from '../lib/constants'
+import { DELIVERY, deliveryMap } from '../lib/delivery'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import Badge from '../components/Badge.vue'
@@ -17,6 +17,8 @@ import ProgressRing from '../components/ProgressRing.vue'
 import AnimatedNumber from '../components/AnimatedNumber.vue'
 import BudgetCell from '../components/BudgetCell.vue'
 import InfoTip from '../components/InfoTip.vue'
+import Callout from '../components/Callout.vue'
+import BulkBudget from '../components/BulkBudget.vue'
 import OnboardingCard from '../components/OnboardingCard.vue'
 import { allDone, hidden as onboardHidden } from '../stores/onboarding'
 
@@ -26,6 +28,7 @@ const filter = ref('all')
 const level = ref('campaign')
 const busy = reactive({})
 const bulkText = ref('')
+const bulkBudget = ref(false) // hộp thoại đổi ngân sách hàng loạt
 const searchEl = ref(null)
 const showOnboarding = computed(() => !onboardHidden.value && !allDone.value)
 
@@ -34,16 +37,21 @@ watch(() => route.query.q, (v) => { if (v !== undefined) q.value = String(v) })
 watch(() => state.objsLoaded, (loaded) => { if (!loaded && !state.objsLoading) loadObjs() })
 onMounted(() => {
   // đã có dữ liệu → làm mới ngầm (không nháy); chưa có → tải bình thường
-  state.objsLoaded ? loadObjs(true, true) : loadObjs()
+  state.objsLoaded ? loadObjs(false, true) : loadObjs()
   window.addEventListener('keydown', slash)
 })
 const slash = (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); searchEl.value && searchEl.value.focus() } }
 onBeforeUnmount(() => window.removeEventListener('keydown', slash))
 
+const staleWait = computed(() => { const t = state.objsMeta && state.objsMeta.blockedUntil; return t ? Math.max(1, Math.ceil((t - Date.now()) / 60000)) : 0 })
 const currency = computed(() => (state.conn && state.conn.currency) || 'VND')
 const camps = computed(() => state.objs.filter((o) => o.level === 'campaign'))
 const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
-const running = computed(() => camps.value.filter((o) => o.effective === 'ACTIVE'))
+// Phân phối như Ads Manager (xét cả nhóm QC bên trong); "đang chạy" = thực sự đang phân phối
+const deliv = computed(() => deliveryMap(state.objs))
+const deliveryOf = (o) => DELIVERY[deliv.value[o.id]] || DELIVERY.off
+const isRunning = (o) => !!deliveryOf(o).running
+const running = computed(() => camps.value.filter(isRunning))
 const totalSpend = computed(() => camps.value.reduce((t, o) => t + o.metrics.spend, 0))
 const totalResults = computed(() => camps.value.reduce((t, o) => t + o.metrics.results, 0))
 const activeBudget = computed(() => running.value.reduce((t, o) => t + (o.dailyBudget || 0), 0))
@@ -58,19 +66,59 @@ const top = computed(() => [...camps.value].filter((o) => o.metrics.spend > 0).s
 const topMax = computed(() => (top.value[0] ? top.value[0].metrics.spend : 1))
 
 const inLevel = computed(() => state.objs.filter((o) => o.level === level.value))
+// ----- Sắp xếp theo cột (bấm tiêu đề cột: lần đầu theo chiều mặc định, bấm lại thì đảo chiều) -----
+// Giá trị trống (CPA khi chưa có kết quả, ngân sách CBO…) luôn nằm cuối, dù tăng hay giảm.
+const SORTS = {
+  name: { label: 'Tên', get: (o) => o.name, text: true, first: 'asc' },
+  delivery: { label: 'Phân phối', get: (o) => deliveryOf(o).rank, first: 'asc' },
+  budget: { label: 'Ngân sách/ngày', get: (o) => o.dailyBudget },
+  spend: { label: 'Chi tiêu', get: (o) => o.metrics.spend },
+  results: { label: 'Kết quả', get: (o) => o.metrics.results },
+  cpa: { label: 'CPA', get: (o) => o.metrics.cpa, first: 'asc' },
+  roas: { label: 'ROAS', get: (o) => o.metrics.roas },
+}
+const SORT_KEY = 'fbads.overviewSort'
+const readSort = () => { try { const v = JSON.parse(localStorage.getItem(SORT_KEY)); return v && SORTS[v.key] && ['asc', 'desc'].includes(v.dir) ? v : null } catch { return null } }
+const sort = reactive(readSort() || { key: '', dir: 'desc' }) // key '' = thứ tự như trên Facebook
+watch(sort, (v) => { try { localStorage.setItem(SORT_KEY, JSON.stringify(v)) } catch { /* chế độ riêng tư */ } })
+function sortBy(k) {
+  if (sort.key === k) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc'
+  else { sort.key = k; sort.dir = SORTS[k].first || 'desc' }
+}
+const sortIcon = (k) => (sort.key !== k ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown)
+const sortTitle = (k) => `Sắp xếp theo ${SORTS[k].label}${sort.key === k ? (sort.dir === 'asc' ? ' (đang tăng dần, bấm để giảm dần)' : ' (đang giảm dần, bấm để tăng dần)') : ''}`
+const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' })
+function compare(a, b) {
+  const s = SORTS[sort.key], va = s.get(a), vb = s.get(b)
+  if (va == null || vb == null) return va == null && vb == null ? 0 : va == null ? 1 : -1
+  const r = s.text ? collator.compare(va, vb) : va - vb
+  return sort.dir === 'asc' ? r : -r
+}
+// Chọn cách sắp xếp trên điện thoại (không có hàng tiêu đề cột)
+const mobileSort = computed({
+  get: () => (sort.key ? `${sort.key}:${sort.dir}` : ''),
+  set: (v) => { const [k, d] = v.split(':'); sort.key = k || ''; sort.dir = d || 'desc' },
+})
+const mobileSortOptions = [
+  ['', 'Mặc định (như Facebook)'], ['spend:desc', 'Chi tiêu: cao → thấp'], ['spend:asc', 'Chi tiêu: thấp → cao'],
+  ['results:desc', 'Kết quả: nhiều → ít'], ['cpa:asc', 'CPA: thấp → cao'], ['cpa:desc', 'CPA: cao → thấp'],
+  ['roas:desc', 'ROAS: cao → thấp'], ['budget:desc', 'Ngân sách: cao → thấp'], ['delivery:asc', 'Phân phối: đang chạy trước'],
+  ['name:asc', 'Tên: A → Z'], ['name:desc', 'Tên: Z → A'],
+]
+
 const visible = computed(() => {
   const s = q.value.trim().toLowerCase()
-  return inLevel.value.filter((o) => (filter.value === 'all' || (filter.value === 'on') === (o.effective === 'ACTIVE')) && (!s || o.name.toLowerCase().includes(s)))
+  const list = inLevel.value.filter((o) => (filter.value === 'all' || (filter.value === 'on') === isRunning(o)) && (!s || o.name.toLowerCase().includes(s)))
+  return sort.key ? list.sort(compare) : list
 })
 const filterOptions = computed(() => [
   { value: 'all', label: 'Tất cả', count: inLevel.value.length },
-  { value: 'on', label: 'Đang chạy', count: inLevel.value.filter((o) => o.effective === 'ACTIVE').length },
-  { value: 'off', label: 'Tạm dừng', count: inLevel.value.filter((o) => o.effective !== 'ACTIVE').length },
+  { value: 'on', label: 'Đang chạy', count: inLevel.value.filter(isRunning).length },
+  { value: 'off', label: 'Không chạy', count: inLevel.value.filter((o) => !isRunning(o)).length },
 ])
 const levelOptions = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm QC' }]
 const footTotals = computed(() => visible.value.reduce((a, o) => ({ s: a.s + o.metrics.spend, r: a.r + o.metrics.results }), { s: 0, r: 0 }))
 
-const statusOf = (o) => STATUS[o.effective] || { label: o.effective, tone: 'warning' }
 const roasTone = (o) => (!o.metrics.spend || o.metrics.roas == null ? null : o.metrics.roas >= 2 ? 'success' : o.metrics.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
 // Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
@@ -150,11 +198,19 @@ async function bulk(on) {
         <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" placeholder="Tìm chiến dịch…" /><kbd>/</kbd></div>
         <Segmented v-model="filter" :options="filterOptions" size="sm" />
         <Segmented v-if="hasAdsets" v-model="level" :options="levelOptions" size="sm" />
+        <select v-model="mobileSort" class="input msort" aria-label="Sắp xếp">
+          <option v-for="[v, l] in mobileSortOptions" :key="v" :value="v">{{ l }}</option>
+        </select>
         <span class="sp" />
+        <Btn size="sm" :icon="Wallet" :disabled="!state.objsLoaded" @click="bulkBudget = true">Đổi ngân sách hàng loạt</Btn>
         <Btn size="sm" :icon="Power" :action="() => bulk(true)">{{ bulkText.startsWith('Đang bật') ? bulkText : 'Bật tất cả' }}</Btn>
         <Btn size="sm" variant="danger" :icon="Power" :action="() => bulk(false)">{{ bulkText.startsWith('Đang tắt') ? bulkText : 'Tắt tất cả' }}</Btn>
       </div>
 
+      <Callout v-if="state.objsMeta && state.objsMeta.stale && state.objsAt" class="stale">
+        <b>Facebook đang giới hạn số lần gọi</b>, nên đây là số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}, chưa phải số mới nhất.
+        Tool tự tải lại{{ staleWait ? ` sau khoảng ${staleWait} phút` : ' khi được phép' }}, không cần bấm Làm mới. Lịch và rule vẫn chạy theo giờ; nếu Facebook từ chối thao tác, lỗi sẽ ghi ở Nhật ký.
+      </Callout>
       <div v-if="!state.objsLoaded" class="skel"><div v-for="i in 5" :key="i"><Skeleton h="44px" r="12px" /></div></div>
       <EmptyState v-else-if="state.objsErr && !state.objs.length" :icon="PlugZap" tone="danger" title="Chưa tải được dữ liệu" :text="state.objsErr">
         <RouterLink to="/settings/connection"><Btn variant="primary">Kiểm tra kết nối</Btn></RouterLink>
@@ -163,13 +219,21 @@ async function bulk(on) {
 
       <div v-else class="table">
         <div class="hd row">
-          <span /><span>{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}</span>
-          <div class="metrics"><span class="r">Ngân sách/ngày <InfoTip tip="budget" /></span><span class="r">Chi tiêu</span><span class="r">Kết quả</span><span class="r">CPA</span><span class="r">ROAS</span></div>
+          <span />
+          <span><button type="button" class="sh" :class="{ on: sort.key === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button></span>
+          <span><button type="button" class="sh" :class="{ on: sort.key === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button></span>
+          <div class="metrics">
+            <span v-for="k in ['budget', 'spend', 'results', 'cpa', 'roas']" :key="k" class="r">
+              <button type="button" class="sh" :class="{ on: sort.key === k }" :title="sortTitle(k)" @click="sortBy(k)">{{ SORTS[k].label }}<component :is="sortIcon(k)" :size="13" /></button>
+              <InfoTip v-if="k === 'budget'" tip="budget" />
+            </span>
+          </div>
         </div>
         <TransitionGroup name="row" tag="div">
           <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
             <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
-            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><span class="bdg"><Badge :tone="statusOf(o).tone" dot>{{ statusOf(o).label }}</Badge><Badge v-if="o.learning" tone="info" title="Đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+            <div class="c-dl"><span class="dl" :class="deliveryOf(o).tone" :title="deliveryOf(o).label"><i />{{ deliveryOf(o).label }}</span></div>
             <div class="metrics">
               <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
               <div class="m r"><span class="ml">Chi tiêu</span><span class="num sp">{{ fmt(o.metrics.spend) }}</span>
@@ -186,9 +250,12 @@ async function bulk(on) {
         <span><b class="num">{{ visible.length }}</b> mục</span>
         <span>Chi tiêu <b class="num">{{ fmt(footTotals.s) }}</b></span>
         <span>Kết quả <b class="num">{{ fmt(footTotals.r) }}</b></span>
-        <span v-if="state.objsAt" class="right">Cập nhật {{ state.objsAt.toLocaleTimeString('vi-VN') }}</span>
+        <span v-if="state.objsMeta && state.objsMeta.usage" class="right" :title="`Mức dùng lượt gọi Facebook API (${state.objsMeta.usage.tier || 'không rõ hạng'}). Tới 100% thì Facebook tạm chặn; tool tự giãn thời gian làm mới khi vượt 60%.`">
+          API Facebook <b class="num" :class="{ warnc: state.objsMeta.usage.pct >= 60 }">{{ state.objsMeta.usage.pct }}%</b></span>
+        <span v-if="state.objsAt" :class="{ right: !(state.objsMeta && state.objsMeta.usage) }">Số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</span>
       </div>
     </section>
+    <BulkBudget v-model="bulkBudget" :level="level" />
   </div>
 </template>
 
@@ -225,7 +292,20 @@ async function bulk(on) {
 .skel { padding: 16px 18px; display: grid; gap: 12px; }
 
 /* bảng dạng lưới: máy tính = bảng; điện thoại = thẻ */
-.row { display: grid; grid-template-columns: 70px minmax(220px, 2fr) minmax(0, 3.6fr); align-items: center; padding: 0 18px; gap: 6px; }
+.row { display: grid; grid-template-columns: 70px minmax(200px, 2fr) minmax(150px, 1fr) minmax(0, 3.6fr); align-items: center; padding: 0 18px; gap: 6px; }
+/* tiêu đề cột bấm được để sắp xếp */
+.sh { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 4px 6px; margin: -4px -6px; border-radius: 7px; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
+.sh svg { opacity: .45; flex: none; }
+.sh:hover { color: var(--text); background: var(--surface-3); } .sh:hover svg { opacity: .8; }
+.sh.on { color: var(--accent); } .sh.on svg { opacity: 1; }
+.hd .r { display: inline-flex; justify-content: flex-end; align-items: center; gap: 2px; }
+.msort { display: none; width: auto; padding: 7px 10px; font-size: 13.5px; }
+/* cột Phân phối: chấm màu + chữ như Ads Manager */
+.c-dl { min-width: 0; }
+.dl { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-2); max-width: 100%; }
+.dl i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); opacity: .6; flex: none; }
+.dl.success { color: var(--text); } .dl.success i { background: var(--success); opacity: 1; }
+.dl.info i { background: var(--info); opacity: 1; } .dl.warning i { background: var(--warning); opacity: 1; } .dl.danger { color: var(--danger); } .dl.danger i { background: var(--danger); opacity: 1; }
 .metrics { display: grid; grid-template-columns: 1.15fr 1.15fr .7fr .9fr .8fr; gap: 10px; align-items: center; }
 .r { text-align: right; justify-self: end; }
 .hd { padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
@@ -243,7 +323,8 @@ async function bulk(on) {
 .mini { width: 74px; height: 4px; border-radius: 9px; background: var(--surface-3); overflow: hidden; }
 .mini b { display: block; height: 100%; background: var(--accent-grad); }
 .foot { display: flex; gap: 22px; flex-wrap: wrap; padding: 13px 20px; border-top: 1px solid var(--border); font-size: 13.5px; }
-.foot b { color: var(--text); } .foot .right { margin-left: auto; }
+.foot b { color: var(--text); } .foot .right { margin-left: auto; } .foot b.warnc { color: var(--warning); }
+.stale { margin: 14px 18px 0; }
 .row-enter-active, .row-leave-active { transition: all .3s var(--ease); }
 .row-enter-from, .row-leave-to { opacity: 0; transform: translateX(-10px); }
 
@@ -255,6 +336,8 @@ async function bulk(on) {
   .m { align-items: flex-start; } .r { justify-self: start; text-align: left; }
   .ml { display: block; }
   .c-nm { padding: 0; }
+  .c-dl { grid-column: 2; margin-top: -6px; }
+  .msort { display: block; }
   .item { min-height: 0; }
   .big { font-size: 34px; }
   .hero { flex-direction: column; align-items: flex-start; }

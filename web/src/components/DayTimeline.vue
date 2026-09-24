@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { scheduleTimes } from '../lib/validate'
 
 const props = defineProps({ schedules: { type: Array, default: () => [] } })
 const now = ref(new Date())
@@ -10,7 +11,9 @@ onBeforeUnmount(() => clearInterval(t))
 const today = computed(() => now.value.getDay())
 const pct = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return ((h * 60 + m) / 1440) * 100 }
 const nowPct = computed(() => ((now.value.getHours() * 60 + now.value.getMinutes()) / 1440) * 100)
-const events = computed(() => props.schedules.filter((s) => s.enabled && s.days.includes(today.value)).map((s) => ({ ...s, left: pct(s.time), past: pct(s.time) < nowPct.value })))
+// Mỗi giờ chạy của lịch là 1 chấm trên dòng thời gian
+const events = computed(() => props.schedules.filter((s) => s.enabled && s.days.includes(today.value))
+  .flatMap((s) => scheduleTimes(s).map((time) => ({ ...s, time, key: `${s.id}:${time}`, left: pct(time), past: pct(time) < nowPct.value }))))
 const tone = (a) => (a === 'on' ? 'success' : a === 'off' ? 'danger' : 'info')
 const label = (s) => `${s.time} · ${s.name}`
 </script>
@@ -19,7 +22,7 @@ const label = (s) => `${s.time} · ${s.name}`
   <div class="tl">
     <div class="track">
       <i class="fill" :style="{ width: nowPct + '%' }" />
-      <span v-for="e in events" :key="e.id" class="ev" :class="[tone(e.action), { past: e.past }]" :style="{ left: e.left + '%' }" :title="label(e)"><i /></span>
+      <span v-for="e in events" :key="e.key"class="ev" :class="[tone(e.action), { past: e.past }]" :style="{ left: e.left + '%' }" :title="label(e)"><i /></span>
       <span class="now" :style="{ left: nowPct + '%' }"><em>Bây giờ</em></span>
     </div>
     <div class="ticks"><span v-for="h in [0, 6, 12, 18, 24]" :key="h" :style="{ left: (h / 24) * 100 + '%' }" class="num faint">{{ String(h).padStart(2, '0') }}:00</span></div>

@@ -25,10 +25,11 @@ let timer = 0
 onMounted(() => {
   bootstrap()
   window.addEventListener('keydown', onKey)
-  // Tự làm mới số liệu mỗi 60 giây khi đang xem Tổng quan (chạy ngầm, không hiện thanh tiến trình)
+  // Tự làm mới mỗi 60 giây khi đang xem Tổng quan (chạy ngầm). Không ép: server chỉ gọi Facebook khi số liệu đã cũ
+  // (2–5 phút tuỳ mức dùng API) để khỏi bị Facebook giới hạn số lần gọi.
   timer = setInterval(() => {
     if (state.auth.authed && !document.hidden && state.storage && state.storage.mode === 'remote') loadStorage()
-    if (route.name === 'overview' && !document.hidden && state.auth.authed && !state.objsLoading && !document.querySelector('.editing')) { loadObjs(true, true); checkConn() }
+    if (route.name === 'overview' && !document.hidden && state.auth.authed && !state.objsLoading && !document.querySelector('.editing')) { loadObjs(false, true); checkConn() }
   }, 60000)
 })
 onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInterval(timer) })

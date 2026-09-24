@@ -2,6 +2,17 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+// Biến môi trường đặt trong file .env cạnh server.js (vd UPSTASH_…, DATA_KEY, APP_PASSWORD) — tiện khi chạy trên máy bằng start.bat.
+// Biến đã đặt sẵn trong môi trường (Render, Fly, cửa sổ lệnh) được ưu tiên hơn file. Cần Node 20.12+; bản cũ hơn thì bỏ qua file.
+const ENV_FILE = path.join(__dirname, '.env');
+if (fs.existsSync(ENV_FILE)) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(ENV_FILE); } catch (e) { console.error(`\n  ❌ Không đọc được file .env: ${e.message}\n`); process.exit(1); }
+  } else console.warn('  ⚠ Có file .env nhưng Node quá cũ để đọc (cần 20.12+). Hãy cập nhật Node hoặc đặt biến môi trường bằng tay.');
+}
+
 const store = require('./lib/store');
 const fb = require('./lib/fb');
 const engine = require('./lib/engine');
@@ -16,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 // (bắt buộc phải có mật khẩu, nếu không server không khởi động).
 const HOST = process.env.HOST || (process.env.RENDER || process.env.FLY_APP_NAME ? '0.0.0.0' : '127.0.0.1');
 const PUBLIC = path.join(__dirname, 'public');
-const SECRETS = ['accessToken', 'telegramToken', 'passwordHash'];
+const SECRETS = ['accessToken', 'telegramToken', 'passwordHash', 'fbAppSecret'];
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon',
@@ -44,6 +55,46 @@ function upsert(list, item) {
   else { const i = list.findIndex((x) => x.id === item.id); if (i >= 0) list[i] = item; else list.push(item); }
   store.save();
   return item;
+}
+
+// ----- Đăng nhập bằng Facebook (OAuth) -----
+// Cookie phiên là SameSite=Strict nên khi Facebook chuyển về /api/fb/callback trình duyệt KHÔNG gửi cookie.
+// Callback vì vậy không đòi đăng nhập, mà dựa vào `state`: mã ngẫu nhiên dùng 1 lần, chỉ người đã đăng nhập mới tạo được, sống 10 phút.
+const oauthStates = new Map();
+let oauthError = '';
+const OAUTH_BACK = '/#/settings/connection?fbLogin=';
+function redirectUri(req) {
+  if (process.env.PUBLIC_URL) return `${process.env.PUBLIC_URL.replace(/\/+$/, '')}/api/fb/callback`;
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || (req.socket.encrypted ? 'https' : 'http');
+  return `${proto}://${req.headers.host}/api/fb/callback`;
+}
+function newOauthState(appId, uri) {
+  const now = Date.now();
+  for (const [k, v] of oauthStates) if (v.exp < now) oauthStates.delete(k);
+  if (oauthStates.size > 50) oauthStates.clear();
+  const st = crypto.randomBytes(24).toString('hex');
+  oauthStates.set(st, { appId, redirectUri: uri, exp: now + 10 * 60000 });
+  return st;
+}
+async function oauthCallback(res, url) {
+  const q = url.searchParams, st = q.get('state') || '';
+  const pending = oauthStates.get(st);
+  oauthStates.delete(st);
+  // Chỉ đưa mã kết quả lên URL; nội dung lỗi lấy qua /api/fb/oauth (tránh người ngoài chèn chữ tuỳ ý vào giao diện)
+  const back = (r) => { res.writeHead(302, { Location: OAUTH_BACK + r, 'Cache-Control': 'no-store' }); res.end(); };
+  if (!pending || pending.exp < Date.now()) return back('expired');
+  if (q.get('error') || !q.get('code')) return back('cancel'); // người dùng bấm Huỷ trên Facebook
+  const s = store.get().settings;
+  try {
+    s.accessToken = await fb.exchangeCode({ appId: pending.appId, appSecret: s.fbAppSecret, redirectUri: pending.redirectUri, code: q.get('code') });
+    store.save();
+    fb.resetCache();
+    oauthError = '';
+    return back('ok');
+  } catch (e) {
+    oauthError = e.message;
+    return back('fail');
+  }
 }
 
 // Ghi nhật ký cho thao tác thủ công (kể cả khi lỗi) rồi ném lại lỗi cho giao diện
@@ -81,6 +132,7 @@ async function api(req, res, url) {
     await new Promise((r) => setTimeout(r, 600)); // làm chậm dò mật khẩu
     return send(res, 401, { error: 'Sai mật khẩu' });
   }
+  if (m === 'GET' && p === '/api/fb/callback') return oauthCallback(res, url);
   if (m === 'POST' && p === '/api/logout') { auth.endSession(req); auth.setCookie(req, res, '', 0); return send(res, 200, { ok: true }); }
   if (!auth.isAuthed(req)) return send(res, 401, { error: 'Cần đăng nhập' });
 
@@ -97,7 +149,7 @@ async function api(req, res, url) {
 
   if (m === 'GET' && p === '/api/state') return send(res, 200, { settings: publicSettings(), schedules: d.schedules, rules: d.rules, storage: store.status() });
   if (m === 'GET' && p === '/api/storage') return send(res, 200, store.status());
-  if (m === 'GET' && p === '/api/objects') return send(res, 200, await fb.listObjects(url.searchParams.get('refresh') === '1'));
+  if (m === 'GET' && p === '/api/objects') return send(res, 200, { items: await fb.listObjects(url.searchParams.get('refresh') === '1'), ...fb.objectsMeta() });
   if (m === 'GET' && p === '/api/logs') return send(res, 200, d.logs.slice(0, 300));
 
   if ((mt = p.match(/^\/api\/objects\/([^/]+)\/status$/)) && m === 'POST') {
@@ -146,7 +198,7 @@ async function api(req, res, url) {
   if ((mt = p.match(/^\/api\/schedules\/([^/]+)\/run$/)) && m === 'POST') {
     const s = d.schedules.find((x) => x.id === mt[1]);
     if (!s) return send(res, 404, { error: 'Không tìm thấy lịch' });
-    await engine.runSchedule(s);
+    if (await engine.runSchedule(s) === 'blocked') return send(res, 429, { error: 'Facebook đang giới hạn số lần gọi nên lịch chưa chạy. Thử lại sau vài phút.', rateLimited: true });
     return send(res, 200, { ok: true });
   }
   if (m === 'POST' && p === '/api/rules/run') { await engine.runRules(); return send(res, 200, { ok: true }); }
@@ -183,6 +235,22 @@ async function api(req, res, url) {
     d.settings.accessToken = long; store.save();
     return send(res, 200, { ok: true, token: await fb.inspectToken(long) });
   }
+  // Địa chỉ cần khai báo trong ứng dụng Meta + lỗi của lần đăng nhập Facebook gần nhất
+  if (m === 'GET' && p === '/api/fb/oauth') return send(res, 200, { redirectUri: redirectUri(req), error: oauthError });
+  // Bắt đầu đăng nhập bằng Facebook: lưu App ID/Secret (để lần sau chỉ cần bấm 1 nút) rồi trả về địa chỉ trang đăng nhập
+  if (m === 'POST' && p === '/api/fb/oauth/start') {
+    const b = await readBody(req), s = d.settings;
+    const appId = String(b.appId || '').trim() || s.fbAppId;
+    const appSecret = String(b.appSecret || '').trim() || (appId === s.fbAppId ? s.fbAppSecret : ''); // đổi ứng dụng thì phải nhập secret mới
+    const configId = 'configId' in b ? String(b.configId || '').trim() : s.fbConfigId;
+    const em = V.checkAppId(appId) || (appSecret ? V.checkAppSecret(appSecret) : 'Hãy nhập App Secret') || V.checkConfigId(configId);
+    if (em) return send(res, 400, { error: em });
+    Object.assign(s, { fbAppId: appId, fbAppSecret: appSecret, fbConfigId: configId });
+    store.save();
+    oauthError = '';
+    const uri = redirectUri(req);
+    return send(res, 200, { url: fb.oauthUrl({ appId, configId, redirectUri: uri, state: newOauthState(appId, uri) }) });
+  }
   if (m === 'POST' && p === '/api/telegram/test') {
     const ok = await notify.telegram('✅ Kết nối Telegram thành công — Facebook Ads Auto Tool');
     return send(res, ok ? 200 : 400, ok ? { ok } : { error: 'Gửi thất bại, kiểm tra Bot Token và Chat ID' });
@@ -218,7 +286,7 @@ const server = http.createServer(async (req, res) => {
     });
     res.end(fs.readFileSync(file));
   } catch (e) {
-    send(res, e.status || 500, { error: e.message, ...(e.drift ? { drift: true } : {}) });
+    send(res, e.status || 500, { error: e.message, ...(e.drift ? { drift: true } : {}), ...(fb.isRateLimited(e) ? { rateLimited: true } : {}) });
   }
 });
 
@@ -243,6 +311,12 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
   if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !auth.enabled()) {
     return fatal('HOST mở ra mạng nhưng chưa có mật khẩu.\n  Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự) rồi chạy lại.');
   }
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') {
+      return fatal(`Cổng ${PORT} đang được dùng — rất có thể tool đã chạy sẵn ở một cửa sổ khác (bản đó vẫn dùng cấu hình cũ).\n  Hãy đóng cửa sổ đó (hoặc tắt tiến trình node đang chạy) rồi chạy lại. Muốn chạy song song thì đặt PORT khác.`);
+    }
+    fatal(`Không mở được cổng ${PORT}: ${e.message}`);
+  });
   server.listen(PORT, HOST, () => {
     const st = store.status();
     console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : 'file data.json'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);

@@ -14,7 +14,11 @@ export const LIMITS = {
     intervalMax: 1440,
     capPctMin: 5, // giới hạn tổng thay đổi ngân sách mỗi ngày do rule (%)
     capPctMax: 100,
+    scheduleTimesMax: 24, // một lịch chạy tối đa 24 lần mỗi ngày
 }
+
+// Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
+export const scheduleTimes = (s) => (Array.isArray(s && s.times) ? s.times.map(String) : s && s.time ? [String(s.time)] : [])
 const METRICS = ['cpa', 'roas', 'spend', 'results']
 // Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
 export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
@@ -54,6 +58,20 @@ const inter = (a, b) => a.filter((x) => b.includes(x))
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
 /* ------------------------------------------------------------------ Lịch */
+// Chọn mục theo điều kiện (lịch "Theo điều kiện"): { level, op, x, y, name, onlyRunning } — cách lọc nằm ở shared/bulk.mjs
+export const FILTER_OPS = ['any', 'lt', 'lte', 'gt', 'gte', 'between']
+export function checkFilter(f = {}) {
+    const e = {}
+    const level = f.level === 'adset' ? 'adset' : 'campaign'
+    const op = FILTER_OPS.includes(f.op) ? f.op : 'any'
+    const x = num(f.x), y = num(f.y)
+    if (op !== 'any' && !(x >= 0)) e.x = 'Nhập mức ngân sách để so sánh'
+    if (op === 'between' && !(y >= 0)) e.y = 'Nhập mức thứ hai của khoảng'
+    const name = String(f.name ?? '').trim()
+    if (name.length > 100) e.name = 'Cụm tên tối đa 100 ký tự'
+    return { errors: e, value: { level, op, ...(op !== 'any' ? { x } : {}), ...(op === 'between' ? { y } : {}), name, onlyRunning: !!f.onlyRunning } }
+}
+
 export function validateSchedule(input = {}, ctx = {}) {
     const {objs = null, schedules = []} = ctx
     const e = {}, w = []
@@ -63,34 +81,54 @@ export function validateSchedule(input = {}, ctx = {}) {
     const action = input.action
     if (!['on', 'off', 'budget'].includes(action)) e.action = 'Hành động không hợp lệ'
 
-    if (!isTime(input.time)) e.time = 'Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)'
+    const rawTimes = scheduleTimes(input)
+    const times = uniq(rawTimes).sort()
+    if (!rawTimes.length) e.time = 'Hãy thêm ít nhất 1 giờ chạy'
+    else if (rawTimes.some((t) => !isTime(t))) e.time = 'Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)'
+    else if (times.length > LIMITS.scheduleTimesMax) e.time = `Tối đa ${LIMITS.scheduleTimesMax} giờ chạy mỗi ngày`
 
     const days = uniq((Array.isArray(input.days) ? input.days : []).map(Number)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
     if (!days.length) e.days = 'Hãy chọn ít nhất 1 ngày trong tuần'
 
-    const targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
-    if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch'
-    else if (objs) {
-        const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
-        if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}. Hãy bỏ chọn chúng.`
+    // Áp dụng cho: danh sách cố định (list) hoặc theo điều kiện (filter) — lọc lại mỗi lần chạy nên camp mới cũng được áp dụng
+    const targetMode = input.targetMode === 'filter' ? 'filter' : 'list'
+    let targets = [], filter = null
+    if (targetMode === 'filter') {
+        const fr = checkFilter(input.filter)
+        filter = fr.value
+        if (Object.keys(fr.errors).length) e.filter = Object.values(fr.errors)[0]
+        else if (filter.op === 'any' && !filter.name && !filter.onlyRunning) w.push(`Điều kiện đang khớp ${filter.level === 'adset' ? 'mọi nhóm QC' : 'mọi chiến dịch'} trên tài khoản.`)
+    } else {
+        targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
+        if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch'
+        else if (objs) {
+            const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
+            if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}. Hãy bỏ chọn chúng.`
+        }
     }
 
-    let mode = input.mode === 'set' ? 'set' : 'percent'
+    let mode = ['set', 'add'].includes(input.mode) ? input.mode : 'percent'
     let value = num(input.value)
     if (action === 'budget') {
         if (!Number.isFinite(value)) e.value = 'Nhập giá trị đổi ngân sách'
-        else if (mode === 'percent') {
+        else if (mode === 'add') {
+            if (value === 0) e.value = 'Số tiền cộng/trừ phải khác 0'
+            else if (Math.abs(value) > LIMITS.budgetMax) e.value = 'Số tiền quá lớn, hãy kiểm tra lại số 0'
+            else value = Math.round(value)
+            if (!e.value && !e.time && times.length > 1) w.push(`Ngân sách sẽ ${value > 0 ? 'cộng' : 'trừ'} ${money(Math.abs(value))} ${times.length} lần mỗi ngày và cộng dồn.`)
+        } else if (mode === 'percent') {
             if (value === 0) e.value = 'Phần trăm phải khác 0'
             else if (value <= -100) e.value = 'Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -90%.'
             else if (value < -LIMITS.rulePctDecreaseMax) e.value = `Giảm tối đa ${LIMITS.rulePctDecreaseMax}% mỗi lần`
             else if (value > LIMITS.scheduleSetPctMax) e.value = `Tăng tối đa ${LIMITS.scheduleSetPctMax}% mỗi lần`
             else if (Math.abs(value) >= 50) w.push(`${value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(value)}% một lần là thay đổi lớn, Facebook có thể học lại từ đầu.`)
+            if (!e.value && !e.time && times.length > 1) w.push(`Ngân sách sẽ ${value > 0 ? 'tăng' : 'giảm'} ${Math.abs(value)}% ${times.length} lần mỗi ngày và cộng dồn (lần sau tính trên ngân sách đã đổi). Nên đặt trần/sàn ngân sách hoặc dùng số tiền cố định.`)
         } else {
             if (value <= 0) e.value = 'Ngân sách phải lớn hơn 0'
             else if (value > LIMITS.budgetMax) e.value = 'Ngân sách quá lớn, hãy kiểm tra lại số 0'
             else value = Math.round(value)
         }
-        if (!e.targets && objs) {
+        if (targetMode === 'list' && !e.targets && objs) {
             const cbo = targets.filter((id) => {
                 const o = objs.find((x) => x.id === id);
                 return o && o.dailyBudget == null
@@ -101,24 +139,27 @@ export function validateSchedule(input = {}, ctx = {}) {
 
     // Xung đột với các lịch đang bật
     const enabled = input.enabled !== false
-    if (enabled && !e.time && !e.days && !e.targets && !e.action) {
+    // (lịch theo điều kiện không có danh sách cố định nên không kiểm tra trùng/ngược được trước)
+    if (enabled && targetMode === 'list' && !e.time && !e.days && !e.targets && !e.action) {
         for (const o of schedules) {
             if (o.id && o.id === input.id) continue
-            if (o.enabled === false || o.time !== input.time) continue
+            const oTimes = scheduleTimes(o), sharedTimes = inter(times, oTimes)
+            if (o.enabled === false || !sharedTimes.length) continue
+            const at = sharedTimes.join(', ')
             const sharedDays = inter(days, (o.days || []).map(Number)), sharedTargets = inter(targets, o.targets || [])
             if (!sharedDays.length || !sharedTargets.length) continue
             const names = sharedTargets.slice(0, 2).map((id) => nameOf(objs, id)).join(', ')
             const opposite = (action === 'on' && o.action === 'off') || (action === 'off' && o.action === 'on')
-            const identical = action === o.action && (action !== 'budget' || (mode === (o.mode === 'set' ? 'set' : 'percent') && Number(o.value) === value)) && sameSet(days, (o.days || []).map(Number)) && sameSet(targets, o.targets || [])
+            const identical = action === o.action && (action !== 'budget' || (mode === (['set', 'add'].includes(o.mode) ? o.mode : 'percent') && Number(o.value) === value)) && sameSet(times, oTimes) && sameSet(days, (o.days || []).map(Number)) && sameSet(targets, o.targets || [])
             if (opposite) {
-                e.conflict = `Xung đột với lịch “${o.name}”: cùng lúc ${input.time} nhưng làm điều ngược lại (${o.action === 'on' ? 'bật' : 'tắt'}) cho ${names}.`;
+                e.conflict = `Xung đột với lịch “${o.name}”: cùng lúc ${at} nhưng làm điều ngược lại (${o.action === 'on' ? 'bật' : 'tắt'}) cho ${names}.`;
                 break
             }
             if (identical) {
                 e.conflict = `Đã có lịch giống hệt: “${o.name}”.`;
                 break
             }
-            if (action === 'budget' && o.action === 'budget') w.push(`Lịch “${o.name}” cũng đổi ngân sách của ${names} lúc ${input.time}, kết quả có thể khó đoán.`)
+            if (action === 'budget' && o.action === 'budget') w.push(`Lịch “${o.name}” cũng đổi ngân sách của ${names} lúc ${at}, kết quả có thể khó đoán.`)
         }
     }
 
@@ -126,9 +167,12 @@ export function validateSchedule(input = {}, ctx = {}) {
         ...(input.id ? {id: String(input.id)} : {}),
         name: name || 'Lịch mới',
         action,
-        time: input.time,
+        time: times[0], // giữ cho dữ liệu/giao diện cũ: giờ chạy sớm nhất
+        times,
         days,
+        targetMode,
         targets,
+        ...(filter ? {filter} : {}),
         mode,
         value: Number.isFinite(value) ? value : 0,
         enabled,
@@ -286,6 +330,7 @@ export const cleanAccountId = (v) => String(v ?? '').trim().replace(/^act_/i, ''
 export const checkAccountId = (v) => (/^\d{5,}$/.test(cleanAccountId(v)) ? '' : 'ID tài khoản quảng cáo chỉ gồm chữ số (ví dụ 1234567890)')
 export const checkAppId = (v) => (/^\d{8,}$/.test(String(v ?? '').trim()) ? '' : 'App ID chỉ gồm chữ số (ít nhất 8 số)')
 export const checkAppSecret = (v) => (/^[a-f0-9]{16,}$/i.test(String(v ?? '').trim()) ? '' : 'App Secret gồm chữ và số (thường 32 ký tự)')
+export const checkConfigId = (v) => (!v || /^\d{5,}$/.test(String(v).trim()) ? '' : 'Configuration ID chỉ gồm chữ số')
 export const checkTelegramToken = (v) => (!v || TG_TOKEN.test(String(v).trim()) ? '' : 'Bot Token không đúng dạng (ví dụ 123456789:AAxxxxxxxx…)')
 export const checkTelegramChat = (v) => (!v || TG_CHAT.test(String(v).trim()) ? '' : 'Chat ID là một dãy số (có thể có dấu -) hoặc @tenkenh')
 

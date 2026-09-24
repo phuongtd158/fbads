@@ -12,6 +12,7 @@ export const state = reactive({
   objsLoading: false,
   objsErr: '',
   objsAt: null,
+  objsMeta: null, // { stale, blockedUntil, usage: { pct, tier } } — số liệu cũ vì Facebook giới hạn số lần gọi, mức dùng API
   conn: null,
   connChecking: false,
   storage: null, // { mode: 'file' | 'remote', provider, lastSavedAt, lastError, pending }
@@ -39,9 +40,12 @@ export async function loadStorage() {
 export async function loadObjs(force = false, bg = false) {
   state.objsLoading = true
   try {
-    state.objs = await api('objects' + (force ? '?refresh=1' : ''), 'GET', undefined, { bg })
+    const r = await api('objects' + (force ? '?refresh=1' : ''), 'GET', undefined, { bg })
+    state.objs = r.items
     state.objsErr = ''
-    state.objsAt = new Date()
+    // giờ số liệu được tải từ Facebook (server có thể trả lại bản vừa tải để tiết kiệm lượt gọi)
+    state.objsAt = r.at ? new Date(r.at) : new Date()
+    state.objsMeta = { stale: !!r.stale, blockedUntil: r.blockedUntil || null, usage: r.usage || null }
   } catch (e) {
     if (!e.silent) { if (!bg) state.objs = []; state.objsErr = e.message }
   } finally {

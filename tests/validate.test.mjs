@@ -62,6 +62,27 @@ test('schedule: xung đột bật/tắt cùng giờ, trùng lặp', () => {
   assert.equal(validateSchedule(okSchedule, { objs, schedules: off }).ok, true) // lịch đang tắt thì bỏ qua
 })
 
+test('schedule: nhiều giờ chạy trong ngày', () => {
+  const r = validateSchedule({ ...okSchedule, time: undefined, times: ['13:00', '09:00', '13:00'] }, { objs })
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.value.times, ['09:00', '13:00']) // bỏ trùng, sắp xếp
+  assert.equal(r.value.time, '09:00') // giữ `time` cho dữ liệu cũ
+  assert.deepEqual(validateSchedule(okSchedule, { objs }).value.times, ['06:00']) // lịch cũ chỉ có time
+  assert.ok(validateSchedule({ ...okSchedule, times: [] }, { objs }).errors.time)
+  assert.ok(validateSchedule({ ...okSchedule, times: ['09:00', '25:00'] }, { objs }).errors.time)
+  const many = Array.from({ length: 25 }, (_, i) => `${String(Math.floor(i / 2)).padStart(2, '0')}:${i % 2 ? '30' : '00'}`)
+  assert.ok(validateSchedule({ ...okSchedule, times: many }, { objs }).errors.time)
+  const pct = validateSchedule({ ...okSchedule, times: ['09:00', '15:00'], action: 'budget', mode: 'percent', value: 20 }, { objs })
+  assert.ok(pct.ok && pct.warnings.some((w) => w.includes('cộng dồn')))
+})
+
+test('schedule nhiều giờ: xung đột khi trùng 1 giờ với lịch khác', () => {
+  const existing = [{ id: 's1', name: 'Tắt trưa', action: 'off', time: '13:00', days: [1, 2], targets: ['c1'], enabled: true }]
+  const r = validateSchedule({ ...okSchedule, times: ['09:00', '13:00'] }, { objs, schedules: existing })
+  assert.ok(r.errors.conflict && r.errors.conflict.includes('13:00'))
+  assert.equal(validateSchedule({ ...okSchedule, times: ['09:00', '14:00'] }, { objs, schedules: existing }).ok, true)
+})
+
 test('rule hợp lệ', () => {
   assert.equal(validateRule(okRule, { objs }).ok, true)
 })
@@ -184,4 +205,18 @@ test('cài đặt bảo vệ ngân sách', () => {
   assert.ok(validateSettings({ killSwitchEnabled: true }, { dailySpendLimit: 0 }).errors.dailySpendLimit)
   assert.equal(validateSettings({ killSwitchEnabled: true, dailySpendLimit: 3000000 }).ok, true)
   assert.equal(validateSettings({ killSwitchEnabled: false, dailySpendLimit: 0 }).ok, true)
+})
+
+test('lịch theo điều kiện: không cần chọn từng mục, kiểm tra điều kiện; kiểu cộng/trừ số tiền', () => {
+  const base = { name: 'Nâng nhóm nhỏ', action: 'budget', mode: 'set', value: 500000, time: '06:00', days: [1], targetMode: 'filter' }
+  const r = validateSchedule({ ...base, filter: { level: 'adset', op: 'lt', x: 100000 } }, { objs })
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.value.filter, { level: 'adset', op: 'lt', x: 100000, name: '', onlyRunning: false })
+  assert.deepEqual(r.value.targets, [])
+  assert.ok(validateSchedule({ ...base, filter: { level: 'adset', op: 'lt' } }, { objs }).errors.filter) // thiếu mức so sánh
+  assert.ok(validateSchedule({ ...base, filter: { level: 'adset', op: 'any' } }, { objs }).warnings.some((w) => w.includes('mọi nhóm QC')))
+  assert.equal(validateSchedule({ ...okSchedule, targetMode: 'list' }, { objs }).value.targetMode, 'list') // lịch cũ vẫn như trước
+  const add = validateSchedule({ ...base, mode: 'add', value: -50000, filter: { level: 'adset', op: 'any', name: 'x' } }, { objs })
+  assert.equal(add.ok, true); assert.equal(add.value.mode, 'add')
+  assert.ok(validateSchedule({ ...base, mode: 'add', value: 0, filter: { level: 'adset', op: 'any', name: 'x' } }, { objs }).errors.value)
 })

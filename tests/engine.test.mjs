@@ -222,3 +222,69 @@ test('runRules: rule sau không tác động lên camp vừa bị rule trước 
   assert.ok(paused.length > 0)
   assert.equal(S().logs.filter((l) => l.refId === 'u1' && l.ok && paused.includes(l.target.id)).length, 0)
 })
+
+/* ------------------------------------------------------- lịch nhiều giờ */
+test('lịch nhiều giờ: mỗi mốc đã tới chạy đúng 1 lần, mốc chưa tới thì chưa chạy', async () => {
+  const tz = S().settings.timezone
+  const hm = (offsetMin) => new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(Date.now() + offsetMin * 60e3))
+  const past = hm(-3), later = hm(90)
+  if (later < past) return // gần nửa đêm: bỏ qua cho khỏi lệch ngày
+  S().schedules.push({ id: 'm1', name: 'Nhiều giờ', action: 'off', time: past, times: [past, later], days: [0, 1, 2, 3, 4, 5, 6], targets: ['mock_1'], enabled: true })
+  await engine.tickSchedules()
+  await engine.tickSchedules() // gọi lại không chạy lần 2
+  const runs = S().logs.filter((l) => l.kind === 'schedule')
+  assert.equal(runs.length, 1)
+  assert.ok(Object.keys(S().state.fired).some((k) => k.endsWith(`:${past}`)))
+  assert.ok(!Object.keys(S().state.fired).some((k) => k.endsWith(`:${later}`)))
+})
+
+/* ------------------------------------------------------- đếm kết quả */
+test('kết quả "purchase": nhận cả Lượt mua trên Meta, không đếm trùng các tên khác nhau của cùng đơn', () => {
+  const act = (t, v) => ({ action_type: t, value: String(v) })
+  // tài khoản chốt đơn qua Messenger: không có "purchase", chỉ có omni_purchase / onsite_conversion.purchase
+  const onsite = { spend: '8864906', actions: [act('onsite_conversion.purchase', 24), act('omni_purchase', 24), act('onsite_web_purchase', 24)], action_values: [act('omni_purchase', 25430000)] }
+  const m = fb.metricsFrom(onsite, 'purchase')
+  assert.equal(m.results, 24)
+  assert.equal(Math.round(m.cpa), 369371)
+  assert.equal(m.roas.toFixed(2), '2.87')
+  // tài khoản chỉ có pixel web
+  assert.equal(fb.metricsFrom({ spend: '100', actions: [act('purchase', 2), act('offsite_conversion.fb_pixel_purchase', 2)] }, 'purchase').results, 2)
+  // loại không có bí danh: khớp đúng tên
+  assert.equal(fb.metricsFrom({ spend: '100', actions: [act('link_click', 7)] }, 'link_click').results, 7)
+  assert.equal(fb.metricsFrom({ spend: '100', actions: [] }, 'purchase').cpa, null)
+})
+
+/* ------------------------------------------------- lịch theo điều kiện */
+test('lịch theo điều kiện: camp ngân sách dưới 300k → đặt 350k, lọc lại lúc chạy, ghi 1 dòng tóm tắt', async () => {
+  // dữ liệu giả: mock_3 (200k, đang tắt), mock_5 (150k, đang chạy) là 2 camp dưới 300k
+  const sch = { id: 'f1', name: 'Nâng camp nhỏ', action: 'budget', mode: 'set', value: 350000, targetMode: 'filter', targets: [],
+    filter: { level: 'campaign', op: 'lt', x: 300000, name: '', onlyRunning: false }, days: [0, 1, 2, 3, 4, 5, 6], times: ['06:00'], enabled: true }
+  await engine.runSchedule(sch)
+  assert.equal((await camp('mock_3')).dailyBudget, 350000)
+  assert.equal((await camp('mock_5')).dailyBudget, 350000)
+  assert.equal((await camp('mock_2')).dailyBudget, 300000) // = 300k không khớp "dưới"
+  const logs = S().logs.filter((l) => l.refId === 'f1')
+  assert.equal(logs.filter((l) => l.after).length, 2) // mỗi mục 1 dòng, hoàn tác được
+  const sum = logs.find((l) => !l.after)
+  assert.ok(sum.ok && sum.detail.includes('Khớp 2 mục') && sum.detail.includes('đã đổi 2'))
+
+  await engine.runSchedule(sch) // chạy lại: đã đúng mức → không đổi thêm
+  assert.equal(S().logs.filter((l) => l.refId === 'f1' && l.after).length, 2)
+})
+
+test('lịch theo điều kiện: chỉ mục đang chạy, cộng/trừ số tiền, bật/tắt theo tên', async () => {
+  const base = { id: 'f2', name: 'Lọc', days: [0, 1, 2, 3, 4, 5, 6], times: ['06:00'], enabled: true, targetMode: 'filter', targets: [] }
+  await engine.runSchedule({ ...base, action: 'budget', mode: 'add', value: -50000, filter: { level: 'campaign', op: 'lte', x: 300000, onlyRunning: true } })
+  assert.equal((await camp('mock_5')).dailyBudget, 100000) // 150k đang chạy → -50k
+  assert.equal((await camp('mock_2')).dailyBudget, 250000) // 300k đang chạy → -50k
+  assert.equal((await camp('mock_3')).dailyBudget, 200000) // đang tắt → không đụng
+  await engine.runSchedule({ ...base, id: 'f3', action: 'off', filter: { level: 'campaign', op: 'any', name: '[retarget]' } })
+  assert.equal((await camp('mock_2')).effective, 'PAUSED')
+  assert.equal((await camp('mock_1')).effective, 'ACTIVE')
+})
+
+test('lịch không khớp mục nào: ghi 1 dòng, không gửi gì', async () => {
+  await engine.runSchedule({ id: 'f4', name: 'Không khớp', action: 'on', targetMode: 'filter', targets: [], filter: { level: 'campaign', op: 'gt', x: 1e9 }, days: [0], times: ['06:00'], enabled: true })
+  const l = S().logs.find((x) => x.refId === 'f4')
+  assert.ok(l.ok && l.detail.includes('Không có mục nào khớp'))
+})

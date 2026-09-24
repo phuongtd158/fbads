@@ -1,17 +1,20 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
-import { CheckCircle2, AlertTriangle, FlaskConical, Loader2, KeyRound, RefreshCw, ExternalLink, X, Check, ShieldCheck } from 'lucide-vue-next'
+import { useRoute, useRouter } from 'vue-router'
+import { CheckCircle2, AlertTriangle, FlaskConical, Loader2, KeyRound, RefreshCw, ExternalLink, X, Check, ShieldCheck, Copy, LogIn } from 'lucide-vue-next'
 import { state, checkConn, loadState, resetData } from '../../stores/app'
 import { toast, toastError } from '../../stores/ui'
 import { api } from '../../lib/api'
-import { checkToken, checkAppId, checkAppSecret, checkAccountId, cleanAccountId } from '../../lib/validate'
+import { checkToken, checkAppId, checkAppSecret, checkConfigId, checkAccountId, cleanAccountId } from '../../lib/validate'
 import Btn from '../../components/Btn.vue'
 import Badge from '../../components/Badge.vue'
 import Segmented from '../../components/Segmented.vue'
 import InfoTip from '../../components/InfoTip.vue'
 
+const route = useRoute()
+const router = useRouter()
 const wizOpen = ref(false)
-const method = ref('fast')
+const method = ref('login')
 const token = ref('')
 const info = ref(null)
 const acc = ref('')
@@ -35,7 +38,55 @@ const tokenTone = computed(() => { const t = tk.value; return !t || t.daysLeft =
 const isShort = computed(() => { const t = info.value && info.value.token; return !!(t && t.expiresAt && t.expiresAt - Date.now() < 12 * 3600e3) })
 const hasToken = computed(() => !!(token.value.trim() || s.value.has_accessToken))
 
-onMounted(() => { if (!s.value.mock) checkConn(true) })
+// Đăng nhập bằng Facebook
+const oauth = reactive({ appId: '', secret: '', configId: '', redirectUri: '' })
+const oauthErr = ref('')
+const OAUTH_RESULT = {
+  cancel: ['Bạn đã huỷ đăng nhập Facebook, chưa có gì thay đổi.', 'error'],
+  expired: ['Phiên đăng nhập Facebook đã quá 10 phút hoặc tool vừa khởi động lại. Hãy bấm Đăng nhập bằng Facebook lần nữa.', 'error'],
+}
+
+async function loadOauth() {
+  oauth.appId = s.value.fbAppId || ''
+  oauth.configId = s.value.fbConfigId || ''
+  try { oauth.redirectUri = (await api('fb/oauth', 'GET', null, { bg: true })).redirectUri } catch { oauth.redirectUri = `${location.origin}/api/fb/callback` }
+}
+async function copyUri() {
+  try { await navigator.clipboard.writeText(oauth.redirectUri); toast('Đã sao chép địa chỉ') } catch { toast('Không sao chép được, hãy bôi đen và sao chép tay', 'error') }
+}
+async function fbLogin() {
+  const secret = oauth.secret.trim()
+  oauthErr.value = checkAppId(oauth.appId) ||
+    (secret ? checkAppSecret(secret) : s.value.has_fbAppSecret && oauth.appId.trim() === s.value.fbAppId ? '' : 'Hãy nhập App Secret') ||
+    checkConfigId(oauth.configId)
+  if (oauthErr.value) return
+  const { url } = await api('fb/oauth/start', 'POST', { appId: oauth.appId.trim(), appSecret: secret, configId: oauth.configId.trim() })
+  location.href = url
+}
+// Facebook chuyển về /#/settings/connection?fbLogin=ok|cancel|expired|fail
+async function handleOauthReturn(r) {
+  router.replace({ query: {} })
+  if (r === 'ok') {
+    await loadState()
+    openWiz(); method.value = 'login'
+    toast('Đăng nhập Facebook thành công, token đã được lưu')
+    await verify()
+    if (!s.value.mock) checkConn(true)
+    return
+  }
+  if (OAUTH_RESULT[r]) return toast(...OAUTH_RESULT[r])
+  let msg = ''
+  try { msg = (await api('fb/oauth')).error } catch { /* bỏ qua */ }
+  openWiz(); method.value = 'login'
+  oauthErr.value = `Đăng nhập Facebook thất bại: ${msg || 'lỗi không xác định'}`
+}
+
+onMounted(() => {
+  loadOauth()
+  const r = route.query.fbLogin
+  if (r) return handleOauthReturn(String(r))
+  if (!s.value.mock) checkConn(true)
+})
 
 async function recheck() { await checkConn(true); if (state.conn && state.conn.ok) toast('Kết nối hoạt động tốt') }
 function openWiz() { wizOpen.value = true; info.value = null; acc.value = s.value.adAccountId || ''; nextTick(() => wiz.value && wiz.value.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
@@ -123,8 +174,31 @@ async function saveConn() {
           <div class="body">
             <h4>Lấy Access Token <InfoTip tip="token" /></h4>
             <p class="muted">Token là “chìa khoá” cho phép tool điều khiển quảng cáo của bạn. Chọn cách phù hợp:</p>
-            <Segmented v-model="method" :options="[{ value: 'fast', label: 'Cách nhanh (60 ngày)' }, { value: 'stable', label: 'Cách ổn định (không hết hạn)' }]" />
-            <ol v-if="method === 'fast'">
+            <Segmented v-model="method" :options="[{ value: 'login', label: 'Đăng nhập Facebook (60 ngày)' }, { value: 'fast', label: 'Dán token (60 ngày)' }, { value: 'stable', label: 'Người dùng hệ thống (không hết hạn)' }]" />
+            <template v-if="method === 'login'">
+              <ol>
+                <li><div>Tạo một ứng dụng Meta loại <b>Business</b> (đã có thì bỏ qua bước này).<a class="ext" href="https://developers.facebook.com/apps/creation/" target="_blank" rel="noopener">Tạo ứng dụng mới <ExternalLink :size="13" /></a></div></li>
+                <li><div>Trong ứng dụng, thêm sản phẩm <b>Facebook Login</b> (hoặc <b>Facebook Login for Business</b>) → <b>Cài đặt</b> → dán địa chỉ dưới đây vào ô <b>URI chuyển hướng OAuth hợp lệ</b> (Valid OAuth Redirect URIs) rồi Lưu.
+                  <div class="uri"><code>{{ oauth.redirectUri }}</code><Btn size="sm" variant="ghost" :icon="Copy" aria-label="Sao chép" @click="copyUri" /></div>
+                  <small class="faint">Facebook chỉ nhận địa chỉ <code>https://</code>, riêng <code>http://localhost</code> được phép khi ứng dụng ở chế độ phát triển.</small>
+                </div></li>
+                <li><div>Mở <b>Cài đặt ứng dụng → Thông tin cơ bản</b>, sao chép <b>App ID</b> và <b>App Secret</b> vào đây. Tool lưu lại để lần sau chỉ cần bấm nút.
+                  <div class="row" style="margin-top: 10px">
+                    <input v-model="oauth.appId" class="input" placeholder="App ID" autocomplete="off" @input="oauthErr = ''" />
+                    <input v-model="oauth.secret" class="input" type="password" autocomplete="off" :placeholder="s.has_fbAppSecret && oauth.appId.trim() === s.fbAppId ? 'App Secret đã lưu (nhập để thay)' : 'App Secret'" @input="oauthErr = ''" />
+                  </div>
+                  <details><summary>Dùng Facebook Login for Business?</summary>
+                    <div class="row"><input v-model="oauth.configId" class="input" placeholder="Configuration ID (không bắt buộc)" autocomplete="off" @input="oauthErr = ''" /></div>
+                    <small class="faint">Nếu ứng dụng dùng <b>Facebook Login for Business</b>, tạo một cấu hình có quyền <code>ads_management</code>, <code>ads_read</code> và dán ID của cấu hình đó. Dùng Facebook Login thường thì để trống.</small>
+                  </details>
+                </div></li>
+                <li><div>Bấm nút dưới, đăng nhập đúng tài khoản đang chạy quảng cáo và <b>cho phép đủ quyền</b>. Tool tự nhận token và gia hạn lên khoảng 60 ngày. Hết hạn thì bấm lại nút này.
+                  <div style="margin-top: 10px"><Btn variant="primary" :icon="LogIn" :action="fbLogin">Đăng nhập bằng Facebook</Btn></div>
+                  <p v-if="oauthErr" class="ferr">{{ oauthErr }}</p>
+                </div></li>
+              </ol>
+            </template>
+            <ol v-else-if="method === 'fast'">
               <li><div>Mở <b>Graph API Explorer</b> của Facebook (đăng nhập đúng tài khoản đang chạy quảng cáo).<a class="ext" href="https://developers.facebook.com/tools/explorer/" target="_blank" rel="noopener">Mở Graph API Explorer <ExternalLink :size="13" /></a></div></li>
               <li><div>Ở ô <b>Meta App</b> chọn ứng dụng của bạn. Chưa có? Tạo nhanh, chọn loại <b>Business</b>.<a class="ext" href="https://developers.facebook.com/apps/creation/" target="_blank" rel="noopener">Tạo ứng dụng mới <ExternalLink :size="13" /></a></div></li>
               <li><div>Ở mục <b>Permissions</b> thêm 2 quyền <code>ads_management</code> và <code>ads_read</code>, rồi bấm <b>Generate Access Token</b> và cho phép.</div></li>
@@ -142,9 +216,11 @@ async function saveConn() {
         <div class="step" :class="{ done: info }">
           <span class="no"><Check v-if="info" :size="16" /><template v-else>2</template></span>
           <div class="body">
-            <h4>Dán token và kiểm tra</h4>
-            <p class="muted">Tool sẽ kiểm tra token còn dùng được không và có đủ quyền không.</p>
-            <div class="row">
+            <h4>{{ method === 'login' ? 'Kiểm tra token' : 'Dán token và kiểm tra' }}</h4>
+            <p v-if="method === 'login'" class="muted">{{ info ? 'Token nhận từ Facebook đã được lưu.' : 'Sau khi đăng nhập ở bước 1, tool tự kiểm tra token tại đây.' }}</p>
+            <p v-else class="muted">Tool sẽ kiểm tra token còn dùng được không và có đủ quyền không.</p>
+            <Btn v-if="method === 'login' && s.has_accessToken && !info" :loading="loading" :action="verify">Kiểm tra token đã lưu</Btn>
+            <div v-if="method !== 'login'" class="row">
               <input v-model="token" class="input" type="password" autocomplete="off" :placeholder="s.has_accessToken ? 'Đã có token đã lưu — dán token mới hoặc bấm Kiểm tra' : 'Dán token vào đây (bắt đầu bằng EAA…)'" :class="{ bad: tokErr }" @input="tokErr = ''" @keydown.enter="verify" />
               <Btn variant="primary" :loading="loading" :action="verify">Kiểm tra token</Btn>
             </div>
@@ -217,6 +293,8 @@ li > div { flex: 1; min-width: 0; }
 .ext { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-weight: 600; font-size: 13.5px; text-decoration: none; transition: .15s; }
 .ext:hover { border-color: var(--accent); color: var(--accent); }
 .ext { display: flex; width: fit-content; }
+.uri { display: flex; align-items: center; gap: 6px; margin: 8px 0 4px; padding: 6px 6px 6px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.uri code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; } .row .input { flex: 1; min-width: 200px; }
 .note { display: flex; gap: 11px; padding: 12px 14px; border-radius: 12px; margin-top: 12px; font-size: 14.5px; }
 .note > div { flex: 1; min-width: 0; } .note svg { flex: none; margin-top: 2px; } .note small { display: block; margin-top: 6px; opacity: .85; }

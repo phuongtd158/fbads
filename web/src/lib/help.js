@@ -142,7 +142,8 @@ export const TOPICS = [
     blocks: [
       { t: 'p', text: 'Để điều khiển quảng cáo thật, tool cần **Access Token** (chìa khoá do Facebook cấp) và biết **tài khoản quảng cáo** nào cần quản lý. Vào **Cài đặt → Kết nối Facebook → Kết nối Facebook** và làm theo trình hướng dẫn 3 bước.' },
       { t: 'table', head: ['Cách lấy token', 'Đặc điểm'], rows: [
-        ['Cách nhanh (Graph API Explorer)', 'Mất vài phút. Token ban đầu chỉ sống vài giờ, tool giúp **gia hạn lên 60 ngày** nếu bạn nhập App ID và App Secret (chỉ dùng 1 lần, không lưu).'],
+        ['Đăng nhập Facebook', 'Dễ nhất khi dùng lâu dài: khai báo 1 lần App ID, App Secret và địa chỉ chuyển hướng trong ứng dụng Meta, sau đó chỉ cần bấm **Đăng nhập bằng Facebook**. Token tự gia hạn lên **60 ngày**, hết hạn thì bấm lại.'],
+        ['Dán token (Graph API Explorer)', 'Mất vài phút. Token ban đầu chỉ sống vài giờ, tool giúp **gia hạn lên 60 ngày** nếu bạn nhập App ID và App Secret (chỉ dùng 1 lần, không lưu).'],
         ['Cách ổn định (Người dùng hệ thống)', 'Cần Business Manager. Token **không hết hạn**, phù hợp chạy lâu dài.'],
       ] },
       { t: 'steps', title: 'Quyền cần có', items: ['`ads_management` — để bật/tắt camp và đổi ngân sách.', '`ads_read` — để đọc chiến dịch và số liệu.', 'Tài khoản quảng cáo phải được **gán** cho người dùng/token đó (quyền quản lý chiến dịch).'] },
@@ -264,7 +265,7 @@ export const TIPS = {
   roas: { text: 'ROAS = doanh thu ÷ chi tiêu. Trên 1 là có lãi trên quảng cáo; từ 2 trở lên là tốt.', topic: 'glossary' },
   results: { text: 'Số hành động khách đã làm (mua hàng, để lại thông tin, nhắn tin…). Chọn loại ở Cài đặt → Chung.', topic: 'glossary' },
   budget: { text: 'Ô hiện “–” nghĩa là camp dùng ngân sách cấp chiến dịch (CBO), hãy chỉnh ở cấp có số tiền.', topic: 'overview' },
-  scheduleTime: { text: 'Nếu máy bật trễ tối đa 10 phút so với giờ hẹn, tool vẫn chạy bù. Giờ tính theo múi giờ ở Cài đặt → Chung.', topic: 'schedules' },
+  scheduleTime: { text: 'Một lịch có thể có nhiều giờ chạy trong ngày; giờ nào hôm nay chưa tới thì chạy luôn hôm nay. Nếu máy bật trễ tối đa 10 phút so với giờ hẹn, tool vẫn chạy bù. Giờ tính theo múi giờ ở Cài đặt → Chung.', topic: 'schedules' },
   scheduleBudget: { text: 'Theo %: nhập số âm để giảm (vd -30). Số tiền cố định: đặt ngân sách ngày đúng bằng số đó.', topic: 'schedules' },
   minSpend: { text: 'Chỉ xét camp đã tiêu ít nhất số tiền này, để không tắt nhầm camp mới chạy chưa đủ dữ liệu.', topic: 'rules' },
   ruleAction: { text: 'Thay đổi ngân sách quá lớn có thể khiến Facebook học lại từ đầu. Nên tăng/giảm khoảng 20% mỗi lần.', topic: 'rules' },

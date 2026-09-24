@@ -39,7 +39,8 @@ export const RULE_PRESETS = [
 ]
 
 export const RESULT_ACTIONS = [
-  ['purchase', 'Đơn hàng (purchase)'],
+  ['purchase', 'Đơn hàng (web, app và trên Meta/Messenger)'],
+  ['initiate_checkout', 'Bắt đầu thanh toán'],
   ['lead', 'Khách để lại thông tin (lead)'],
   ['onsite_conversion.messaging_conversation_started_7d', 'Tin nhắn mới'],
   ['link_click', 'Lượt nhấp liên kết'],

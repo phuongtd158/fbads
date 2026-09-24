@@ -31,6 +31,14 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. Cấ
 - Hướng dẫn ngay trong app: trang **Hướng dẫn** (tìm kiếm, FAQ, thuật ngữ), dấu `?` giải thích cạnh các ô khó, thẻ **Bắt đầu nhanh** tự tick theo tiến độ.
 - Đăng nhập bằng mật khẩu (Cài đặt → Bảo mật, hoặc biến môi trường `APP_PASSWORD`).
 
+## Đăng nhập bằng Facebook (lấy token bằng 1 nút)
+Cài đặt → Kết nối Facebook → chọn **Đăng nhập Facebook**:
+1. Trong ứng dụng Meta (loại Business), thêm sản phẩm **Facebook Login** rồi dán địa chỉ tool hiển thị (dạng `https://<tên miền>/api/fb/callback`) vào **Valid OAuth Redirect URIs**. Chạy trên máy thì mở tool bằng `http://localhost:3000` (không dùng `127.0.0.1`).
+2. Nhập App ID + App Secret một lần (lưu cùng dữ liệu, không bao giờ trả về giao diện).
+3. Bấm **Đăng nhập bằng Facebook**, cho phép `ads_management`, `ads_read`. Tool tự đổi sang token ~60 ngày. Hết hạn thì bấm lại.
+
+Dùng **Facebook Login for Business** thì tạo một cấu hình có 2 quyền trên và nhập **Configuration ID**. Nếu địa chỉ tool tự nhận sai (đứng sau proxy lạ), đặt biến môi trường `PUBLIC_URL=https://ten-mien-cua-ban`.
+
 ## Chia sẻ tạm thời qua ngrok
 1. Cài một lần: `winget install ngrok.ngrok` rồi `ngrok config add-authtoken <AUTHTOKEN>` (lấy token ở ngrok.com).
 2. Bấm đúp **`start-ngrok.bat`**: hỏi mật khẩu đăng nhập (ẩn ký tự), khởi động tool, mở đường hầm, in địa chỉ `https://…` và sao chép vào clipboard. Nhấn phím bất kỳ để dừng cả hai.
