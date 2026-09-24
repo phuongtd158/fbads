@@ -12,8 +12,13 @@ export const LIMITS = {
     cooldownMax: 168,
     intervalMin: 5,
     intervalMax: 1440,
+    capPctMin: 5, // giới hạn tổng thay đổi ngân sách mỗi ngày do rule (%)
+    capPctMax: 100,
 }
 const METRICS = ['cpa', 'roas', 'spend', 'results']
+// Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
+export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
+export const RANGE_LABEL = {today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất'}
 const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả'}
 const isBlank = (v) => v === '' || v === null || v === undefined
 const num = (v) => (isBlank(v) ? NaN : Number(v))
@@ -153,6 +158,9 @@ export function validateRule(input = {}, ctx = {}) {
     const op = input.op === '<' ? '<' : input.op === '>' ? '>' : null
     if (!op) e.op = 'Phép so sánh không hợp lệ'
 
+    const range = isBlank(input.range) ? 'today' : RANGES.includes(input.range) ? input.range : null
+    if (!range) e.range = 'Khoảng thời gian không hợp lệ'
+
     const value = num(input.value)
     if (!Number.isFinite(value)) e.value = 'Nhập ngưỡng so sánh'
     else if (value < 0) e.value = 'Ngưỡng không được âm'
@@ -164,7 +172,8 @@ export function validateRule(input = {}, ctx = {}) {
     else if (metric && metric !== 'spend' && minSpend <= 0) e.minSpend = 'Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.'
 
     const action = input.action
-    if (!['pause', 'increase', 'decrease'].includes(action)) e.action = 'Hành động không hợp lệ'
+    if (!['pause', 'increase', 'decrease', 'notify'].includes(action)) e.action = 'Hành động không hợp lệ'
+    if (range === 'today' && metric && metric !== 'spend' && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
     let pct = num(input.pct)
     if (action === 'increase' || action === 'decrease') {
         if (!Number.isFinite(pct) || pct <= 0) e.pct = 'Nhập % thay đổi lớn hơn 0'
@@ -184,6 +193,7 @@ export function validateRule(input = {}, ctx = {}) {
     const cooldown = isBlank(input.cooldownHours) ? 0 : num(input.cooldownHours)
     if (!Number.isFinite(cooldown) || cooldown < 0 || cooldown > LIMITS.cooldownMax) e.cooldownHours = `Thời gian nghỉ từ 0 đến ${LIMITS.cooldownMax} giờ`
     else if ((action === 'increase' || action === 'decrease') && cooldown < 1) e.cooldownHours = 'Rule đổi ngân sách cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không ngân sách sẽ thay đổi liên tục mỗi lần kiểm tra.'
+    else if (action === 'notify' && cooldown < 1) e.cooldownHours = 'Rule chỉ thông báo cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không bạn sẽ nhận thông báo lặp lại mỗi lần kiểm tra.'
 
     const from = input.from || '', to = input.to || ''
     if (from || to) {
@@ -209,6 +219,7 @@ export function validateRule(input = {}, ctx = {}) {
         for (const o of rules) {
             if (o.id && o.id === input.id) continue
             if (o.enabled === false || o.metric !== metric || !(o.op === '>' || o.op === '<')) continue
+            if (o.action === 'notify' || action === 'notify') continue // rule chỉ thông báo không gây mâu thuẫn
             const scopeOverlap = allActive || o.allActive !== false || inter(targets, o.targets || []).length > 0
             if (!scopeOverlap) continue
             if (kind(o.action) !== kind(action) && condOverlap({op, value}, o)) {
@@ -223,6 +234,7 @@ export function validateRule(input = {}, ctx = {}) {
         name: name || 'Rule mới',
         metric,
         op,
+        range: range || 'today',
         value: Number.isFinite(value) ? value : 0,
         minSpend: Number.isFinite(minSpend) ? minSpend : 0,
         action,
@@ -326,10 +338,23 @@ export function validateSettings(patch = {}, current = {}) {
         const r = String(patch.apiVersion ?? '').trim();
         if (!/^v\d+\.\d+$/.test(r)) e.apiVersion = 'Phiên bản API không hợp lệ (ví dụ v21.0)'; else v.apiVersion = r
     }
+    if (has('skipLearning')) v.skipLearning = !!patch.skipLearning
+    if (has('dailyChangeCapPct')) {
+        const n = num(patch.dailyChangeCapPct)
+        if (!Number.isInteger(n) || n < LIMITS.capPctMin || n > LIMITS.capPctMax) e.dailyChangeCapPct = `Giới hạn thay đổi ngân sách mỗi ngày từ ${LIMITS.capPctMin}% đến ${LIMITS.capPctMax}%`
+        else v.dailyChangeCapPct = n
+    }
+    if (has('killSwitchEnabled')) v.killSwitchEnabled = !!patch.killSwitchEnabled
+    if (has('dailySpendLimit')) {
+        const n = isBlank(patch.dailySpendLimit) ? 0 : num(patch.dailySpendLimit)
+        if (!Number.isFinite(n) || n < 0 || n > LIMITS.budgetMax) e.dailySpendLimit = 'Mức chi tiêu tối đa mỗi ngày phải là số không âm'
+        else v.dailySpendLimit = Math.round(n)
+    }
     if (has('mock')) v.mock = !!patch.mock
     if (has('dryRun')) v.dryRun = !!patch.dryRun
 
     const eff = {...current, ...v}
+    if ((has('killSwitchEnabled') || has('dailySpendLimit')) && !e.dailySpendLimit && eff.killSwitchEnabled && !(Number(eff.dailySpendLimit) > 0)) e.dailySpendLimit = 'Hãy nhập mức chi tiêu tối đa mỗi ngày (lớn hơn 0) để bật dừng khẩn'
     if (has('mock') || has('dryRun') || has('adAccountId') || has('accessToken')) {
         if (eff.mock === false && (!eff.accessToken || !eff.adAccountId)) e.mock = 'Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.'
     }
@@ -347,4 +372,20 @@ export function validatePassword(next, current = '') {
     else if (WEAK.includes(n.toLowerCase())) e.newPassword = 'Mật khẩu này quá phổ biến, hãy chọn mật khẩu khác'
     else if (current && n === current) e.newPassword = 'Mật khẩu mới phải khác mật khẩu hiện tại'
     return done(e, [], n)
+}
+
+/* ------------------------------------------------------------- Hoàn tác */
+// Trả về lý do KHÔNG hoàn tác được một dòng nhật ký (chuỗi rỗng = hoàn tác được). Dùng chung cho server và giao diện.
+export function undoBlocker(l, nowMs = Date.now(), maxDays = 3) {
+    if (!l) return 'Không tìm thấy dòng nhật ký.'
+    if (l.undone) return 'Dòng này đã được hoàn tác.'
+    if (l.kind === 'undo') return 'Không thể hoàn tác một lần hoàn tác.'
+    if (l.ok === false) return 'Thao tác này đã thất bại nên không có gì để hoàn tác.'
+    if (l.skipped) return 'Dòng này chỉ ghi nhận việc bỏ qua, không thay đổi gì.'
+    if (l.dry) return 'Đây là bản chạy thử (chưa thay đổi thật) nên không cần hoàn tác.'
+    if (!l.action || !['on', 'off', 'budget'].includes(l.action.type)) return 'Loại thao tác này không hoàn tác được.'
+    if (!l.before || !l.after || !l.target || !l.target.id) return 'Dòng nhật ký cũ không lưu đủ dữ liệu để hoàn tác.'
+    if (l.after.status === undefined && l.after.dailyBudget === undefined) return 'Dòng nhật ký không ghi lại thay đổi nào để hoàn tác.'
+    if (l.ts && nowMs - new Date(l.ts).getTime() > maxDays * 864e5) return `Đã quá ${maxDays} ngày, dữ liệu lúc đó có thể không còn phù hợp.`
+    return ''
 }

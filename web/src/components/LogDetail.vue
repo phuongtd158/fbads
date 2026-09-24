@@ -1,17 +1,19 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CheckCircle2, AlertCircle, FlaskConical, Copy, RotateCcw, ExternalLink, ArrowRight, ChevronDown, Lightbulb } from 'lucide-vue-next'
+import { CheckCircle2, AlertCircle, FlaskConical, Copy, RotateCcw, Undo2, ExternalLink, ArrowRight, ChevronDown, Lightbulb, Bell, SkipForward } from 'lucide-vue-next'
 import { state } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt, fmtDec } from '../lib/format'
 import { rich } from '../lib/rich'
 import { hintsFor, kindOf, KIND_LABEL, MODE_LABEL } from '../lib/logHints'
-import { METRICS } from '../lib/constants'
+import { METRICS, RANGE_LABEL } from '../lib/constants'
+import { undoBlocker } from '../lib/validate'
 import Modal from './Modal.vue'
 import Btn from './Btn.vue'
 import Badge from './Badge.vue'
+import Callout from './Callout.vue'
 
 const props = defineProps({ modelValue: Boolean, log: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'retried'])
@@ -22,7 +24,11 @@ const l = computed(() => props.log || {})
 const kind = computed(() => kindOf(l.value))
 const failed = computed(() => l.value.ok === false)
 const dry = computed(() => !!l.value.dry)
-const status = computed(() => (failed.value ? { tone: 'danger', text: 'Lỗi', icon: AlertCircle } : dry.value ? { tone: 'warning', text: 'Chạy thử', icon: FlaskConical } : { tone: 'success', text: 'Thành công', icon: CheckCircle2 }))
+const isNotify = computed(() => !!(l.value.action && l.value.action.type === 'notify'))
+const status = computed(() => (failed.value ? { tone: 'danger', text: 'Lỗi', icon: AlertCircle }
+  : l.value.skipped ? { tone: 'warning', text: 'Bỏ qua', icon: SkipForward }
+  : isNotify.value ? { tone: 'info', text: 'Cảnh báo', icon: Bell }
+  : dry.value ? { tone: 'warning', text: 'Chạy thử', icon: FlaskConical } : { tone: 'success', text: 'Thành công', icon: CheckCircle2 }))
 const err = computed(() => l.value.error || null)
 const hints = computed(() => (failed.value ? hintsFor(l.value) : []))
 const hasDetail = computed(() => !!(l.value.before || l.value.after || l.value.condition || l.value.action || err.value))
@@ -36,6 +42,7 @@ const actionText = computed(() => {
   if (!a) return ''
   if (a.type === 'on') return 'Bật camp'
   if (a.type === 'off') return 'Tắt camp'
+  if (a.type === 'notify') return 'Chỉ gửi cảnh báo (không đổi camp)'
   if (a.type === 'budget') {
     const parts = [a.mode === 'percent' ? `${a.value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(a.value)}% ngân sách` : `Đặt ngân sách = ${fmt(a.value)}`]
     if (a.max) parts.push(`trần ${fmt(a.max)}`)
@@ -49,7 +56,7 @@ const cond = computed(() => {
   if (!c) return null
   const val = c.actualInf ? '∞ (chưa có kết quả)' : c.actual == null ? '–' : c.metric === 'roas' ? fmtDec(c.actual) : fmt(c.actual)
   const th = c.metric === 'roas' ? c.threshold : fmt(c.threshold)
-  return `${METRICS[c.metric]} = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}` + (c.minSpend ? ` · đã chi ${fmt(c.spend)} (≥ ${fmt(c.minSpend)} tối thiểu)` : '')
+  return `${METRICS[c.metric]} (${RANGE_LABEL[c.range || 'today']}) = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}` + (c.minSpend ? ` · đã chi ${fmt(c.spend)} (≥ ${fmt(c.minSpend)} tối thiểu)` : '')
 })
 const stateText = (s) => (s ? ({ ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng' }[s] || s) : '–')
 const rows = computed(() => {
@@ -87,6 +94,26 @@ async function retry() {
   toast('Đã chạy lại — xem dòng nhật ký mới')
   emit('retried'); emit('update:modelValue', false)
 }
+// Hoàn tác: chỉ với thay đổi thật đã thành công; lý do không hoàn tác được hiển thị cho người dùng
+const undoWhy = computed(() => undoBlocker(l.value))
+const canUndo = computed(() => !undoWhy.value)
+const showUndoWhy = computed(() => !!undoWhy.value && !failed.value && !l.value.dry && !l.value.skipped && !isNotify.value && kind.value !== 'undo' && !l.value.undone && !!(l.value.before || l.value.after))
+async function undo() {
+  const x = l.value, isRule = kind.value === 'rule'
+  let what = x.after && x.after.status !== undefined ? (x.before.status === 'ACTIVE' ? 'Camp sẽ được bật lại.' : 'Camp sẽ được tắt lại.') : `Ngân sách sẽ về ${fmt(x.before.dailyBudget)}.`
+  if (isRule) what += ` Rule “${x.refName}” sẽ tạm không tác động lại camp này trong 24 giờ.`
+  if (!await confirm('Hoàn tác thay đổi này?', `${x.target.name}: ${what}`, { ok: 'Hoàn tác' })) return
+  try {
+    await api(`logs/${x.id}/undo`, 'POST', {})
+  } catch (e) {
+    if (!(e.data && e.data.drift)) throw e
+    if (!await confirm('Camp đã thay đổi kể từ lúc đó', `${e.message} Bạn vẫn muốn hoàn tác?`, { ok: 'Vẫn hoàn tác', danger: true })) return
+    await api(`logs/${x.id}/undo`, 'POST', { force: true })
+  }
+  toast('Đã hoàn tác — xem dòng nhật ký mới')
+  emit('retried'); emit('update:modelValue', false)
+}
+const undoneAt = computed(() => (l.value.undone ? new Date(l.value.undone.at).toLocaleString('vi-VN') : ''))
 const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.value : kind.value === 'schedule' && !!ref_.value))
 </script>
 
@@ -99,8 +126,13 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
           <h4>{{ l.source }}</h4>
           <p class="muted">{{ l.name }}</p>
         </div>
+        <Badge v-if="l.undone" tone="neutral">Đã hoàn tác</Badge>
         <Badge :tone="status.tone" dot>{{ status.text }}</Badge>
       </div>
+
+      <Callout v-if="l.skipped" tone="warning">{{ l.detail }} Đây chỉ là ghi nhận, tool không thay đổi gì.</Callout>
+      <Callout v-if="l.undone" tone="info">Thay đổi này đã được hoàn tác lúc {{ undoneAt }}.</Callout>
+      <Callout v-if="kind === 'undo'" tone="info">Đây là một lần hoàn tác thay đổi trước đó. Camp đã được đưa về giá trị cũ.</Callout>
 
       <dl class="meta">
         <div><dt>Thời gian</dt><dd class="cap">{{ when }}</dd></div>
@@ -171,11 +203,13 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
         </div>
       </section>
 
+      <p v-if="showUndoWhy" class="old faint">Không thể hoàn tác: {{ undoWhy }}</p>
       <p v-if="!hasDetail" class="old faint">Dòng nhật ký này được ghi trước khi tool lưu chi tiết nên chỉ có thông tin cơ bản ở trên.</p>
     </template>
 
     <template #footer>
       <Btn :icon="Copy" @click="copyAll">Sao chép chi tiết</Btn>
+      <Btn v-if="canUndo" :icon="Undo2" :action="undo">Hoàn tác</Btn>
       <Btn v-if="canRetry" :icon="RotateCcw" :action="retry">{{ kind === 'rule' ? 'Kiểm tra lại rule' : 'Chạy lại lịch' }}</Btn>
       <Btn variant="primary" @click="emit('update:modelValue', false)">Đóng</Btn>
     </template>
@@ -185,6 +219,7 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
 <style scoped>
 .head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
 .ic { width: 46px; height: 46px; border-radius: 16px; display: grid; place-items: center; flex: none; }
+.ic.info { background: var(--info-soft); color: var(--info); }
 .ic.success { background: var(--success-soft); color: var(--success); } .ic.warning { background: var(--warning-soft); color: var(--warning); } .ic.danger { background: var(--danger-soft); color: var(--danger); }
 .hb { flex: 1; min-width: 0; } h4 { font-size: 17px; letter-spacing: -.02em; overflow-wrap: anywhere; } .hb p { font-size: 14px; overflow-wrap: anywhere; }
 .meta { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }

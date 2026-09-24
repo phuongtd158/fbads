@@ -1,15 +1,17 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3 } from 'lucide-vue-next'
+import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3, Eye } from 'lucide-vue-next'
 import { state, loadState, ensureObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { METRICS, RULE_PRESETS } from '../lib/constants'
+import { METRICS, RULE_PRESETS, RANGE_LABEL } from '../lib/constants'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import EmptyState from '../components/EmptyState.vue'
 import RuleEditor from '../components/RuleEditor.vue'
+import RulePreview from '../components/RulePreview.vue'
+import Modal from '../components/Modal.vue'
 
 const editor = ref(false)
 const editing = ref(null)
@@ -18,8 +20,19 @@ onMounted(() => ensureObjs())
 
 const nameOf = (id) => (state.objs.find((o) => o.id === id) || { name: id }).name
 const val = (r) => (r.metric === 'roas' ? r.value : fmt(r.value))
-const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : 'acc')
-const actText = (r) => (r.action === 'pause' ? 'tắt camp' : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách`)
+const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
+const actText = (r) => (r.action === 'pause' ? 'tắt camp' : r.action === 'notify' ? 'gửi cảnh báo (không đổi camp)' : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách`)
+
+// Xem trước rule đã lưu: đang khớp camp nào ngay bây giờ
+const pvOpen = ref(false)
+const pvRule = ref(null)
+const pvData = ref(null)
+const pvLoading = ref(false)
+const pvError = ref('')
+async function openPreview(r) {
+  pvRule.value = r; pvOpen.value = true; pvData.value = null; pvError.value = ''; pvLoading.value = true
+  try { pvData.value = await api('rules/preview', 'POST', r) } catch (e) { pvError.value = e.message } finally { pvLoading.value = false }
+}
 
 function open(item) { editing.value = item; editor.value = true }
 async function setEnabled(r, on) {
@@ -41,7 +54,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     </Teleport>
 
     <div class="info card">
-      <Timer :size="18" /><p>Tool kiểm tra rule mỗi <b>{{ state.settings.ruleIntervalMin }} phút</b> dựa trên số liệu <b>hôm nay</b>. Luôn đặt “chi tiêu tối thiểu” để không quyết định khi dữ liệu còn ít, và đặt trần ngân sách khi dùng rule tăng. <RouterLink to="/help/rules">Xem hướng dẫn về rule →</RouterLink></p>
+      <Timer :size="18" /><p>Tool kiểm tra rule mỗi <b>{{ state.settings.ruleIntervalMin }} phút</b> theo <b>khoảng thời gian</b> bạn chọn ở từng rule. Luôn đặt “chi tiêu tối thiểu” để không quyết định khi dữ liệu còn ít, và đặt trần ngân sách khi dùng rule tăng. <RouterLink to="/help/rules">Xem hướng dẫn về rule →</RouterLink></p>
     </div>
 
     <div class="presets">
@@ -52,7 +65,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     <div v-if="state.rules.length" class="grid stagger">
       <article v-for="r in state.rules" :key="r.id" class="card it" :class="{ off: !r.enabled }">
         <div class="hd"><h4>{{ r.name }}</h4><Switch :model-value="r.enabled" :loading="busy[r.id]" :label="'Bật/tắt rule ' + r.name" @update:model-value="(v) => setEnabled(r, v)" /></div>
-        <p class="sentence">Nếu <b>{{ METRICS[r.metric] }}</b> {{ r.op === '>' ? 'lớn hơn' : 'nhỏ hơn' }} <b>{{ val(r) }}</b><template v-if="r.minSpend"> (đã chi ≥ {{ fmt(r.minSpend) }})</template>
+        <p class="sentence">Nếu <b>{{ METRICS[r.metric] }}</b> <span class="rg">{{ RANGE_LABEL[r.range || 'today'] }}</span> {{ r.op === '>' ? 'lớn hơn' : 'nhỏ hơn' }} <b>{{ val(r) }}</b><template v-if="r.minSpend"> (đã chi ≥ {{ fmt(r.minSpend) }})</template>
           thì <b :class="actTone(r)">{{ actText(r) }}</b><template v-if="r.maxBudget">, tối đa {{ fmt(r.maxBudget) }}</template><template v-if="r.minBudget">, tối thiểu {{ fmt(r.minBudget) }}</template>.</p>
         <div class="tags">
           <span v-if="r.allActive" class="tag">Tất cả camp đang chạy</span>
@@ -60,12 +73,17 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
           <span v-if="r.from && r.to" class="tag"><Clock3 :size="12" /> {{ r.from }}–{{ r.to }}</span>
           <span v-if="r.cooldownHours" class="tag">Nghỉ {{ r.cooldownHours }}h</span>
         </div>
-        <div class="acts"><Btn size="sm" :icon="Pencil" @click="open(r)">Sửa</Btn><span class="grow" /><Btn size="sm" variant="ghost danger" :icon="Trash2" :action="() => remove(r)" aria-label="Xoá" /></div>
+        <div class="acts"><Btn size="sm" :icon="Eye" @click="openPreview(r)">Xem trước</Btn><Btn size="sm" :icon="Pencil" @click="open(r)">Sửa</Btn><span class="grow" /><Btn size="sm" variant="ghost danger" :icon="Trash2" :action="() => remove(r)" aria-label="Xoá" /></div>
       </article>
     </div>
     <section v-else class="card"><EmptyState :icon="Zap" title="Chưa có rule nào" text="Rule giúp tool tự tắt camp lỗ và tăng ngân sách camp tốt khi bạn không online. Chọn một mẫu ở trên để bắt đầu."><Btn variant="primary" :icon="Plus" @click="open(null)">Thêm rule đầu tiên</Btn></EmptyState></section>
 
     <RuleEditor v-model="editor" :item="editing" @saved="loadState" />
+
+    <Modal v-model="pvOpen" title="Xem trước rule" :subtitle="pvRule && pvRule.name" width="640px">
+      <RulePreview :data="pvData" :rule="pvRule" :loading="pvLoading" :error="pvError" />
+      <template #footer><Btn variant="primary" @click="pvOpen = false">Đóng</Btn></template>
+    </Modal>
   </div>
 </template>
 
@@ -87,6 +105,8 @@ h4 { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
 .sentence b { color: var(--text); background: var(--surface-3); padding: 2px 9px; border-radius: 8px; font-weight: 650; }
 .sentence b.bad { background: var(--danger-soft); color: var(--danger); }
 .sentence b.ok { background: var(--success-soft); color: var(--success); }
+.sentence b.inf { background: var(--info-soft); color: var(--info); }
+.rg { color: var(--text-3); font-size: .88em; }
 .sentence b.acc { background: var(--accent-soft); color: var(--accent); }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .tag { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-3); color: var(--text-2); padding: 2px 10px; border-radius: 8px; font-size: 13px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

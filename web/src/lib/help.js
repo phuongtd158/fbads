@@ -63,19 +63,20 @@ export const TOPICS = [
   {
     id: 'rules', icon: 'Zap', title: 'Rule hiệu quả', summary: 'Tự tắt camp lỗ, tăng ngân sách camp tốt',
     blocks: [
-      { t: 'p', text: 'Rule cho tool tự quyết định dựa trên **số liệu hôm nay** của từng camp. Cứ mỗi vài phút (mặc định 15 phút, đổi được ở Cài đặt → Chung), tool kiểm tra từng camp đang chạy và làm theo rule nếu điều kiện đúng.' },
+      { t: 'p', text: 'Rule cho tool tự quyết định dựa trên **số liệu của khoảng thời gian bạn chọn** (hôm nay, hôm qua, 3 hoặc 7 ngày gần nhất) của từng camp. Cứ mỗi vài phút (mặc định 15 phút, đổi được ở Cài đặt → Chung), tool kiểm tra từng camp đang chạy và làm theo rule nếu điều kiện đúng.' },
       { t: 'table', head: ['Ô trong form', 'Ý nghĩa'], rows: [
+        ['Khoảng thời gian', 'Số liệu tính trong khoảng nào. Chuyển đổi thường về trễ nên khi **tắt hoặc giảm** camp nên dùng “3 ngày”, tránh chỉ dựa vào hôm nay.'],
         ['Nếu (số liệu)', 'Chọn CPA, ROAS, Chi tiêu hoặc Số kết quả, rồi “lớn hơn” hoặc “nhỏ hơn” một giá trị.'],
         ['Chi tiêu tối thiểu', 'Chỉ xét camp đã tiêu ít nhất số tiền này. **Rất quan trọng** để không tắt nhầm camp mới chạy, chưa đủ dữ liệu.'],
-        ['Thì', 'Tắt camp, Tăng ngân sách hoặc Giảm ngân sách theo %.'],
+        ['Thì', 'Tắt camp, Tăng/Giảm ngân sách theo %, hoặc **Chỉ thông báo** (không đổi camp, chỉ ghi Nhật ký và gửi Telegram).'],
         ['Trần / Sàn ngân sách', 'Giới hạn để ngân sách không tăng quá cao hoặc giảm quá thấp sau nhiều lần áp dụng.'],
         ['Không lặp lại trong (giờ)', 'Sau khi rule đã áp dụng cho một camp, chờ số giờ này mới áp dụng lại cho chính camp đó. Tránh tăng/giảm liên tục.'],
         ['Khung giờ', 'Chỉ chạy rule trong khoảng giờ này (để trống là chạy cả ngày).'],
         ['Áp dụng cho', 'Tất cả camp đang chạy, hoặc chọn từng camp cụ thể.'],
       ] },
       { t: 'example', title: 'Ví dụ rule hay dùng', items: [
-        '**Tắt camp CPA cao:** nếu CPA lớn hơn 150.000 và đã chi ≥ 100.000 thì tắt camp.',
-        '**Tắt camp không ra kết quả:** nếu số kết quả nhỏ hơn 1 và đã chi ≥ 200.000 thì tắt camp.',
+        '**Tắt camp CPA cao:** nếu CPA trong 3 ngày gần nhất lớn hơn 150.000 và đã chi ≥ 300.000 thì tắt camp.',
+        '**Tắt camp không ra kết quả:** nếu số kết quả trong 3 ngày nhỏ hơn 1 và đã chi ≥ 500.000 thì tắt camp.',
         '**Tăng khi ROAS tốt:** nếu ROAS lớn hơn 3 và đã chi ≥ 200.000 thì tăng 20% ngân sách, trần 2.000.000, nghỉ 24 giờ.',
         '**Giảm khi ROAS thấp:** nếu ROAS nhỏ hơn 1,5 thì giảm 20% ngân sách, nghỉ 24 giờ.',
       ] },
@@ -83,7 +84,9 @@ export const TOPICS = [
         'Luôn đặt **chi tiêu tối thiểu**. Không có nó, camp vừa chạy vài phút chưa ra kết quả sẽ bị tắt oan.',
         'Khi dùng rule tăng, hãy đặt **trần ngân sách** và **thời gian nghỉ** để tránh ngân sách phình to ngoài ý muốn.',
         'Thay đổi ngân sách quá lớn có thể khiến Facebook học lại từ đầu. Nên tăng/giảm vừa phải (khoảng 20% mỗi lần).',
-        'Bấm **Kiểm tra ngay** để tool chạy thử toàn bộ rule tức thì, rồi xem Nhật ký.',
+        'Bấm **Xem trước** (trong form hoặc trên thẻ rule) để biết rule **đang khớp camp nào ngay bây giờ** mà chưa thay đổi gì.',
+        'Muốn thử một rule mới an toàn: chọn hành động **Chỉ thông báo** vài ngày, thấy đúng ý rồi mới đổi sang tắt/đổi ngân sách.',
+        'Bấm **Kiểm tra ngay** để tool chạy toàn bộ rule tức thì, rồi xem Nhật ký.',
       ] },
       { t: 'note', tone: 'warning', text: 'Rule chỉ xét camp **đang chạy**. Camp bị rule tắt sẽ không tự bật lại — bạn cần bật lại thủ công hoặc bằng lịch.' },
     ],
@@ -92,7 +95,7 @@ export const TOPICS = [
     id: 'logs', icon: 'ScrollText', title: 'Nhật ký & xem lỗi', summary: 'Tool đã làm gì, và vì sao thất bại',
     blocks: [
       { t: 'p', text: 'Nhật ký ghi lại **mọi việc tool đã làm**: lịch, rule, thao tác thủ công của bạn và lỗi hệ thống. Tool giữ 1000 dòng gần nhất.' },
-      { t: 'table', head: ['Nhãn', 'Ý nghĩa'], rows: [['Thành công', 'Đã thay đổi camp thật trên Facebook.'], ['Chạy thử', 'Tool *sẽ* làm việc này, nhưng chưa thực hiện vì đang ở chế độ Chạy thử.'], ['Lỗi', 'Thao tác thất bại. Dòng có vạch đỏ và mã lỗi (ví dụ Facebook #190).']] },
+      { t: 'table', head: ['Nhãn', 'Ý nghĩa'], rows: [['Thành công', 'Đã thay đổi camp thật trên Facebook.'], ['Chạy thử', 'Tool *sẽ* làm việc này, nhưng chưa thực hiện vì đang ở chế độ Chạy thử.'], ['Bỏ qua', 'Tool cố ý không làm vì đang bảo vệ ngân sách (camp đang học, đã chạm giới hạn thay đổi mỗi ngày). Chỉ là ghi nhận.'], ['Cảnh báo', 'Rule “Chỉ thông báo” đã khớp. Tool không đổi camp.'], ['Lỗi', 'Thao tác thất bại. Dòng có vạch đỏ và mã lỗi (ví dụ Facebook #190).']] },
       { t: 'steps', title: 'Xem chi tiết một dòng', items: [
         'Bấm vào dòng nhật ký (hoặc nút **Chi tiết** / **Xem lỗi** bên phải).',
         'Hộp chi tiết cho biết **thời gian, nguồn** (lịch/rule nào, có nút Mở), **đối tượng** và **hành động**.',
@@ -109,11 +112,29 @@ export const TOPICS = [
       ] },
       { t: 'tips', items: [
         'Nút **Chạy lại lịch** / **Kiểm tra lại rule** ở cuối hộp chi tiết giúp thử lại ngay sau khi bạn đã sửa lỗi.',
+        'Nút **Hoàn tác** đưa camp về trạng thái/ngân sách trước đó (trong 3 ngày). Nếu camp đã bị đổi tiếp, tool hỏi lại trước khi ghi đè. Việc do rule làm sẽ được rule tạm hoãn 24 giờ để không làm lại ngay.',
         'Nút **Sao chép chi tiết** gom toàn bộ thông tin (dạng văn bản) để gửi cho người hỗ trợ.',
         'Lọc theo **trạng thái** (Thành công/Chạy thử/Lỗi) và **nguồn** (Lịch/Rule/Thủ công/Hệ thống), hoặc gõ mã lỗi vào ô tìm kiếm.',
         'Access Token **không bao giờ** được ghi vào nhật ký.',
       ] },
       { t: 'note', tone: 'info', text: 'Các dòng nhật ký ghi trước khi có tính năng này chỉ có thông tin cơ bản (không có Trước → Sau hay mã lỗi).' },
+    ],
+  },
+  {
+    id: 'protect', icon: 'ShieldAlert', title: 'Bảo vệ ngân sách', summary: 'Phanh an toàn: camp đang học, giới hạn ngày, dừng khẩn',
+    blocks: [
+      { t: 'p', text: 'Ba “phanh an toàn” giúp rule và lịch không làm ngân sách đi quá xa, kể cả khi bạn không online. Cài ở **Cài đặt → Bảo vệ ngân sách**.' },
+      { t: 'table', head: ['Tính năng', 'Làm gì', 'Áp dụng cho'], rows: [
+        ['Bỏ qua camp đang học', 'Không để **rule** tăng/giảm ngân sách camp đang trong giai đoạn học, vì Facebook sẽ học lại từ đầu.', 'Rule đổi ngân sách'],
+        ['Giới hạn thay đổi mỗi ngày', 'Tổng % ngân sách một camp được đổi trong ngày, tính trên ngân sách đầu ngày. Ví dụ 30%: gốc 500.000 thì tối đa lên 650.000 hoặc xuống 350.000 dù rule chạy nhiều lần.', 'Rule đổi ngân sách (lịch do bạn đặt không bị giới hạn)'],
+        ['Dừng khẩn', 'Khi tổng chi tiêu hôm nay của mọi camp đạt mức bạn đặt, tự **tắt tất cả camp đang chạy** và báo Telegram. Mỗi ngày tối đa một lần.', 'Toàn bộ tài khoản'],
+      ] },
+      { t: 'tips', items: [
+        'Camp đang học có nhãn **Đang học** ở trang Tổng quan.',
+        'Khi tool bỏ qua vì các lý do trên, Nhật ký có dòng **Bỏ qua** ghi rõ nguyên nhân (mỗi lý do chỉ ghi một lần mỗi ngày cho mỗi camp).',
+        'Dừng khẩn được kiểm tra theo chu kỳ rule (mặc định 15 phút), nên có thể chi vượt mức một chút trước khi tắt.',
+      ] },
+      { t: 'note', tone: 'warning', text: 'Dừng khẩn chỉ **tắt**, không tự bật lại. Hôm sau hãy dùng lịch “Bật camp buổi sáng” để chạy lại. Ở chế độ Chạy thử, dừng khẩn chỉ ghi Nhật ký.' },
     ],
   },
   {
@@ -207,6 +228,8 @@ export const TOPICS = [
     blocks: [
       { t: 'faq', items: [
         ['Vì sao tool không cho tôi lưu lịch hoặc rule?', 'Tool chặn các thiết lập dễ gây thiệt hại hoặc vô nghĩa, và báo lỗi ngay dưới ô cần sửa. Các luật chính: **Lịch** — phải có giờ hợp lệ, ít nhất 1 ngày và 1 camp; không giảm ngân sách từ 100% trở lên; không đổi ngân sách cho camp dùng CBO; không có hai lịch bật/tắt ngược nhau cùng giờ cho cùng camp. **Rule** — phải có chi tiêu tối thiểu (với CPA, ROAS, số kết quả); rule đổi ngân sách phải nghỉ ít nhất 1 giờ giữa hai lần, tăng tối đa 100% và giảm tối đa 90% mỗi lần; trần phải lớn hơn hoặc bằng sàn; khung giờ không được qua đêm. **Sửa ngân sách tay** — phải lớn hơn 0, và hỏi xác nhận nếu tăng gấp đôi trở lên hoặc giảm một nửa trở lên (tránh gõ nhầm số 0).'],
+        ['Vì sao rule không tăng/giảm ngân sách camp của tôi?', 'Rule chỉ đổi ngân sách khi mọi điều kiện đều đạt. Hãy mở **Xem trước** trên thẻ rule để thấy lý do từng camp: chưa đủ chi tiêu tối thiểu, đang trong thời gian nghỉ, ngoài khung giờ, **camp đang học** (Cài đặt → Bảo vệ ngân sách), đã **chạm giới hạn thay đổi mỗi ngày**, hoặc camp dùng CBO nên không có ngân sách riêng. Các dòng “Bỏ qua” trong Nhật ký cũng ghi rõ lý do.'],
+        ['Tool tắt nhầm camp, làm sao đưa về như cũ?', 'Vào **Nhật ký**, mở dòng tắt camp đó rồi bấm **Hoàn tác** (trong vòng 3 ngày). Sau đó nên sửa rule (tăng chi tiêu tối thiểu hoặc dùng khoảng “3 ngày”) và dùng **Xem trước** trước khi bật lại.'],
         ['Tool báo “Mất kết nối Facebook” thì sao?', 'Vào Cài đặt → Kết nối Facebook xem thẻ trạng thái, nó nêu rõ lý do. Thường gặp: token hết hạn (tạo token mới), thiếu quyền `ads_management`/`ads_read`, hoặc máy không có mạng. Sau khi sửa, bấm **Kiểm tra lại**.'],
         ['Lịch không chạy đúng giờ?', 'Kiểm tra lần lượt: (1) máy có đang bật và cửa sổ `start.bat` còn mở không; (2) lịch có đang được bật (công tắc) và đúng ngày không; (3) múi giờ ở Cài đặt → Chung đã đúng chưa; (4) chế độ có đang là Chạy thử không — khi đó lịch chỉ ghi Nhật ký; (5) xem Nhật ký có báo lỗi không.'],
         ['Không đổi được ngân sách?', 'Camp có thể dùng ngân sách chiến dịch (CBO) nên nhóm quảng cáo không có ngân sách riêng. Hãy chỉnh ngân sách ở cấp camp. Ô hiện dấu “–” nghĩa là cấp đó không có ngân sách.'],
@@ -251,5 +274,10 @@ export const TIPS = {
   modes: { text: 'Chạy thử: dùng Facebook thật nhưng chỉ ghi Nhật ký, không đổi camp. Chạy thật: thay đổi camp thật.', topic: 'modes' },
   token: { text: 'Access Token là chìa khoá Facebook cấp để tool điều khiển quảng cáo. Đừng chia sẻ cho ai.', topic: 'connect' },
   resultAction: { text: 'Loại “kết quả” dùng để tính CPA/ROAS. Chọn đúng mục tiêu bạn chạy quảng cáo.', topic: 'glossary' },
+  range: { text: 'Chọn số liệu của khoảng nào để so với ngưỡng. Chuyển đổi thường về trễ nên khi tắt/giảm camp nên dùng “3 ngày”, tránh chỉ dựa vào hôm nay.', topic: 'rules' },
+  notify: { text: 'Rule chỉ thông báo không đổi camp, chỉ ghi Nhật ký và gửi Telegram. Rất hợp để thử rule vài ngày trước khi cho nó tự hành động.', topic: 'rules' },
+  skipLearning: { text: 'Camp mới hoặc vừa đổi lớn sẽ vào giai đoạn học. Đổi ngân sách lúc này khiến Facebook học lại từ đầu, nên rule sẽ bỏ qua các camp đó.', topic: 'protect' },
+  dailyCap: { text: 'Tổng % ngân sách một camp được phép thay đổi trong một ngày do rule, tính trên ngân sách đầu ngày. Chống việc tăng/giảm dồn dập nhiều lần.', topic: 'protect' },
+  killSwitch: { text: 'Khi tổng chi tiêu hôm nay của mọi camp vượt mức bạn đặt, tool tự tắt tất cả camp đang chạy (mỗi ngày tối đa một lần).', topic: 'protect' },
   interval: { text: 'Tool kiểm tra toàn bộ rule mỗi khoảng phút này. Tối thiểu 5 phút.', topic: 'rules' },
 }

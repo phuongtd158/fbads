@@ -148,3 +148,40 @@ test('mật khẩu', () => {
   assert.ok(validatePassword('matkhau-cu-1', 'matkhau-cu-1').errors.newPassword)
   assert.equal(validatePassword('mat-khau-moi-99', 'matkhau-cu-1').ok, true)
 })
+
+test('rule: khoảng thời gian', () => {
+  assert.equal(validateRule({ ...okRule, range: 'last_3d' }, { objs }).ok, true)
+  assert.equal(validateRule({ ...okRule, range: 'last_3d' }, { objs }).value.range, 'last_3d')
+  assert.ok(validateRule({ ...okRule, range: 'last_year' }).errors.range)
+  assert.equal(validateRule({ ...okRule }).value.range, 'today') // không chọn thì mặc định hôm nay
+  // tắt/giảm chỉ dựa vào hôm nay → cảnh báo; dùng 3 ngày thì không
+  assert.ok(validateRule({ ...okRule, range: 'today' }).warnings.some((w) => w.includes('hôm nay')))
+  assert.ok(!validateRule({ ...okRule, range: 'last_3d' }).warnings.some((w) => w.includes('hôm nay')))
+  // chi tiêu thì hôm nay là tự nhiên, không cảnh báo
+  assert.ok(!validateRule({ ...okRule, metric: 'spend', value: 500000, minSpend: 0, range: 'today' }).warnings.some((w) => w.includes('hôm nay')))
+})
+
+test('rule: chỉ thông báo', () => {
+  const n = { ...okRule, action: 'notify', cooldownHours: 12 }
+  assert.equal(validateRule(n).ok, true)
+  assert.equal(validateRule(n).value.pct, 0)
+  assert.ok(validateRule({ ...n, cooldownHours: 0 }).errors.cooldownHours) // tránh thông báo lặp mỗi chu kỳ
+  assert.equal(validateRule({ ...n, minSpend: 0 }).ok, false) // vẫn cần chi tiêu tối thiểu
+  // rule chỉ thông báo không gây cảnh báo mâu thuẫn
+  const other = [{ id: 'r1', name: 'Tăng', metric: 'cpa', op: '>', value: 100000, action: 'increase', allActive: true, enabled: true }]
+  assert.ok(!validateRule(n, { rules: other }).warnings.some((w) => w.includes('mâu thuẫn')))
+})
+
+test('cài đặt bảo vệ ngân sách', () => {
+  assert.ok(validateSettings({ dailyChangeCapPct: 2 }).errors.dailyChangeCapPct)
+  assert.ok(validateSettings({ dailyChangeCapPct: 500 }).errors.dailyChangeCapPct)
+  assert.ok(validateSettings({ dailyChangeCapPct: 12.5 }).errors.dailyChangeCapPct)
+  assert.equal(validateSettings({ dailyChangeCapPct: '30' }).value.dailyChangeCapPct, 30)
+  assert.equal(validateSettings({ skipLearning: 0 }).value.skipLearning, false)
+  assert.ok(validateSettings({ dailySpendLimit: -1 }).errors.dailySpendLimit)
+  // bật dừng khẩn thì phải có mức > 0
+  assert.ok(validateSettings({ killSwitchEnabled: true, dailySpendLimit: 0 }).errors.dailySpendLimit)
+  assert.ok(validateSettings({ killSwitchEnabled: true }, { dailySpendLimit: 0 }).errors.dailySpendLimit)
+  assert.equal(validateSettings({ killSwitchEnabled: true, dailySpendLimit: 3000000 }).ok, true)
+  assert.equal(validateSettings({ killSwitchEnabled: false, dailySpendLimit: 0 }).ok, true)
+})

@@ -1,8 +1,8 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { Check } from 'lucide-vue-next'
+import { Check, Eye } from 'lucide-vue-next'
 import { api } from '../lib/api'
-import { METRICS } from '../lib/constants'
+import { METRICS, RANGES } from '../lib/constants'
 import { validateRule } from '../lib/validate'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
@@ -12,18 +12,23 @@ import Field from './Field.vue'
 import Callout from './Callout.vue'
 import Segmented from './Segmented.vue'
 import TargetPicker from './TargetPicker.vue'
+import RulePreview from './RulePreview.vue'
 
 const props = defineProps({ modelValue: Boolean, item: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const blank = () => ({ name: '', metric: 'cpa', op: '>', value: 150000, minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, from: '', to: '', allActive: true, level: 'campaign', targets: [], enabled: true })
+const blank = () => ({ name: '', metric: 'cpa', op: '>', range: 'last_3d', value: 150000, minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, from: '', to: '', allActive: true, level: 'campaign', targets: [], enabled: true })
 const f = ref(blank())
 const scope = ref('all')
 const submitted = ref(false)
 const touched = reactive({})
+const pv = ref(null)
+const pvLoading = ref(false)
+const pvError = ref('')
 
 watch(() => props.modelValue, (open) => {
   if (!open) return
+  pv.value = null; pvError.value = ''
   f.value = { ...blank(), ...JSON.parse(JSON.stringify(props.item || {})) }
   f.value.maxBudget = f.value.maxBudget || ''; f.value.minBudget = f.value.minBudget || ''
   scope.value = f.value.allActive ? 'all' : 'pick'
@@ -39,6 +44,18 @@ const showTargets = computed(() => (submitted.value ? check.value.errors.targets
 const touch = (k) => { touched[k] = true }
 // các ô trần / sàn / % nằm chung một khối: gom lỗi lại
 const adjErrors = computed(() => ['pct', 'maxBudget', 'minBudget'].map(show).filter(Boolean))
+// Sửa form thì kết quả xem trước cũ không còn đúng → xoá đi
+watch(() => JSON.stringify(check.value.value), () => { pv.value = null; pvError.value = '' })
+
+async function preview() {
+  submitted.value = true
+  if (!check.value.ok) { toast('Hãy sửa các mục báo lỗi trước khi xem trước', 'error'); return }
+  pvLoading.value = true; pvError.value = ''; pv.value = null
+  try { pv.value = await api('rules/preview', 'POST', check.value.value) } catch (e) { pvError.value = e.message } finally { pvLoading.value = false }
+  await nextTick()
+  const el = document.querySelector('.sheet .pv') // cuộn tới kết quả để người dùng thấy ngay
+  if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
 
 async function save() {
   submitted.value = true
@@ -55,15 +72,19 @@ async function save() {
   emit('saved'); emit('update:modelValue', false)
 }
 const ops = [{ value: '>', label: 'Lớn hơn' }, { value: '<', label: 'Nhỏ hơn' }]
-const actions = [{ value: 'pause', label: 'Tắt camp' }, { value: 'increase', label: 'Tăng ngân sách' }, { value: 'decrease', label: 'Giảm ngân sách' }]
+const actions = [{ value: 'pause', label: 'Tắt camp' }, { value: 'increase', label: 'Tăng NS' }, { value: 'decrease', label: 'Giảm NS' }, { value: 'notify', label: 'Chỉ thông báo' }]
 const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value: 'pick', label: 'Chọn camp cụ thể' }]
 </script>
 
 <template>
-  <Modal :model-value="modelValue" :title="item && item.id ? 'Sửa rule' : 'Thêm rule'" subtitle="Tool kiểm tra rule định kỳ dựa trên số liệu hôm nay." @update:model-value="emit('update:modelValue', $event)">
+  <Modal :model-value="modelValue" :title="item && item.id ? 'Sửa rule' : 'Thêm rule'" subtitle="Tool kiểm tra rule định kỳ theo khoảng thời gian bạn chọn." @update:model-value="emit('update:modelValue', $event)">
     <Field label="Tên rule" :error="show('name')"><input v-model="f.name" class="input" maxlength="120" placeholder="Vd: Tắt camp CPA cao" @input="touch('name')" /></Field>
 
-    <Field label="Nếu (số liệu hôm nay)" :error="show('value')">
+    <Field label="Số liệu tính trong khoảng" tip="range" :error="show('range')">
+      <Segmented v-model="f.range" :options="RANGES" block />
+    </Field>
+
+    <Field label="Nếu" :error="show('value')">
       <div class="inl">
         <select v-model="f.metric" class="input sel"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
         <Segmented v-model="f.op" :options="ops" />
@@ -95,7 +116,10 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
 
     <Callout v-for="w in check.warnings" :key="w" tone="warning">{{ w }}</Callout>
 
+    <RulePreview v-if="pv || pvLoading || pvError" :data="pv" :rule="check.value" :loading="pvLoading" :error="pvError" />
+
     <template #footer>
+      <Btn :icon="Eye" :loading="pvLoading" :action="preview">Xem trước</Btn>
       <Btn @click="emit('update:modelValue', false)">Huỷ</Btn>
       <Btn variant="primary" :icon="Check" :action="save">Lưu rule</Btn>
     </template>

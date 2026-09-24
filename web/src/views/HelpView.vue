@@ -1,13 +1,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Rocket, LayoutDashboard, CalendarClock, Zap, KeyRound, ShieldCheck, Send, Lock, Keyboard, BookText, LifeBuoy, ScrollText, Search, ChevronDown, Lightbulb, Info, AlertTriangle, ArrowRight, ArrowLeft, SearchX, X } from 'lucide-vue-next'
+import { Rocket, LayoutDashboard, CalendarClock, Zap, KeyRound, ShieldCheck, Send, Lock, Keyboard, BookText, LifeBuoy, ScrollText, ShieldAlert, Search, ChevronDown, Lightbulb, Info, AlertTriangle, ArrowRight, ArrowLeft, SearchX, X } from 'lucide-vue-next'
 import { TOPICS, topicById, plainText } from '../lib/help'
 import { rich } from '../lib/rich'
 import EmptyState from '../components/EmptyState.vue'
 import OnboardingCard from '../components/OnboardingCard.vue'
 
-const icons = { Rocket, LayoutDashboard, CalendarClock, Zap, KeyRound, ShieldCheck, Send, Lock, Keyboard, BookText, LifeBuoy, ScrollText }
+const icons = { Rocket, LayoutDashboard, CalendarClock, Zap, KeyRound, ShieldCheck, Send, Lock, Keyboard, BookText, LifeBuoy, ScrollText, ShieldAlert }
 const route = useRoute()
 const router = useRouter()
 const q = ref('')

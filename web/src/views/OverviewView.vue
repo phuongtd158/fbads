@@ -169,7 +169,7 @@ async function bulk(on) {
         <TransitionGroup name="row" tag="div">
           <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
             <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
-            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><Badge :tone="statusOf(o).tone" dot>{{ statusOf(o).label }}</Badge></div>
+            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><span class="bdg"><Badge :tone="statusOf(o).tone" dot>{{ statusOf(o).label }}</Badge><Badge v-if="o.learning" tone="info" title="Đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
             <div class="metrics">
               <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
               <div class="m r"><span class="ml">Chi tiêu</span><span class="num sp">{{ fmt(o.metrics.spend) }}</span>
@@ -233,6 +233,7 @@ async function bulk(on) {
 .item { min-height: 68px; border-bottom: 1px solid var(--border); transition: background .15s; }
 .item:last-child { border-bottom: 0; }
 .item:hover { background: var(--surface-2); }
+.bdg { display: flex; gap: 6px; flex-wrap: wrap; }
 .item.off .c-nm b { color: var(--text-2); }
 .c-nm { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 0; }
 .c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }

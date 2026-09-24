@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { RefreshCw, CheckCircle2, AlertCircle, FlaskConical, ScrollText, Search, ChevronRight } from 'lucide-vue-next'
+import { RefreshCw, CheckCircle2, AlertCircle, FlaskConical, ScrollText, Search, ChevronRight, Bell, SkipForward } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { state, loadState } from '../stores/app'
 import { toastError } from '../stores/ui'
@@ -23,17 +23,19 @@ const current = ref(null)
 async function load() { try { logs.value = await api('logs') } catch (e) { toastError(e) } finally { loaded.value = true } }
 onMounted(() => { load(); if (!state.schedules.length && !state.rules.length) loadState().catch(() => {}) })
 
-const kind = (l) => (l.ok === false ? 'err' : l.dry ? 'dry' : 'ok')
+const kind = (l) => (l.ok === false ? 'err' : l.skipped ? 'skip' : l.action && l.action.type === 'notify' ? 'info' : l.dry ? 'dry' : 'ok')
+const bucket = (l) => { const k = kind(l); return k === 'info' ? 'ok' : k } // cảnh báo tính vào "Thành công" khi lọc
 const options = computed(() => [
   { value: 'all', label: 'Tất cả', count: logs.value.length },
-  { value: 'ok', label: 'Thành công', count: logs.value.filter((l) => kind(l) === 'ok').length },
-  { value: 'dry', label: 'Chạy thử', count: logs.value.filter((l) => kind(l) === 'dry').length },
-  { value: 'err', label: 'Lỗi', count: logs.value.filter((l) => kind(l) === 'err').length },
+  { value: 'ok', label: 'Thành công', count: logs.value.filter((l) => bucket(l) === 'ok').length },
+  { value: 'dry', label: 'Chạy thử', count: logs.value.filter((l) => bucket(l) === 'dry').length },
+  { value: 'skip', label: 'Bỏ qua', count: logs.value.filter((l) => bucket(l) === 'skip').length },
+  { value: 'err', label: 'Lỗi', count: logs.value.filter((l) => bucket(l) === 'err').length },
 ])
 const sources = computed(() => [{ value: 'all', label: 'Mọi nguồn' }, ...Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))])
 const shown = computed(() => {
   const s = q.value.trim().toLowerCase()
-  return logs.value.filter((l) => (filter.value === 'all' || kind(l) === filter.value) && (source.value === 'all' || kindOf(l) === source.value)
+  return logs.value.filter((l) => (filter.value === 'all' || bucket(l) === filter.value) && (source.value === 'all' || kindOf(l) === source.value)
     && (!s || `${l.source} ${l.name} ${l.detail} ${(l.error && l.error.code) || ''}`.toLowerCase().includes(s)))
 })
 const groups = computed(() => {
@@ -41,7 +43,7 @@ const groups = computed(() => {
   for (const l of shown.value) (g[dayLabel(l.ts)] ||= []).push(l)
   return Object.entries(g)
 })
-const icon = (l) => ({ ok: CheckCircle2, dry: FlaskConical, err: AlertCircle }[kind(l)])
+const icon = (l) => ({ ok: CheckCircle2, dry: FlaskConical, err: AlertCircle, skip: SkipForward, info: Bell }[kind(l)])
 const view = (l) => { current.value = l; open.value = true }
 </script>
 
@@ -67,6 +69,7 @@ const view = (l) => { current.value = l; open.value = true }
           <div class="bd">
             <b>{{ l.source }}</b>
             <p><span class="nm">{{ l.name }}</span> <span class="muted">— {{ l.detail }}</span></p>
+            <span v-if="l.undone" class="chip">Đã hoàn tác</span>
             <span v-if="l.ok === false && l.error && (l.error.code || l.error.network)" class="code">{{ l.error.network ? 'Lỗi mạng' : `Facebook #${l.error.code}${l.error.subcode ? '/' + l.error.subcode : ''}` }}</span>
           </div>
           <time class="num faint">{{ timeOf(l.ts) }}</time>
@@ -93,6 +96,8 @@ const view = (l) => { current.value = l; open.value = true }
 .lg:hover, .lg:focus-visible { background: var(--surface-2); outline-offset: -2px; } .lg:last-child { border-bottom: 0; }
 .lg.err { box-shadow: inset 3px 0 0 var(--danger); }
 .ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; }
+.ic.skip { background: var(--warning-soft); color: var(--warning); } .ic.info { background: var(--info-soft); color: var(--info); }
+.chip { display: inline-block; margin: 6px 6px 0 0; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 650; background: var(--surface-3); color: var(--text-2); }
 .ic.ok { background: var(--success-soft); color: var(--success); } .ic.dry { background: var(--warning-soft); color: var(--warning); } .ic.err { background: var(--danger-soft); color: var(--danger); }
 .bd { flex: 1; min-width: 0; } .bd b { font-size: 14.5px; font-weight: 620; } .bd p { font-size: 14.5px; margin-top: 1px; overflow-wrap: anywhere; }
 .nm { font-weight: 550; }

@@ -1,9 +1,10 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck, Send, SlidersHorizontal, Palette, Lock } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock } from 'lucide-vue-next'
 import ConnectionPanel from './settings/ConnectionPanel.vue'
 import ModePanel from './settings/ModePanel.vue'
+import ProtectPanel from './settings/ProtectPanel.vue'
 import TelegramPanel from './settings/TelegramPanel.vue'
 import GeneralPanel from './settings/GeneralPanel.vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
@@ -14,6 +15,7 @@ const router = useRouter()
 const tabs = [
   { v: 'connection', label: 'Kết nối Facebook', icon: KeyRound, comp: ConnectionPanel },
   { v: 'mode', label: 'Chế độ hoạt động', icon: ShieldCheck, comp: ModePanel },
+  { v: 'protect', label: 'Bảo vệ ngân sách', icon: ShieldAlert, comp: ProtectPanel },
   { v: 'telegram', label: 'Telegram', icon: Send, comp: TelegramPanel },
   { v: 'general', label: 'Chung', icon: SlidersHorizontal, comp: GeneralPanel },
   { v: 'appearance', label: 'Giao diện', icon: Palette, comp: AppearancePanel },

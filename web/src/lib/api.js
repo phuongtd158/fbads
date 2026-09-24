@@ -4,8 +4,9 @@ import { reactive } from 'vue'
 export const net = reactive({ pending: 0 })
 
 export class ApiError extends Error {
-  constructor(message, { silent = false, fields = null } = {}) {
+  constructor(message, { silent = false, fields = null, data = null } = {}) {
     super(message)
+    this.data = data // toàn bộ JSON server trả về (ví dụ { drift: true })
     this.silent = silent
     this.fields = fields // { tenTruong: 'thông báo' } khi server trả lỗi theo trường
   }
@@ -33,7 +34,7 @@ export async function api(path, method = 'GET', body, opts = {}) {
       unauthorizedHandler()
       throw new ApiError('Cần đăng nhập', { silent: true })
     }
-    if (!res.ok || json.error) throw new ApiError(json.error || 'Có lỗi xảy ra', { fields: json.errors || null })
+    if (!res.ok || json.error) throw new ApiError(json.error || 'Có lỗi xảy ra', { fields: json.errors || null, data: json })
     return json
   } finally {
     if (!opts.bg) net.pending--

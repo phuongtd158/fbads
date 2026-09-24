@@ -22,11 +22,20 @@ export const SCHEDULE_PRESETS = [
 
 export const METRICS = { cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả' }
 
+export const RANGES = [
+  { value: 'today', label: 'Hôm nay' },
+  { value: 'yesterday', label: 'Hôm qua' },
+  { value: 'last_3d', label: '3 ngày' },
+  { value: 'last_7d', label: '7 ngày' },
+]
+export const RANGE_LABEL = { today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất' }
+
 export const RULE_PRESETS = [
-  { name: 'Tắt camp CPA cao', d: { name: 'Tắt camp CPA cao', metric: 'cpa', op: '>', value: 150000, minSpend: 100000, action: 'pause', cooldownHours: 24 } },
-  { name: 'Tắt camp chi nhiều không ra kết quả', d: { name: 'Tắt camp không ra kết quả', metric: 'results', op: '<', value: 1, minSpend: 200000, action: 'pause', cooldownHours: 24 } },
-  { name: 'Tăng 20% khi ROAS tốt', d: { name: 'Tăng ngân sách khi ROAS tốt', metric: 'roas', op: '>', value: 3, minSpend: 200000, action: 'increase', pct: 20, cooldownHours: 24 } },
-  { name: 'Giảm 20% khi ROAS thấp', d: { name: 'Giảm ngân sách khi ROAS thấp', metric: 'roas', op: '<', value: 1.5, minSpend: 200000, action: 'decrease', pct: 20, cooldownHours: 24 } },
+  { name: 'Tắt camp CPA cao', d: { name: 'Tắt camp CPA cao', metric: 'cpa', op: '>', range: 'last_3d', value: 150000, minSpend: 300000, action: 'pause', cooldownHours: 24 } },
+  { name: 'Tắt camp chi nhiều không ra kết quả', d: { name: 'Tắt camp không ra kết quả', metric: 'results', op: '<', range: 'last_3d', value: 1, minSpend: 500000, action: 'pause', cooldownHours: 24 } },
+  { name: 'Tăng 20% khi ROAS tốt', d: { name: 'Tăng ngân sách khi ROAS tốt', metric: 'roas', op: '>', range: 'last_3d', value: 3, minSpend: 300000, action: 'increase', pct: 20, maxBudget: 2000000, cooldownHours: 24 } },
+  { name: 'Giảm 20% khi ROAS thấp', d: { name: 'Giảm ngân sách khi ROAS thấp', metric: 'roas', op: '<', range: 'last_3d', value: 1.5, minSpend: 300000, action: 'decrease', pct: 20, minBudget: 100000, cooldownHours: 24 } },
+  { name: 'Chỉ cảnh báo khi CPA cao', d: { name: 'Cảnh báo CPA cao', metric: 'cpa', op: '>', range: 'today', value: 150000, minSpend: 100000, action: 'notify', cooldownHours: 12 } },
 ]
 
 export const RESULT_ACTIONS = [

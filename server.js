@@ -147,6 +147,18 @@ async function api(req, res, url) {
     return send(res, 200, { ok: true });
   }
   if (m === 'POST' && p === '/api/rules/run') { await engine.runRules(); return send(res, 200, { ok: true }); }
+  // Xem trước: rule (chưa lưu) đang khớp camp nào ngay bây giờ — không thay đổi gì
+  if (m === 'POST' && p === '/api/rules/preview') {
+    const b = await readBody(req);
+    const r = V.validateRule({ ...b, enabled: true }, { objs: fb.peekObjects(), rules: [] });
+    if (!r.ok) return bad(res, r);
+    return send(res, 200, { ...(await engine.previewRule(r.value)), warnings: r.warnings });
+  }
+  // Hoàn tác một thay đổi đã ghi trong nhật ký
+  if ((mt = p.match(/^\/api\/logs\/([^/]+)\/undo$/)) && m === 'POST') {
+    const b = await readBody(req);
+    return send(res, 200, { ok: true, entry: await engine.undoLog(mt[1], { force: !!b.force }) });
+  }
   if ((m === 'POST' || m === 'GET') && (p === '/api/test-connection' || p === '/api/connection')) {
     try { return send(res, 200, await fb.testConnection()); } catch (e) { return send(res, 200, { ok: false, error: e.message }); }
   }
@@ -202,7 +214,7 @@ const server = http.createServer(async (req, res) => {
     });
     res.end(fs.readFileSync(file));
   } catch (e) {
-    send(res, 500, { error: e.message });
+    send(res, e.status || 500, { error: e.message, ...(e.drift ? { drift: true } : {}) });
   }
 });
 
