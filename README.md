@@ -43,13 +43,14 @@ Cần tài khoản Fly.io (có thẻ) và `flyctl`. Không cần cài Docker tr�
 ```powershell
 iwr https://fly.io/install.ps1 -useb | iex
 fly auth login
-# 1) sửa dòng app = ... trong fly.toml thành tên duy nhất của bạn, rồi:
-fly apps create TEN-APP
-fly volumes create fbads_data --region sin --size 1
-fly secrets set APP_PASSWORD="mat-khau-manh-cua-ban"
-fly deploy --ha=false
+# 1) app trong fly.toml là 'bongbi'; nếu tên đó chưa có thì tạo: fly apps create bongbi (hoặc đổi tên trong fly.toml)
+# 2) nếu Fly đã tự deploy cấu hình cũ (ams, cổng 8080): xoá máy cũ trước
+#    fly machine list -a bongbi  →  fly machine destroy ID --force -a bongbi
+fly volumes create fbads_data --region sin --size 1 -a bongbi
+fly secrets set APP_PASSWORD="mat-khau-manh-cua-ban" -a bongbi
+fly deploy --ha=false -a bongbi
 ```
-Mở `https://TEN-APP.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào Cài đặt → Kết nối Facebook.
+Mở `https://bongbi.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào Cài đặt → Kết nối Facebook.
 - **Chỉ chạy 1 máy** (`--ha=false`, kiểm tra bằng `fly status`): lịch và rule chạy trong tiến trình này, 2 máy sẽ làm trùng việc.
 - Dữ liệu (`data.json`) nằm trên volume `fbads_data` (`DATA_DIR=/data`), giữ nguyên khi deploy lại. Sao lưu: `fly ssh sftp get /data/data.json`.
 - Cập nhật code: `fly deploy --ha=false`. Xem log: `fly logs`.
