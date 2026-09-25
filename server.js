@@ -266,10 +266,10 @@ async function api(req, res, url) {
     return send(res, 200, { url: fb.oauthUrl({ appId, configId, redirectUri: uri, state: newOauthState(appId, uri) }) });
   }
   if (m === 'POST' && p === '/api/telegram/test') {
-    const ok = await notify.telegram('✅ Kết nối Telegram thành công — Facebook Ads Auto Tool');
-    return send(res, ok ? 200 : 400, ok ? { ok } : { error: 'Gửi thất bại, kiểm tra Bot Token và Chat ID' });
+    const r = notify.reply(await notify.send('✅ Kết nối Telegram thành công — Facebook Ads Auto Tool'));
+    return send(res, r.status, r.body);
   }
-  if (m === 'POST' && p === '/api/report') { await engine.sendReport(); return send(res, 200, { ok: true }); }
+  if (m === 'POST' && p === '/api/report') { const r = notify.reply(await engine.sendReport()); return send(res, r.status, r.body); }
   send(res, 404, { error: 'Not found' });
 }
 

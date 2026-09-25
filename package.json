@@ -5,7 +5,7 @@
   "description": "Facebook Ads automation tool",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/validate.test.mjs tests/engine.test.mjs tests/auth.test.mjs tests/store.test.mjs tests/delivery.test.mjs tests/fb.test.mjs tests/bulkBudget.test.mjs tests/fbAccounts.test.mjs tests/accounts.test.mjs tests/dates.test.mjs tests/metrics.test.mjs tests/fbRange.test.mjs tests/insightsApi.test.mjs",
+    "test": "node --test tests/validate.test.mjs tests/engine.test.mjs tests/auth.test.mjs tests/store.test.mjs tests/delivery.test.mjs tests/fb.test.mjs tests/bulkBudget.test.mjs tests/fbAccounts.test.mjs tests/accounts.test.mjs tests/dates.test.mjs tests/metrics.test.mjs tests/fbRange.test.mjs tests/insightsApi.test.mjs tests/notify.test.mjs",
     "build:web": "cd web && npm run build"
   }
 }

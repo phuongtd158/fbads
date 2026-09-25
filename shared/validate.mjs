@@ -341,6 +341,25 @@ export const checkConfigId = (v) => (!v || /^\d{5,}$/.test(String(v).trim()) ? '
 export const checkTelegramToken = (v) => (!v || TG_TOKEN.test(String(v).trim()) ? '' : 'Bot Token không đúng dạng (ví dụ 123456789:AAxxxxxxxx…)')
 export const checkTelegramChat = (v) => (!v || TG_CHAT.test(String(v).trim()) ? '' : 'Chat ID là một dãy số (có thể có dấu -) hoặc @tenkenh')
 
+// Nhiều người nhận: Chat ID cách nhau bằng dấu phẩy (chấp nhận cả chấm phẩy, khoảng trắng, xuống dòng).
+// Bỏ trùng (không phân biệt hoa thường, vì @tenkenh không phân biệt) và bỏ ô trống. lib/notify.js có bản tách y hệt (chatIdsOf).
+export const MAX_TG_CHATS = 10
+export function parseChatIds(v) {
+    const seen = new Map()
+    for (const raw of String(v ?? '').split(/[\s,;]+/)) {
+        const id = raw.trim()
+        if (id && !seen.has(id.toLowerCase())) seen.set(id.toLowerCase(), id)
+    }
+    return [...seen.values()]
+}
+export function checkTelegramChats(v) {
+    const ids = parseChatIds(v)
+    const bad = ids.find((id) => !TG_CHAT.test(id))
+    if (bad) return `“${bad.length > 24 ? bad.slice(0, 24) + '…' : bad}” không phải Chat ID hợp lệ (dãy số, có thể có dấu -, hoặc @tenkenh)`
+    if (ids.length > MAX_TG_CHATS) return `Tối đa ${MAX_TG_CHATS} Chat ID (đang nhập ${ids.length})`
+    return ''
+}
+
 // patch: dữ liệu client gửi lên; current: cài đặt hiện tại (server: đầy đủ; giao diện: truyền has_accessToken → accessToken dạng cờ)
 export function validateSettings(patch = {}, current = {}) {
     const e = {}, v = {}
@@ -360,8 +379,8 @@ export function validateSettings(patch = {}, current = {}) {
     }
     if (has('telegramChatId')) {
         const c = String(patch.telegramChatId ?? '').trim();
-        const m = checkTelegramChat(c);
-        if (m) e.telegramChatId = m; else v.telegramChatId = c
+        const m = checkTelegramChats(c);
+        if (m) e.telegramChatId = m; else v.telegramChatId = parseChatIds(c).join(', ') // lưu dạng chuẩn: "id1, id2"
     }
     if (has('telegramToken')) {
         const t = String(patch.telegramToken ?? '').trim();

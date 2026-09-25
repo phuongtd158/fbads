@@ -308,10 +308,10 @@ test('lịch theo điều kiện: bỏ qua mục đã loại trừ, vẫn áp d�
 
 test('báo cáo: nhiều tài khoản quảng cáo → mỗi tài khoản một phần', async () => {
   const notify = require('../lib/notify')
-  const orig = notify.telegram
+  const orig = notify.send
   let sent = ''
-  notify.telegram = async (t) => { sent = t; return true }
-  try { await engine.sendReport() } finally { notify.telegram = orig }
+  notify.send = async (t) => { sent = t; return { configured: true, results: [{ id: '111111', ok: true }] } }
+  try { await engine.sendReport() } finally { notify.send = orig }
   assert.ok(sent.includes('Tài khoản mẫu A') && sent.includes('Tài khoản mẫu B'))
   assert.equal((sent.match(/Đang chạy:/g) || []).length, 2)
 })
