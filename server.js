@@ -20,6 +20,7 @@ const notify = require('./lib/notify');
 const auth = require('./lib/auth');
 
 let V = null; // shared/validate.mjs (ES module, nạp bằng import() lúc khởi động)
+let D = null; // shared/dates.mjs: khoảng ngày cho số liệu ở Tổng quan
 const bad = (res, r) => send(res, 400, { error: r.first || r.error, errors: r.errors || {} });
 
 const PORT = process.env.PORT || 3000;
@@ -150,6 +151,19 @@ async function api(req, res, url) {
   if (m === 'GET' && p === '/api/state') return send(res, 200, { settings: publicSettings(), schedules: d.schedules, rules: d.rules, storage: store.status() });
   if (m === 'GET' && p === '/api/storage') return send(res, 200, store.status());
   if (m === 'GET' && p === '/api/objects') return send(res, 200, { items: await fb.listObjects(url.searchParams.get('refresh') === '1'), ...fb.objectsMeta() });
+  // Số liệu theo khoảng ngày cho Tổng quan: ?range=last_7d hoặc ?since=2026-09-01&until=2026-09-20 (trống = hôm nay).
+  // Không đụng tới danh sách camp/engine: chỉ trả { [id]: metrics }, giao diện ghép vào bảng.
+  if (m === 'GET' && p === '/api/insights') {
+    const today = D.todayIn(d.settings.timezone);
+    const parsed = D.parseRange(Object.fromEntries(url.searchParams), today);
+    if (!parsed.ok) return send(res, 400, { error: parsed.error });
+    const r = D.resolveRange(parsed.spec, today);
+    const q = { key: parsed.key, fbParams: D.fbParams(parsed.spec, today), days: r.days };
+    const got = await fb.rangeData(q, url.searchParams.get('refresh') === '1');
+    const meta = fb.objectsMeta();
+    return send(res, 200, { range: parsed.spec, key: parsed.key, since: r.since, until: r.until, days: r.days, at: got.at || null, stale: got.stale,
+      blockedUntil: meta.blockedUntil, usage: meta.usage, accountErrors: meta.accountErrors, metrics: got.data });
+  }
   if (m === 'GET' && p === '/api/logs') return send(res, 200, d.logs.slice(0, 300));
 
   if ((mt = p.match(/^\/api\/objects\/([^/]+)\/status$/)) && m === 'POST') {
@@ -304,7 +318,7 @@ async function shutdown(sig) {
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
 
 (async () => {
-  try { V = await import('./shared/validate.mjs'); } catch (e) { return fatal(`Không nạp được shared/validate.mjs: ${e.message}`); }
+  try { V = await import('./shared/validate.mjs'); D = await import('./shared/dates.mjs'); } catch (e) { return fatal(`Không nạp được module dùng chung (shared/): ${e.message}`); }
   // Nạp dữ liệu TRƯỚC khi kiểm tra mật khẩu: mật khẩu đặt trong Cài đặt nằm trong dữ liệu (nhất là khi lưu ở Upstash)
   try { await store.init(); } catch (e) { return fatal(e.message); }
   // Mặc định chỉ lắng nghe trên máy bạn (127.0.0.1). Mở ra mạng mà không có mật khẩu thì từ chối chạy.

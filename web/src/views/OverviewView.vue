@@ -1,13 +1,17 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, X, FilterX } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
+import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt, fmtDec, fmtCompact } from '../lib/format'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
+import { totals } from '../lib/metrics'
+import { isToday } from '../lib/dates'
+import { colOf, cellValue, cellText, money } from '../lib/overviewColumns'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import Badge from '../components/Badge.vue'
@@ -21,144 +25,187 @@ import InfoTip from '../components/InfoTip.vue'
 import Callout from '../components/Callout.vue'
 import BulkBudget from '../components/BulkBudget.vue'
 import OnboardingCard from '../components/OnboardingCard.vue'
+import DateRangePicker from '../components/DateRangePicker.vue'
+import AccountFilter from '../components/AccountFilter.vue'
+import ColumnsMenu from '../components/ColumnsMenu.vue'
+import Popover from '../components/Popover.vue'
 import { allDone, hidden as onboardHidden } from '../stores/onboarding'
 
 const route = useRoute()
 const q = ref(String(route.query.q || ''))
-const filter = ref('all')
-const level = ref('campaign')
-// Nhiều tài khoản quảng cáo: lọc theo tài khoản ('' = tất cả); trình duyệt nhớ lựa chọn
-const ACC_KEY = 'fbads.overviewAccount'
-const account = ref((() => { try { return localStorage.getItem(ACC_KEY) || '' } catch { return '' } })())
-watch(account, (v) => { try { localStorage.setItem(ACC_KEY, v) } catch { /* chế độ riêng tư */ } })
 const busy = reactive({})
 const bulkText = ref('')
 const bulkBudget = ref(false) // hộp thoại đổi ngân sách hàng loạt
+const actOpen = ref(false)
 const searchEl = ref(null)
 const showOnboarding = computed(() => !onboardHidden.value && !allDone.value)
+const today = computed(() => rangeInfo.value.today) // đang xem số liệu hôm nay (khác: khoảng ngày khác)
 
 watch(() => route.query.q, (v) => { if (v !== undefined) q.value = String(v) })
 // nếu dữ liệu bị xoá khi đang xem (đổi chế độ, đổi tài khoản…) thì tự tải lại
 watch(() => state.objsLoaded, (loaded) => { if (!loaded && !state.objsLoading) loadObjs() })
+// mỗi lần danh sách camp được làm mới (tự động mỗi 60 giây hoặc bấm Làm mới) thì cập nhật cả số liệu khoảng ngày (server dùng lại bản mới tải nên nhẹ)
+watch(() => state.objsAt, () => { if (!isToday(ov.spec)) loadRange({ bg: true }) })
 onMounted(() => {
   // đã có dữ liệu → làm mới ngầm (không nháy); chưa có → tải bình thường
   state.objsLoaded ? loadObjs(false, true) : loadObjs()
+  loadRange({ bg: rangeReady.value })
   window.addEventListener('keydown', slash)
 })
 const slash = (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); searchEl.value && searchEl.value.focus() } }
 onBeforeUnmount(() => window.removeEventListener('keydown', slash))
+const refreshAll = () => Promise.all([loadObjs(true), loadRange({ force: true })])
 
 const staleWait = computed(() => { const t = state.objsMeta && state.objsMeta.blockedUntil; return t ? Math.max(1, Math.ceil((t - Date.now()) / 60000)) : 0 })
+const rangeStale = computed(() => !today.value && !!(ov.data && ov.data.stale))
+const stalePanel = computed(() => (state.objsMeta && state.objsMeta.stale && state.objsAt) || rangeStale.value)
+
+// ----- Tài khoản -----
 const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
 const multiAcc = computed(() => accounts.value.length > 1)
 const accErrors = computed(() => (state.objsMeta && state.objsMeta.accountErrors) || [])
-// tài khoản đã chọn không còn trong danh sách (đổi kết nối) → về "tất cả"
-watch(accounts, (list) => { if (account.value && list.length && !list.some((a) => a.id === account.value)) account.value = '' })
-const inAcc = (o) => !account.value || o.accountId === account.value
-const showAccCol = computed(() => multiAcc.value && !account.value) // đang xem 1 tài khoản thì cột này chỉ lặp lại
-const accCount = computed(() => countByAccount(state.objs.filter((o) => o.level === level.value)))
 const errIds = computed(() => new Set(accErrors.value.map((x) => x.id)))
-const accountOptions = computed(() => [
-  { id: '', name: `Tất cả tài khoản (${accounts.value.length})` },
-  ...accounts.value.map((a) => ({ id: a.id, name: `${a.name}${errIds.value.has(a.id) ? ' — không tải được' : ` (${accCount.value[a.id] || 0})`}` })),
-])
-const camps = computed(() => state.objs.filter((o) => o.level === 'campaign' && inAcc(o)))
-// Khác loại tiền (vd VND + USD) thì không cộng chung được: tổng chi tiêu/ngân sách tính riêng từng loại tiền,
+// tài khoản đã chọn mà không còn trong danh sách (đổi kết nối) → bỏ khỏi bộ lọc
+watch(accounts, (list) => {
+  if (!list.length || !ov.accounts.length) return
+  const ok = ov.accounts.filter((id) => list.some((a) => a.id === id))
+  if (ok.length !== ov.accounts.length) ov.accounts = ok
+})
+const inAcc = (o) => !ov.accounts.length || ov.accounts.includes(o.accountId)
+const singleAcc = computed(() => (ov.accounts.length === 1 ? ov.accounts[0] : ''))
+const showAccCol = computed(() => multiAcc.value && ov.accounts.length !== 1) // đang xem đúng 1 tài khoản thì cột này chỉ lặp lại
+const accCount = computed(() => countByAccount(state.objs.filter((o) => o.level === ov.level)))
+
+// ----- Số liệu (theo khoảng ngày đang chọn) -----
+// Khác loại tiền (vd VND + USD) thì không cộng chung được: tổng tính riêng từng loại tiền,
 // CPA và ROAS chỉ hiện khi đang xem một loại tiền (chọn 1 tài khoản ở ô lọc)
 // loại tiền khi chưa có camp nào để lấy (tài khoản đang chọn, không thì loại tiền đầu tiên của kết nối; conn.currency có thể là "VND, USD")
 const fallbackCur = computed(() => {
-  const a = accounts.value.find((x) => x.id === account.value)
+  const a = accounts.value.find((x) => x.id === singleAcc.value)
   return (a && a.currency) || String((state.conn && state.conn.currency) || 'VND').split(',')[0].trim() || 'VND'
 })
-const curGroups = computed(() => groupByCurrency(camps.value, fallbackCur.value))
-const mixed = computed(() => curGroups.value.length > 1)
-const currency = computed(() => (curGroups.value[0] && curGroups.value[0].currency) || fallbackCur.value)
-const money = (n, cur) => (decimalsOf(cur) ? fmtDec(n, 2) : fmt(n))
+const cur = (o) => o.currency || fallbackCur.value
 const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
+watch(hasAdsets, (v) => { if (!v && ov.level === 'adset') ov.level = 'campaign' })
 // Phân phối như Ads Manager (xét cả nhóm QC bên trong); "đang chạy" = thực sự đang phân phối
 const deliv = computed(() => deliveryMap(state.objs))
 const deliveryOf = (o) => DELIVERY[deliv.value[o.id]] || DELIVERY.off
 const isRunning = (o) => !!deliveryOf(o).running
-const running = computed(() => camps.value.filter(isRunning))
-const totalSpend = computed(() => camps.value.reduce((t, o) => t + o.metrics.spend, 0))
-const totalResults = computed(() => camps.value.reduce((t, o) => t + o.metrics.results, 0))
-const activeBudget = computed(() => running.value.reduce((t, o) => t + (o.dailyBudget || 0), 0))
-const budgetPct = computed(() => (activeBudget.value ? Math.min(100, (totalSpend.value / activeBudget.value) * 100) : 0))
+
+const campItems = computed(() => state.objs.filter((o) => o.level === 'campaign' && inAcc(o)).map(itemOf))
+const running = computed(() => campItems.value.filter((i) => isRunning(i.o)))
+const curGroups = computed(() => groupByCurrency(campItems.value, fallbackCur.value))
+const mixed = computed(() => curGroups.value.length > 1)
+const currency = computed(() => (curGroups.value[0] && curGroups.value[0].currency) || fallbackCur.value)
+const T = computed(() => totals(campItems.value.map((i) => ({ m: i.m, budget: null }))))
+const activeBudget = computed(() => running.value.reduce((t, i) => t + (i.o.dailyBudget || 0), 0))
+const budgetPct = computed(() => (activeBudget.value ? Math.min(100, (T.value.spend / activeBudget.value) * 100) : 0))
 // Tổng chi tiêu / ngân sách theo từng loại tiền (chỉ dùng khi xem nhiều loại tiền cùng lúc)
 const byCur = computed(() => curGroups.value.map((g) => ({
   currency: g.currency,
-  spend: g.items.reduce((t, o) => t + o.metrics.spend, 0),
-  budget: g.items.filter(isRunning).reduce((t, o) => t + (o.dailyBudget || 0), 0),
+  spend: g.items.reduce((t, i) => t + i.m.spend, 0),
+  budget: g.items.filter((i) => isRunning(i.o)).reduce((t, i) => t + (i.o.dailyBudget || 0), 0),
 })))
-const avgCpa = computed(() => (!mixed.value && totalResults.value ? totalSpend.value / totalResults.value : null))
-const avgRoas = computed(() => {
-  if (mixed.value) return null
-  const w = camps.value.filter((o) => o.metrics.roas != null && o.metrics.spend > 0)
-  const s = w.reduce((t, o) => t + o.metrics.spend, 0)
-  return s ? w.reduce((t, o) => t + o.metrics.roas * o.metrics.spend, 0) / s : null
-})
-const top = computed(() => (mixed.value ? [] : [...camps.value].filter((o) => o.metrics.spend > 0).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3)))
-const topMax = computed(() => (top.value[0] ? top.value[0].metrics.spend : 1))
+const avgCpa = computed(() => (mixed.value ? null : T.value.cpa))
+const avgRoas = computed(() => (mixed.value ? null : T.value.roas))
+const avgPerDay = computed(() => (!today.value && !mixed.value && rangeInfo.value.days && T.value.spend ? T.value.spend / rangeInfo.value.days : null))
+const top = computed(() => (mixed.value ? [] : [...campItems.value].filter((i) => i.m.spend > 0).sort((a, b) => b.m.spend - a.m.spend).slice(0, 3)))
+const topMax = computed(() => (top.value[0] ? top.value[0].m.spend : 1))
+const kpiLoading = computed(() => !state.objsLoaded || !rangeReady.value)
 
-const inLevel = computed(() => state.objs.filter((o) => o.level === level.value && inAcc(o)))
-// ----- Sắp xếp theo cột (bấm tiêu đề cột: lần đầu theo chiều mặc định, bấm lại thì đảo chiều) -----
+// ----- Danh sách -----
+const cols = computed(() => ov.columns.map(colOf))
+const inLevel = computed(() => state.objs.filter((o) => o.level === ov.level && inAcc(o)).map(itemOf))
+
+// Sắp xếp theo cột (bấm tiêu đề cột: lần đầu theo chiều mặc định, bấm lại thì đảo chiều).
 // Giá trị trống (CPA khi chưa có kết quả, ngân sách CBO…) luôn nằm cuối, dù tăng hay giảm.
-const SORTS = {
-  name: { label: 'Tên', get: (o) => o.name, text: true, first: 'asc' },
-  account: { label: 'Tài khoản', get: (o) => accountLabel(o), text: true, first: 'asc' },
-  delivery: { label: 'Phân phối', get: (o) => deliveryOf(o).rank, first: 'asc' },
-  budget: { label: 'Ngân sách/ngày', get: (o) => o.dailyBudget },
-  spend: { label: 'Chi tiêu', get: (o) => o.metrics.spend },
-  results: { label: 'Kết quả', get: (o) => o.metrics.results },
-  cpa: { label: 'CPA', get: (o) => o.metrics.cpa, first: 'asc' },
-  roas: { label: 'ROAS', get: (o) => o.metrics.roas },
-}
-const SORT_KEY = 'fbads.overviewSort'
-const readSort = () => { try { const v = JSON.parse(localStorage.getItem(SORT_KEY)); return v && SORTS[v.key] && ['asc', 'desc'].includes(v.dir) ? v : null } catch { return null } }
-const sort = reactive(readSort() || { key: '', dir: 'desc' }) // key '' = thứ tự như trên Facebook
-watch(sort, (v) => { try { localStorage.setItem(SORT_KEY, JSON.stringify(v)) } catch { /* chế độ riêng tư */ } })
+const SORT_META = { name: { label: 'Tên', text: true, first: 'asc' }, account: { label: 'Tài khoản', text: true, first: 'asc' }, delivery: { label: 'Phân phối', first: 'asc' } }
+const sortMeta = (k) => SORT_META[k] || { label: colOf(k).label, first: colOf(k).first || 'desc' }
+// cột đang được sắp xếp mà đã bị ẩn đi (hoặc không còn) thì coi như không sắp xếp
+const sortKey = computed(() => { const k = ov.sort.key; return k && (SORT_META[k] || ov.columns.includes(k)) && (k !== 'account' || showAccCol.value) ? k : '' })
+const sortValue = (k, it) => (k === 'name' ? it.o.name : k === 'account' ? accountLabel(it.o) : k === 'delivery' ? deliveryOf(it.o).rank : cellValue(k, it))
 function sortBy(k) {
-  if (sort.key === k) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc'
-  else { sort.key = k; sort.dir = SORTS[k].first || 'desc' }
+  if (sortKey.value === k) ov.sort = { key: k, dir: ov.sort.dir === 'asc' ? 'desc' : 'asc' }
+  else ov.sort = { key: k, dir: sortMeta(k).first }
 }
-const sortIcon = (k) => (sort.key !== k ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown)
-const sortTitle = (k) => `Sắp xếp theo ${SORTS[k].label}${sort.key === k ? (sort.dir === 'asc' ? ' (đang tăng dần, bấm để giảm dần)' : ' (đang giảm dần, bấm để tăng dần)') : ''}`
+const sortIcon = (k) => (sortKey.value !== k ? ArrowUpDown : ov.sort.dir === 'asc' ? ArrowUp : ArrowDown)
+const sortTitle = (k) => `Sắp xếp theo ${sortMeta(k).label}${sortKey.value === k ? (ov.sort.dir === 'asc' ? ' (đang tăng dần, bấm để giảm dần)' : ' (đang giảm dần, bấm để tăng dần)') : ''}`
 const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' })
 function compare(a, b) {
-  const s = SORTS[sort.key], va = s.get(a), vb = s.get(b)
+  const k = sortKey.value, va = sortValue(k, a), vb = sortValue(k, b)
   if (va == null || vb == null) return va == null && vb == null ? 0 : va == null ? 1 : -1
-  const r = s.text ? collator.compare(va, vb) : va - vb
-  return sort.dir === 'asc' ? r : -r
+  const r = SORT_META[k] && SORT_META[k].text ? collator.compare(va, vb) : va - vb
+  return ov.sort.dir === 'asc' ? r : -r
 }
 // Chọn cách sắp xếp trên điện thoại (không có hàng tiêu đề cột)
-const mobileSort = computed({
-  get: () => (sort.key ? `${sort.key}:${sort.dir}` : ''),
-  set: (v) => { const [k, d] = v.split(':'); sort.key = k || ''; sort.dir = d || 'desc' },
+const dirText = (k, d) => (SORT_META[k] && SORT_META[k].text ? (d === 'asc' ? 'A → Z' : 'Z → A') : k === 'delivery' ? (d === 'asc' ? 'đang chạy trước' : 'không chạy trước') : d === 'asc' ? 'thấp → cao' : 'cao → thấp')
+const mobileSortOptions = computed(() => {
+  const out = [['', 'Mặc định (như Facebook)']]
+  for (const k of ['name', ...(showAccCol.value ? ['account'] : []), 'delivery', ...ov.columns]) {
+    const first = sortMeta(k).first, other = first === 'asc' ? 'desc' : 'asc'
+    out.push([`${k}:${first}`, `${sortMeta(k).label}: ${dirText(k, first)}`], [`${k}:${other}`, `${sortMeta(k).label}: ${dirText(k, other)}`])
+  }
+  return out
 })
-const mobileSortOptions = computed(() => [
-  ['', 'Mặc định (như Facebook)'], ['spend:desc', 'Chi tiêu: cao → thấp'], ['spend:asc', 'Chi tiêu: thấp → cao'],
-  ['results:desc', 'Kết quả: nhiều → ít'], ['cpa:asc', 'CPA: thấp → cao'], ['cpa:desc', 'CPA: cao → thấp'],
-  ['roas:desc', 'ROAS: cao → thấp'], ['budget:desc', 'Ngân sách: cao → thấp'], ['delivery:asc', 'Phân phối: đang chạy trước'],
-  ['name:asc', 'Tên: A → Z'], ['name:desc', 'Tên: Z → A'],
-  ...(multiAcc.value && !account.value ? [['account:asc', 'Tài khoản: A → Z'], ['account:desc', 'Tài khoản: Z → A']] : []),
-])
+const mobileSort = computed({
+  get: () => (sortKey.value ? `${sortKey.value}:${ov.sort.dir}` : ''),
+  set: (v) => { const [k, d] = v.split(':'); ov.sort = { key: k || '', dir: d || 'desc' } },
+})
 
 const visible = computed(() => {
   const s = q.value.trim().toLowerCase()
-  const list = inLevel.value.filter((o) => (filter.value === 'all' || (filter.value === 'on') === isRunning(o)) && (!s || o.name.toLowerCase().includes(s)))
-  return sort.key ? list.sort(compare) : list
+  const list = inLevel.value.filter((i) => (ov.status === 'all' || (ov.status === 'on') === isRunning(i.o))
+    && (!s || i.o.name.toLowerCase().includes(s) || (multiAcc.value && accountLabel(i.o).toLowerCase().includes(s))))
+  return sortKey.value ? [...list].sort(compare) : list
 })
-const filterOptions = computed(() => [
+const statusOptions = computed(() => [
   { value: 'all', label: 'Tất cả', count: inLevel.value.length },
-  { value: 'on', label: 'Đang chạy', count: inLevel.value.filter(isRunning).length },
-  { value: 'off', label: 'Không chạy', count: inLevel.value.filter((o) => !isRunning(o)).length },
+  { value: 'on', label: 'Đang chạy', count: inLevel.value.filter((i) => isRunning(i.o)).length },
+  { value: 'off', label: 'Không chạy', count: inLevel.value.filter((i) => !isRunning(i.o)).length },
 ])
-const levelOptions = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm QC' }]
-const footResults = computed(() => visible.value.reduce((t, o) => t + o.metrics.results, 0))
-// Chi tiêu ở chân bảng: nhiều loại tiền thì tách riêng từng loại
-const footSpend = computed(() => groupByCurrency(visible.value, fallbackCur.value).map((g) => ({ currency: g.currency, s: g.items.reduce((t, o) => t + o.metrics.spend, 0) })))
+const levelOptions = computed(() => [
+  { value: 'campaign', label: 'Chiến dịch', count: state.objs.filter((o) => o.level === 'campaign' && inAcc(o)).length },
+  { value: 'adset', label: 'Nhóm QC', count: state.objs.filter((o) => o.level === 'adset' && inAcc(o)).length },
+])
+const levelName = computed(() => (ov.level === 'campaign' ? 'chiến dịch' : 'nhóm QC'))
 
-const roasTone = (o) => (!o.metrics.spend || o.metrics.roas == null ? null : o.metrics.roas >= 2 ? 'success' : o.metrics.roas < 1 ? 'danger' : 'warning')
+// Hàng tổng: cộng số liệu rồi tính lại CPA/ROAS/CTR… từ tổng. Nhiều loại tiền thì cột tiền để trống (không cộng chung được)
+const visCurs = computed(() => groupByCurrency(visible.value, fallbackCur.value))
+const visMixed = computed(() => visCurs.value.length > 1)
+const tot = computed(() => totals(visible.value.map((i) => ({ m: i.m, budget: i.o.dailyBudget }))))
+const totCell = (c) => {
+  if (c.key === 'budget') return tot.value.budgetRows && !visMixed.value ? money(tot.value.budget, currency.value) : '–'
+  if (c.money && visMixed.value) return '–'
+  if (c.key === 'roas') return tot.value.roas == null || visMixed.value ? '–' : fmtDec(tot.value.roas)
+  return cellText(c, tot.value[c.key], visCurs.value[0] ? visCurs.value[0].currency : fallbackCur.value)
+}
+const footSpend = computed(() => visCurs.value.map((g) => ({ currency: g.currency, s: g.items.reduce((t, i) => t + i.m.spend, 0) })))
+const footResults = computed(() => visible.value.reduce((t, i) => t + i.m.results, 0))
+
+const lead = computed(() => 3 + (showAccCol.value ? 1 : 0)) // số cột đầu (công tắc, tên, [tài khoản], phân phối) mà nhãn hàng tổng trải ngang qua
+// Bảng có thể rộng hơn khung (nhiều cột): cuộn ngang, giữ cố định 2 cột đầu, tiêu đề và hàng tổng
+const gridStyle = computed(() => {
+  const acc = showAccCol.value
+  const tracks = ['70px', 'minmax(170px, 2.2fr)', ...(acc ? ['minmax(120px, 1fr)'] : []), 'minmax(108px, .9fr)', ...cols.value.map((c) => `minmax(${c.min}px, 1fr)`)]
+  const minw = 70 + 170 + (acc ? 120 : 0) + 108 + cols.value.reduce((t, c) => t + c.min, 0) + 18 + 6 * (tracks.length - 1)
+  return { '--cols': tracks.join(' '), '--minw': minw + 'px' }
+})
+
+// ----- Bộ lọc đang áp dụng -----
+const STATUS_LABEL = { on: 'Đang chạy', off: 'Không chạy' }
+const chips = computed(() => {
+  const out = []
+  if (ov.accounts.length) {
+    const names = ov.accounts.map((id) => (accounts.value.find((a) => a.id === id) || { name: id }).name)
+    out.push({ k: 'Tài khoản', v: names.length > 2 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', '), clear: () => { ov.accounts = [] } })
+  }
+  if (ov.status !== 'all') out.push({ k: 'Trạng thái', v: STATUS_LABEL[ov.status], clear: () => { ov.status = 'all' } })
+  if (q.value.trim()) out.push({ k: 'Từ khoá', v: q.value.trim(), clear: () => { q.value = '' } })
+  return out
+})
+const clearAll = () => { clearFilters(); q.value = '' }
+
+const roasTone = (m) => (!m.spend || m.roas == null ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
 // Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
 const locked = (o) => ['ARCHIVED', 'DELETED', 'DISAPPROVED'].includes(o.effective)
@@ -173,8 +220,11 @@ async function toggle(o, on) {
   } catch (e) { Object.assign(o, prev); toastError(e) } finally { busy[o.id] = false }
 }
 
+// Bật/tắt hàng loạt: chỉ các mục đang hiển thị sau khi lọc
+const toOn = computed(() => visible.value.filter((i) => i.o.status !== 'ACTIVE').length)
+const toOff = computed(() => visible.value.filter((i) => i.o.status === 'ACTIVE').length)
 async function bulk(on) {
-  const list = visible.value.filter((o) => (o.status === 'ACTIVE') !== on)
+  const list = visible.value.map((i) => i.o).filter((o) => (o.status === 'ACTIVE') !== on)
   if (!list.length) return toast(on ? 'Tất cả đã bật' : 'Tất cả đã tắt')
   const names = list.slice(0, 4).map((o) => o.name).join(', ') + (list.length > 4 ? ` và ${list.length - 4} mục khác` : '')
   if (!await confirm(`${on ? 'Bật' : 'Tắt'} ${list.length} mục?`, names, { ok: on ? 'Bật' : 'Tắt', danger: !on })) return
@@ -191,124 +241,176 @@ async function bulk(on) {
 <template>
   <div>
     <Teleport to="#page-actions" defer>
-      <Btn :icon="RefreshCw" :loading="state.objsLoading" :action="() => loadObjs(true)">Làm mới</Btn>
+      <Btn :icon="RefreshCw" :loading="state.objsLoading || ov.loading" :action="refreshAll">Làm mới</Btn>
     </Teleport>
+
+    <!-- Thanh lọc chung: khoảng ngày và tài khoản áp dụng cho cả thẻ chỉ số lẫn bảng; dính ở đầu trang khi cuộn -->
+    <div class="gbar">
+      <DateRangePicker :model-value="ov.spec" :today="todayISO()" :loading="ov.loading" @update:model-value="setSpec" />
+      <AccountFilter v-if="multiAcc" v-model="ov.accounts" :accounts="accounts" :counts="accCount" :err-ids="errIds" />
+      <span v-if="!today" class="gnote faint">Số liệu <b>{{ rangeInfo.title.toLowerCase() }}</b>: chi tiêu, kết quả, CPA, ROAS… Ngân sách và trạng thái luôn là hiện tại.</span>
+    </div>
 
     <OnboardingCard v-if="showOnboarding" />
 
-    <!-- Bento KPI -->
+    <!-- Bento KPI (theo khoảng ngày và tài khoản đang chọn) -->
     <div class="bento stagger">
       <section class="card hero">
-        <template v-if="!state.objsLoaded"><Skeleton w="120px" /><Skeleton w="220px" h="38px" /><Skeleton w="80%" /></template>
+        <template v-if="kpiLoading"><Skeleton w="120px" /><Skeleton w="220px" h="38px" /><Skeleton w="80%" /></template>
         <template v-else>
           <div class="hero-l">
-            <p class="lbl">Chi tiêu hôm nay</p>
+            <p class="lbl">Chi tiêu {{ today ? 'hôm nay' : '· ' + rangeInfo.title.toLowerCase() }}</p>
             <template v-if="!mixed">
-              <p class="big"><AnimatedNumber :value="totalSpend" :decimals="decimalsOf(currency)" /><small>{{ currency }}</small></p>
-              <p class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${money(activeBudget, currency)}` : 'Chưa có ngân sách cấp camp' }}</p>
+              <p class="big"><AnimatedNumber :value="T.spend" :decimals="decimalsOf(currency)" /><small>{{ currency }}</small></p>
+              <p v-if="today" class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${money(activeBudget, currency)}` : 'Chưa có ngân sách cấp camp' }}</p>
+              <p v-else class="muted sub">{{ rangeInfo.dates }}<template v-if="rangeInfo.days"> · {{ rangeInfo.days }} ngày</template><template v-if="avgPerDay != null"> · TB {{ money(avgPerDay, currency) }}/ngày</template></p>
             </template>
             <template v-else>
-              <p v-for="g in byCur" :key="g.currency" class="big cur"><AnimatedNumber :value="g.spend" :decimals="decimalsOf(g.currency)" /><small>{{ g.currency }}</small><em v-if="g.budget" class="faint">trên ngân sách {{ money(g.budget, g.currency) }}</em></p>
+              <p v-for="g in byCur" :key="g.currency" class="big cur"><AnimatedNumber :value="g.spend" :decimals="decimalsOf(g.currency)" /><small>{{ g.currency }}</small><em v-if="today && g.budget" class="faint">trên ngân sách {{ money(g.budget, g.currency) }}</em></p>
               <p class="muted sub">Các tài khoản dùng {{ byCur.length }} loại tiền khác nhau nên không cộng chung. Chọn 1 tài khoản ở ô lọc để xem CPA và ROAS.</p>
             </template>
             <div v-if="top.length" class="tops">
-              <div v-for="t in top" :key="t.id" class="top"><span class="tn" :title="t.name">{{ t.name }}</span><i class="tbar"><b :style="{ width: (t.metrics.spend / topMax) * 100 + '%' }" /></i><em class="num">{{ fmtCompact(t.metrics.spend) }}</em></div>
+              <div v-for="t in top" :key="t.o.id" class="top"><span class="tn" :title="t.o.name">{{ t.o.name }}</span><i class="tbar"><b :style="{ width: (t.m.spend / topMax) * 100 + '%' }" /></i><em class="num">{{ fmtCompact(t.m.spend) }}</em></div>
             </div>
           </div>
-          <ProgressRing v-if="!mixed" :value="budgetPct" :size="128" :stroke="12"><div class="rc"><b class="num">{{ Math.round(budgetPct) }}%</b><small class="faint">ngân sách</small></div></ProgressRing>
+          <ProgressRing v-if="!mixed && today" :value="budgetPct" :size="128" :stroke="12"><div class="rc"><b class="num">{{ Math.round(budgetPct) }}%</b><small class="faint">ngân sách</small></div></ProgressRing>
         </template>
       </section>
 
       <section class="card kpi"><p class="lbl">Đang chạy</p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
-        <template v-else><p class="val"><AnimatedNumber :value="running.length" /><small> / {{ camps.length }}</small></p><p class="sub faint">{{ camps.length - running.length ? `${camps.length - running.length} camp đang dừng` : 'Tất cả đang chạy' }}</p></template>
+        <template v-else><p class="val"><AnimatedNumber :value="running.length" /><small> / {{ campItems.length }}</small></p><p class="sub faint">{{ campItems.length - running.length ? `${campItems.length - running.length} camp đang dừng` : 'Tất cả đang chạy' }}</p></template>
       </section>
       <section class="card kpi"><p class="lbl">Kết quả <InfoTip tip="results" /></p>
-        <Skeleton v-if="!state.objsLoaded" h="30px" w="90px" />
-        <template v-else><p class="val"><AnimatedNumber :value="totalResults" /></p><p class="sub faint">theo “{{ state.settings.resultAction || 'purchase' }}”</p></template>
+        <Skeleton v-if="kpiLoading" h="30px" w="90px" />
+        <template v-else><p class="val"><AnimatedNumber :value="T.results" /></p><p class="sub faint">theo “{{ state.settings.resultAction || 'purchase' }}” · {{ today ? 'hôm nay' : rangeInfo.title.toLowerCase() }}</p></template>
       </section>
       <section class="card kpi"><p class="lbl">CPA trung bình <InfoTip tip="cpa" /></p>
-        <Skeleton v-if="!state.objsLoaded" h="30px" w="110px" />
-        <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" /></template><template v-else>–</template></p><p class="sub faint">{{ mixed ? 'Khác loại tiền, chọn 1 tài khoản' : avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
+        <Skeleton v-if="kpiLoading" h="30px" w="110px" />
+        <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" :decimals="decimalsOf(currency)" /></template><template v-else>–</template></p><p class="sub faint">{{ mixed ? 'Khác loại tiền, chọn 1 tài khoản' : avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
       </section>
       <section class="card kpi"><p class="lbl">ROAS trung bình <InfoTip tip="roas" /></p>
-        <Skeleton v-if="!state.objsLoaded" h="30px" w="80px" />
+        <Skeleton v-if="kpiLoading" h="30px" w="80px" />
         <template v-else><p class="val" :class="avgRoas != null && (avgRoas >= 2 ? 'ok' : avgRoas < 1 ? 'bad' : 'warn')">{{ avgRoas != null ? fmtDec(avgRoas) : '–' }}</p><p class="sub faint">{{ mixed ? 'Khác loại tiền, chọn 1 tài khoản' : 'Doanh thu chia chi tiêu' }}</p></template>
       </section>
     </div>
 
     <!-- Bảng chiến dịch -->
     <section class="card panel">
-      <div class="tb">
-        <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" placeholder="Tìm chiến dịch…" /><kbd>/</kbd></div>
-        <Segmented v-model="filter" :options="filterOptions" size="sm" />
-        <select v-if="multiAcc" v-model="account" class="input accsel" aria-label="Tài khoản quảng cáo"><option v-for="a in accountOptions" :key="a.id" :value="a.id">{{ a.name }}</option></select>
-        <Segmented v-if="hasAdsets" v-model="level" :options="levelOptions" size="sm" />
+      <!-- Hàng 1: tìm kiếm, cột, hành động -->
+      <div class="fbar">
+        <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" :placeholder="`Tìm ${levelName}${multiAcc ? ' hoặc tài khoản' : ''}…`" aria-label="Tìm kiếm" /><kbd>/</kbd></div>
+        <span class="sp" />
+        <ColumnsMenu v-model="ov.columns" />
+        <Popover v-model="actOpen" align="right" width="320px" label="Hành động hàng loạt">
+          <template #trigger="{ toggle: tg }">
+            <button type="button" class="acb" :class="{ on: actOpen }" :disabled="!state.objsLoaded" aria-haspopup="menu" :aria-expanded="actOpen" @click="tg">
+              <Zap :size="16" /><span class="lb">{{ bulkText || 'Hành động' }}</span><ChevronDown :size="15" />
+            </button>
+          </template>
+          <template #default="{ close }">
+            <div class="menu" role="menu">
+              <button type="button" class="mi" role="menuitem" @click="close(); bulkBudget = true"><Wallet :size="18" /><span><b>Đổi ngân sách hàng loạt</b><small>Lọc theo điều kiện rồi đổi nhiều mục một lúc</small></span></button>
+              <button type="button" class="mi" role="menuitem" :disabled="!toOn" @click="close(); bulk(true)"><Power :size="18" /><span><b>Bật {{ toOn }} mục đang hiển thị</b><small>Chỉ các mục đang tắt trong danh sách đã lọc</small></span></button>
+              <button type="button" class="mi danger" role="menuitem" :disabled="!toOff" @click="close(); bulk(false)"><Power :size="18" /><span><b>Tắt {{ toOff }} mục đang hiển thị</b><small>Chỉ các mục đang bật trong danh sách đã lọc</small></span></button>
+            </div>
+          </template>
+        </Popover>
+      </div>
+
+      <!-- Hàng 2: cấp (chiến dịch / nhóm QC), trạng thái -->
+      <div class="frow">
+        <Segmented v-if="hasAdsets" v-model="ov.level" :options="levelOptions" size="sm" />
+        <Segmented v-model="ov.status" :options="statusOptions" size="sm" />
+        <span class="sp" />
         <select v-model="mobileSort" class="input msort" aria-label="Sắp xếp">
           <option v-for="[v, l] in mobileSortOptions" :key="v" :value="v">{{ l }}</option>
         </select>
-        <span class="sp" />
-        <Btn size="sm" :icon="Wallet" :disabled="!state.objsLoaded" @click="bulkBudget = true">Đổi ngân sách hàng loạt</Btn>
-        <Btn size="sm" :icon="Power" :action="() => bulk(true)">{{ bulkText.startsWith('Đang bật') ? bulkText : 'Bật tất cả' }}</Btn>
-        <Btn size="sm" variant="danger" :icon="Power" :action="() => bulk(false)">{{ bulkText.startsWith('Đang tắt') ? bulkText : 'Tắt tất cả' }}</Btn>
       </div>
 
+      <!-- Bộ lọc đang áp dụng -->
+      <div v-if="chips.length" class="chips" aria-label="Bộ lọc đang áp dụng">
+        <span v-for="c in chips" :key="c.k" class="chip"><small>{{ c.k }}</small><b :title="c.v">{{ c.v }}</b><button type="button" :aria-label="'Bỏ lọc ' + c.k" @click="c.clear()"><X :size="13" /></button></span>
+        <button type="button" class="clr" @click="clearAll"><FilterX :size="14" />Xoá bộ lọc</button>
+        <span class="cnt faint" aria-live="polite">Hiển thị <b class="num">{{ visible.length }}</b> / {{ inLevel.length }} {{ levelName }}</span>
+      </div>
+
+      <Callout v-if="ov.err && !today" tone="danger" class="stale">
+        <b>Không tải được số liệu “{{ rangeInfo.title }}”:</b> {{ ov.err }}
+        <Btn size="sm" :action="() => loadRange({ force: true })">Thử lại</Btn>
+        <Btn size="sm" variant="ghost" @click="setSpec({ preset: 'today' })">Về hôm nay</Btn>
+      </Callout>
       <Callout v-if="accErrors.length" tone="danger" class="stale">
         <b>Không tải được {{ accErrors.length }} tài khoản:</b>
         <template v-for="(x, i) in accErrors" :key="x.id">{{ i ? '; ' : ' ' }}{{ x.name }} ({{ x.error }})</template>.
         Các tài khoản khác vẫn hiện bình thường. Kiểm tra quyền của token với tài khoản này ở Cài đặt → Kết nối Facebook.
       </Callout>
-      <Callout v-if="state.objsMeta && state.objsMeta.stale && state.objsAt" class="stale">
-        <b>Facebook đang giới hạn số lần gọi</b>, nên đây là số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}, chưa phải số mới nhất.
+      <Callout v-if="stalePanel" class="stale">
+        <b>Facebook đang giới hạn số lần gọi</b>, nên đây là số liệu lúc {{ (rangeStale && ov.data.at ? new Date(ov.data.at) : state.objsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}, chưa phải số mới nhất.
         Tool tự tải lại{{ staleWait ? ` sau khoảng ${staleWait} phút` : ' khi được phép' }}, không cần bấm Làm mới. Lịch và rule vẫn chạy theo giờ; nếu Facebook từ chối thao tác, lỗi sẽ ghi ở Nhật ký.
       </Callout>
+
       <div v-if="!state.objsLoaded" class="skel"><div v-for="i in 5" :key="i"><Skeleton h="44px" r="12px" /></div></div>
       <EmptyState v-else-if="state.objsErr && !state.objs.length" :icon="PlugZap" tone="danger" title="Chưa tải được dữ liệu" :text="state.objsErr">
         <RouterLink to="/settings/connection"><Btn variant="primary">Kiểm tra kết nối</Btn></RouterLink>
       </EmptyState>
-      <EmptyState v-else-if="!visible.length" :icon="q ? SearchX : Megaphone" :title="q ? 'Không có kết quả phù hợp' : 'Chưa có chiến dịch nào'" :text="q ? 'Thử đổi từ khoá hoặc bộ lọc.' : 'Khi tài khoản có chiến dịch, chúng sẽ hiện ở đây.'" />
+      <EmptyState v-else-if="!visible.length" :icon="chips.length ? SearchX : Megaphone" :title="chips.length ? 'Không có kết quả phù hợp' : 'Chưa có chiến dịch nào'" :text="chips.length ? 'Thử đổi từ khoá hoặc nới bộ lọc.' : 'Khi tài khoản có chiến dịch, chúng sẽ hiện ở đây.'">
+        <Btn v-if="chips.length" variant="primary" :icon="FilterX" @click="clearAll">Xoá bộ lọc</Btn>
+      </EmptyState>
 
-      <div v-else class="table" :class="{ hasacc: showAccCol }">
-        <div class="hd row">
-          <span />
-          <span><button type="button" class="sh" :class="{ on: sort.key === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button></span>
-          <span v-if="showAccCol" class="h-ac"><button type="button" class="sh" :class="{ on: sort.key === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button></span>
-          <span><button type="button" class="sh" :class="{ on: sort.key === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button></span>
-          <div class="metrics">
-            <span v-for="k in ['budget', 'spend', 'results', 'cpa', 'roas']" :key="k" class="r">
-              <button type="button" class="sh" :class="{ on: sort.key === k }" :title="sortTitle(k)" @click="sortBy(k)">{{ SORTS[k].label }}<component :is="sortIcon(k)" :size="13" /></button>
-              <InfoTip v-if="k === 'budget'" tip="budget" />
-            </span>
-          </div>
-        </div>
-        <TransitionGroup name="row" tag="div">
-          <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
-            <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
-            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ accountLabel(o) }}</small><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
-            <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + o.accountId"><b>{{ accountLabel(o) }}</b><small v-if="o.currency" class="faint">{{ o.currency }}</small></div>
-            <div class="c-dl"><span class="dl" :class="deliveryOf(o).tone" :title="deliveryOf(o).label"><i />{{ deliveryOf(o).label }}</span></div>
+      <div v-else class="tscroll" :class="{ dim: ov.loading && !today }">
+        <div class="table" :class="{ hasacc: showAccCol }" :style="gridStyle">
+          <div class="hd row">
+            <span class="c-sw" />
+            <span class="c-nm"><button type="button" class="sh" :class="{ on: sortKey === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ ov.level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button></span>
+            <span v-if="showAccCol"><button type="button" class="sh" :class="{ on: sortKey === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button></span>
+            <span><button type="button" class="sh" :class="{ on: sortKey === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button></span>
             <div class="metrics">
-              <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
-              <div class="m r"><span class="ml">Chi tiêu</span><span class="num sp">{{ fmt(o.metrics.spend) }}</span>
-                <i v-if="o.dailyBudget" class="mini"><b :style="{ width: Math.min(100, (o.metrics.spend / o.dailyBudget) * 100) + '%' }" /></i></div>
-              <div class="m r"><span class="ml">Kết quả</span><span class="num">{{ o.metrics.results }}</span></div>
-              <div class="m r"><span class="ml">CPA</span><span class="num">{{ fmt(o.metrics.cpa) }}</span></div>
-              <div class="m r"><span class="ml">ROAS</span><Badge v-if="roasTone(o)" :tone="roasTone(o)" class="num">{{ fmtDec(o.metrics.roas) }}</Badge><span v-else class="faint">–</span></div>
+              <span v-for="c in cols" :key="c.key" class="r">
+                <button type="button" class="sh" :class="{ on: sortKey === c.key }" :title="sortTitle(c.key)" @click="sortBy(c.key)">{{ c.short || c.label }}<component :is="sortIcon(c.key)" :size="13" /></button>
+                <InfoTip v-if="c.tip" :tip="c.tip" />
+              </span>
             </div>
           </div>
-        </TransitionGroup>
+
+          <TransitionGroup name="row" tag="div">
+            <div v-for="it in visible" :key="it.o.id" class="row item" :class="{ off: it.o.status !== 'ACTIVE' }">
+              <div class="c-sw"><Switch :model-value="it.o.status === 'ACTIVE'" :disabled="locked(it.o)" :title="locked(it.o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[it.o.id]" :label="'Bật/tắt ' + it.o.name" @update:model-value="(v) => toggle(it.o, v)" /></div>
+              <div class="c-nm"><b :title="it.o.name">{{ it.o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+              <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + it.o.accountId"><b>{{ accountLabel(it.o) }}</b><small v-if="it.o.currency" class="faint">{{ it.o.currency }}</small></div>
+              <div class="c-dl"><span class="dl" :class="deliveryOf(it.o).tone" :title="deliveryOf(it.o).label"><i />{{ deliveryOf(it.o).label }}</span></div>
+              <div class="metrics">
+                <div v-for="c in cols" :key="c.key" class="m r">
+                  <span class="ml">{{ c.label }}</span>
+                  <BudgetCell v-if="c.key === 'budget'" :o="it.o" />
+                  <template v-else-if="c.key === 'spend'">
+                    <span class="num sp">{{ money(it.m.spend, cur(it.o)) }}</span>
+                    <i v-if="today && it.o.dailyBudget" class="mini"><b :style="{ width: Math.min(100, (it.m.spend / it.o.dailyBudget) * 100) + '%' }" /></i>
+                  </template>
+                  <template v-else-if="c.key === 'roas'"><Badge v-if="roasTone(it.m)" :tone="roasTone(it.m)" class="num">{{ fmtDec(it.m.roas) }}</Badge><span v-else class="faint">–</span></template>
+                  <span v-else class="num" :class="{ faint: cellValue(c.key, it) == null }">{{ cellText(c, cellValue(c.key, it), cur(it.o)) }}</span>
+                </div>
+              </div>
+            </div>
+          </TransitionGroup>
+
+          <div class="tot row">
+            <span class="t-l" :style="{ gridColumn: '1 / span ' + lead }"><b>Tổng</b> · {{ visible.length }} {{ levelName }}<small v-if="visMixed" class="faint"> · khác loại tiền</small></span>
+            <div class="metrics"><span v-for="c in cols" :key="c.key" class="m r"><span class="ml">{{ c.label }}</span><b class="num">{{ totCell(c) }}</b></span></div>
+          </div>
+        </div>
       </div>
 
       <div v-if="state.objsLoaded && visible.length" class="foot faint">
-        <span><b class="num">{{ visible.length }}</b> mục</span>
-        <span>Chi tiêu <template v-for="(g, i) in footSpend" :key="g.currency"><template v-if="i"> + </template><b class="num">{{ money(g.s, g.currency) }}</b><template v-if="footSpend.length > 1"> {{ g.currency }}</template></template></span>
-        <span>Kết quả <b class="num">{{ fmt(footResults) }}</b></span>
+        <span class="cnt"><b class="num">{{ visible.length }}</b> mục</span>
+        <span class="mfoot">Chi tiêu <template v-for="(g, i) in footSpend" :key="g.currency"><template v-if="i"> + </template><b class="num">{{ money(g.s, g.currency) }}</b><template v-if="footSpend.length > 1"> {{ g.currency }}</template></template></span>
+        <span class="mfoot">Kết quả <b class="num">{{ fmt(footResults) }}</b></span>
         <span v-if="state.objsMeta && state.objsMeta.usage" class="right" :title="`Mức dùng lượt gọi Facebook API (${state.objsMeta.usage.tier || 'không rõ hạng'}). Tới 100% thì Facebook tạm chặn; tool tự giãn thời gian làm mới khi vượt 60%.`">
           API Facebook <b class="num" :class="{ warnc: state.objsMeta.usage.pct >= 60 }">{{ state.objsMeta.usage.pct }}%</b></span>
-        <span v-if="state.objsAt" :class="{ right: !(state.objsMeta && state.objsMeta.usage) }">Số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</span>
+        <span v-if="state.objsAt" :class="{ right: !(state.objsMeta && state.objsMeta.usage) }">Số liệu lúc {{ (rangeStale || (!today && ov.data && ov.data.at) ? new Date(ov.data.at) : state.objsAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</span>
       </div>
     </section>
-    <BulkBudget v-model="bulkBudget" :level="level" :account="account" />
+    <BulkBudget v-model="bulkBudget" :level="ov.level" :account="singleAcc" />
   </div>
 </template>
 
@@ -320,6 +422,8 @@ async function bulk(on) {
 .lbl { font-size: 13.5px; font-weight: 600; color: var(--text-2); }
 .big { font-size: 42px; font-weight: 750; letter-spacing: -.04em; line-height: 1.1; }
 .big small { font-size: 15px; font-weight: 600; color: var(--text-3); margin-left: 8px; letter-spacing: 0; }
+.big.cur { font-size: 30px; display: flex; align-items: baseline; flex-wrap: wrap; }
+.big.cur em { font-style: normal; font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 12px; }
 .sub { font-size: 13.5px; }
 .rc { display: flex; flex-direction: column; line-height: 1.1; } .rc b { font-size: 26px; letter-spacing: -.03em; } .rc small { font-size: 12px; margin-top: 3px; }
 .tops { margin-top: 16px; display: grid; gap: 9px; }
@@ -335,77 +439,124 @@ async function bulk(on) {
 .val.ok { color: var(--success); } .val.bad { color: var(--danger); } .val.warn { color: var(--warning); }
 .kpi .sub { font-size: 13px; }
 
-.panel { overflow: hidden; }
-.tb { display: flex; align-items: center; gap: 12px; padding: 16px 18px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
-.tb .sp { flex: 1; }
-.search { position: relative; flex: 1 1 220px; max-width: 320px; }
-.search svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
-.search .input { padding: 8px 40px 8px 36px; }
-.search kbd { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); }
+/* ----- Thanh bộ lọc ----- */
+.gbar { position: sticky; top: 0; z-index: 35; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -6px -10px 14px; padding: 8px 10px; border-radius: 16px; background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2); }
+.gnote { font-size: 13px; flex: 1 1 260px; min-width: 0; } .gnote b { color: var(--text-2); }
+.panel { overflow: clip; }
+.fbar { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; flex-wrap: wrap; }
+.fbar .sp, .frow .sp { flex: 1; }
+.search { position: relative; flex: 1 1 200px; min-width: 170px; max-width: 340px; }
+.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
+.search .input { padding: 0 40px 0 38px; height: 42px; }
+.search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+.acb {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 6px 13px; border-radius: 12px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--text-2); font: inherit; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-sm);
+  transition: border-color .15s, box-shadow .15s, color .15s;
+}
+.acb:hover:not(:disabled), .acb.on { border-color: var(--accent); color: var(--accent); }
+.acb.on { box-shadow: 0 0 0 4px var(--accent-soft); }
+.acb:disabled { opacity: .55; cursor: not-allowed; }
+.menu { padding: 6px; display: grid; gap: 2px; min-width: 300px; }
+.mi { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; border: 0; background: none; color: var(--text); font: inherit; padding: 10px 11px; border-radius: 10px; cursor: pointer; }
+.mi:hover:not(:disabled) { background: var(--surface-2); }
+.mi:disabled { opacity: .45; cursor: not-allowed; }
+.mi svg { flex: none; margin-top: 2px; color: var(--accent); }
+.mi span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mi b { font-size: 14px; font-weight: 650; } .mi small { font-size: 12.5px; color: var(--text-3); font-weight: 400; }
+.mi.danger svg { color: var(--danger); } .mi.danger:hover:not(:disabled) { background: var(--danger-soft); }
+.frow { display: flex; align-items: center; gap: 12px; padding: 0 16px 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+.msort { display: none; width: auto; padding: 7px 10px; font-size: 13.5px; }
+.chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 5px 4px 11px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 13px; max-width: 100%; }
+.chip small { font-size: 12px; opacity: .8; } .chip b { font-weight: 650; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip button { display: grid; place-items: center; width: 20px; height: 20px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.chip button:hover { background: var(--accent); color: var(--on-accent); }
+.clr { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; padding: 4px 8px; border-radius: 8px; cursor: pointer; }
+.clr:hover { background: var(--surface-3); color: var(--text); }
+.chips .cnt { margin-left: auto; font-size: 13px; } .chips .cnt b { color: var(--text); }
 .skel { padding: 16px 18px; display: grid; gap: 12px; }
+.stale { margin: 14px 16px 0; }
+.stale .btn { margin-left: 8px; }
 
-/* bảng dạng lưới: máy tính = bảng; điện thoại = thẻ */
-.row { display: grid; grid-template-columns: 70px minmax(200px, 2fr) minmax(150px, 1fr) minmax(0, 3.6fr); align-items: center; padding: 0 18px; gap: 6px; }
+/* ----- Bảng: máy tính = bảng cuộn được (tiêu đề, 2 cột đầu, hàng tổng cố định); điện thoại = thẻ ----- */
+.tscroll { overflow: auto; max-height: min(74vh, 780px); transition: opacity .2s; overscroll-behavior: contain; }
+.tscroll.dim { opacity: .5; pointer-events: none; }
+.table { min-width: var(--minw); }
+.row { display: grid; grid-template-columns: var(--cols); align-items: center; padding: 0 18px 0 0; gap: 6px; }
+.metrics { display: contents; }
 /* tiêu đề cột bấm được để sắp xếp */
 .sh { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; padding: 4px 6px; margin: -4px -6px; border-radius: 7px; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
 .sh svg { opacity: .45; flex: none; }
 .sh:hover { color: var(--text); background: var(--surface-3); } .sh:hover svg { opacity: .8; }
 .sh.on { color: var(--accent); } .sh.on svg { opacity: 1; }
+.hd { position: sticky; top: 0; z-index: 4; padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
 .hd .r { display: inline-flex; justify-content: flex-end; align-items: center; gap: 2px; }
-.msort { display: none; width: auto; padding: 7px 10px; font-size: 13.5px; }
+.item { min-height: 68px; border-bottom: 1px solid var(--border); background: var(--surface); transition: background .15s; }
+.item:hover { background: var(--surface-2); }
+/* 2 cột đầu đứng yên khi cuộn ngang */
+.c-sw { position: sticky; left: 0; z-index: 2; padding-left: 18px; background: inherit; align-self: stretch; display: flex; align-items: center; }
+.c-nm { position: sticky; left: 70px; z-index: 2; background: inherit; align-self: stretch; box-shadow: 1px 0 0 var(--border); }
+.hd .c-sw, .hd .c-nm { z-index: 5; }
+.c-nm { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; padding: 12px 8px 12px 0; }
+.hd .c-nm { flex-direction: row; align-items: center; padding: 0; }
+.c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }
+.item.off .c-nm b { color: var(--text-2); }
+.bdg { display: flex; gap: 6px; flex-wrap: wrap; }
+.c-nm .acc { display: none; font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
+.c-ac { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 0; }
+.c-ac b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--text-2); }
+.c-ac small { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; background: var(--surface-3); }
 /* cột Phân phối: chấm màu + chữ như Ads Manager */
 .c-dl { min-width: 0; }
 .dl { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-2); max-width: 100%; }
 .dl i { width: 9px; height: 9px; border-radius: 50%; background: var(--text-3); opacity: .6; flex: none; }
 .dl.success { color: var(--text); } .dl.success i { background: var(--success); opacity: 1; }
 .dl.info i { background: var(--info); opacity: 1; } .dl.warning i { background: var(--warning); opacity: 1; } .dl.danger { color: var(--danger); } .dl.danger i { background: var(--danger); opacity: 1; }
-.metrics { display: grid; grid-template-columns: 1.15fr 1.15fr .7fr .9fr .8fr; gap: 10px; align-items: center; }
 .r { text-align: right; justify-self: end; }
-.hd { padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
-.hd .metrics > span { width: 100%; text-align: right; }
-.item { min-height: 68px; border-bottom: 1px solid var(--border); transition: background .15s; }
-.item:last-child { border-bottom: 0; }
-.item:hover { background: var(--surface-2); }
-.bdg { display: flex; gap: 6px; flex-wrap: wrap; }
-.item.off .c-nm b { color: var(--text-2); }
-.c-nm { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 0; }
-.c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }
 .m { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 0; }
 .ml { display: none; font-size: 12px; color: var(--text-3); }
 .sp { font-weight: 600; }
 .mini { width: 74px; height: 4px; border-radius: 9px; background: var(--surface-3); overflow: hidden; }
 .mini b { display: block; height: 100%; background: var(--accent-grad); }
+/* hàng tổng cố định ở đáy bảng */
+.tot { position: sticky; bottom: 0; z-index: 4; min-height: 52px; background: var(--surface-2); border-top: 1px solid var(--border-strong); font-size: 14px; }
+.tot .t-l { position: sticky; left: 0; z-index: 5; padding-left: 18px; background: inherit; align-self: stretch; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.tot b { font-weight: 700; }
 .foot { display: flex; gap: 22px; flex-wrap: wrap; padding: 13px 20px; border-top: 1px solid var(--border); font-size: 13.5px; }
 .foot b { color: var(--text); } .foot .right { margin-left: auto; } .foot b.warnc { color: var(--warning); }
-.stale { margin: 14px 18px 0; }
-.accsel { width: auto; max-width: 240px; padding: 7px 10px; font-size: 13.5px; }
-/* cột Tài khoản (chỉ máy tính; điện thoại không có hàng tiêu đề nên hiện tên tài khoản dưới tên chiến dịch) */
-.table.hasacc .row { grid-template-columns: 70px minmax(180px, 1.9fr) minmax(130px, 1.1fr) minmax(140px, .9fr) minmax(0, 3.4fr); }
-.c-nm .acc { display: none; font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
-.c-ac { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 0; }
-.c-ac b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--text-2); }
-.c-ac small { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; background: var(--surface-3); }
-.big.cur { font-size: 30px; display: flex; align-items: baseline; flex-wrap: wrap; }
-.big.cur em { font-style: normal; font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 12px; }
+.mfoot { display: none; }
 .row-enter-active, .row-leave-active { transition: all .3s var(--ease); }
 .row-enter-from, .row-leave-to { opacity: 0; transform: translateX(-10px); }
 
 @media (max-width: 1100px) { .hero { grid-column: span 12; grid-row: auto; } .kpi { grid-column: span 6; } }
 @media (max-width: 860px) {
-  .hd { display: none; }
+  .tscroll { max-height: none; overflow: visible; }
+  .table { min-width: 0; }
+  .hd, .tot { display: none; }
   .row, .table.hasacc .row { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; gap: 10px 14px; }
+  .c-sw, .c-nm { position: static; box-shadow: none; padding-left: 0; background: none; }
+  .c-nm { padding: 0; }
   .c-nm .acc { display: block; }
   .c-ac { display: none; }
-  .metrics { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .metrics { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
   .m { align-items: flex-start; } .r { justify-self: start; text-align: left; }
   .ml { display: block; }
-  .c-nm { padding: 0; }
   .c-dl { grid-column: 2; margin-top: -6px; }
   .msort { display: block; }
   .item { min-height: 0; }
   .big { font-size: 34px; }
   .hero { flex-direction: column; align-items: flex-start; }
   .kpi { grid-column: span 6; }
-  .tb .sp { display: none; }
+  .frow .sp { display: none; }
+  .mfoot { display: inline; }
+}
+@media (max-width: 640px) {
+  .fbar { gap: 8px; }
+  .gbar > :deep(.pop-root) { flex: 1 1 100%; }
+  .gbar { position: static; margin: 0 0 14px; padding: 0; background: none; backdrop-filter: none; }
+  .search { max-width: none; flex: 1 1 100%; }
+  .fbar .sp { display: none; }
+  .chips .cnt { margin-left: 0; width: 100%; }
 }
 </style>
