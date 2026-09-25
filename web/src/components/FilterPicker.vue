@@ -187,7 +187,7 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
 </template>
 
 <style scoped>
-.fp { display: grid; gap: 10px; }
+.fp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; container-type: inline-size; }
 .st { margin-bottom: 10px; }
 .st h4 { display: flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 0 0 10px; letter-spacing: -.01em; }
 .no { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-grad); color: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; }
@@ -243,7 +243,8 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
 .dl.success i { background: var(--success); opacity: 1; } .dl.info i { background: var(--info); opacity: 1; } .dl.warning i { background: var(--warning); opacity: 1; } .dl.danger i { background: var(--danger); opacity: 1; }
 .nw { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .nw small { font-size: 12px; font-weight: 650; color: var(--text-2); } .nw small.bigc { color: var(--warning); } .badc { color: var(--danger); }
-@media (max-width: 620px) {
+/* Theo bề rộng của chính khung chọn (không phải màn hình): trong hộp thoại hẹp cũng gọn lại */
+@container (max-width: 700px) {
   .r { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; gap: 8px; }
   .r.nc { grid-template-columns: 20px minmax(0, 1fr) 90px; }
   .r.wacc { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; }
