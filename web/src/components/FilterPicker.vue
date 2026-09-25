@@ -211,7 +211,8 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
 .note { font-size: 13px; margin: 8px 2px 0; } .warnc { color: var(--warning); }
 
 /* bảng */
-.tbl { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.tbl { border: 1px solid var(--border); border-radius: 14px; overflow-x: auto; overflow-y: hidden; }
+.tbl > * { min-width: 500px; } /* hẹp hơn nữa thì bảng cuộn ngang, không ép chồng chữ */
 .r { display: grid; grid-template-columns: 20px minmax(0, 1fr) 110px 130px 150px; gap: 12px; align-items: center; padding: 9px 14px; }
 .r.nc { grid-template-columns: 20px minmax(0, 1fr) 110px 130px; }
 /* cột Tài khoản (khi có nhiều tài khoản và chưa lọc theo 1 tài khoản) */
@@ -245,10 +246,10 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
 .nw small { font-size: 12px; font-weight: 650; color: var(--text-2); } .nw small.bigc { color: var(--warning); } .badc { color: var(--danger); }
 /* Theo bề rộng của chính khung chọn (không phải màn hình): trong hộp thoại hẹp cũng gọn lại */
 @container (max-width: 700px) {
-  .r { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; gap: 8px; }
-  .r.nc { grid-template-columns: 20px minmax(0, 1fr) 90px; }
-  .r.wacc { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; }
-  .r.wacc.nc { grid-template-columns: 20px minmax(0, 1fr) 90px; }
+  .r { grid-template-columns: 20px minmax(160px, 1fr) minmax(100px, max-content) minmax(150px, max-content); gap: 8px; }
+  .r.nc { grid-template-columns: 20px minmax(160px, 1fr) minmax(100px, max-content); }
+  .r.wacc { grid-template-columns: 20px minmax(160px, 1fr) minmax(100px, max-content) minmax(150px, max-content); }
+  .r.wacc.nc { grid-template-columns: 20px minmax(160px, 1fr) minmax(100px, max-content); }
   .ac, .h-ac { display: none; }
   .acc-in { display: inline; }
   .sp { display: none; }
