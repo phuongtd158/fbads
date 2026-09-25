@@ -182,6 +182,13 @@ export const TOPICS = [
         'Mở `https://api.telegram.org/bot<TOKEN>/getUpdates` (thay `<TOKEN>` bằng token của bạn) và lấy số `chat.id` — đó là **Chat ID**.',
         'Dán cả hai vào Cài đặt → Telegram, chọn giờ nhận báo cáo, bấm **Lưu** rồi **Gửi tin thử**.',
       ] },
+      { t: 'steps', title: 'Gửi cho nhiều người', items: [
+        'Nhập nhiều **Chat ID** vào cùng một ô, cách nhau bằng dấu phẩy, ví dụ `123456789, 987654321, -100555666777` (tối đa 10). Ngay bên dưới, tool hiện từng người nhận thành một nhãn; ID sai được tô đỏ.',
+        '**Mỗi người phải nhắn cho bot ít nhất một tin trước**, nếu không Telegram từ chối gửi cho họ. Lấy `chat.id` của từng người ở `getUpdates` như trên.',
+        'Cách gọn hơn: tạo một **nhóm** Telegram, thêm bot và mọi người vào, gửi một tin trong nhóm rồi lấy `chat.id` của nhóm (số âm, dạng `-100…`). Người mới vào nhóm là tự nhận được tin.',
+        'Bấm **Gửi tin thử** hoặc **Gửi báo cáo ngay** để xem kết quả **từng người**: ai nhận được, ai lỗi và lý do (đã chặn bot, chưa nhắn cho bot, bot chưa ở trong nhóm…). Một người lỗi không làm những người còn lại mất tin.',
+      ] },
+      { t: 'note', tone: 'warning', text: 'Tin gửi đi có chi tiêu và tên chiến dịch, nên chỉ thêm những người bạn muốn họ thấy số liệu.' },
     ],
   },
   {
