@@ -2,13 +2,13 @@
 //   { spend, impressions, clicks, results, cpa, roas }
 // Mẫu số bằng 0 thì trả null (giao diện hiện "–"), không trả 0 hay Infinity.
 
-export const EMPTY = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, cpa: null, roas: null }
+export const EMPTY = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, conversations: 0, checkouts: 0, leads: 0, leadsOnMeta: 0, comments: 0, cpa: null, roas: null }
 
 const div = (a, b) => (b > 0 ? a / b : null)
 
-// CTR (%), CPC, CPM (chi phí / 1000 lượt hiển thị)
+// CTR (%), CPC, CPM (chi phí / 1000 lượt hiển thị), chi phí trên mỗi lượt bắt đầu cuộc trò chuyện
 export function derive(m = EMPTY) {
-  return { ...m, ctr: div(m.clicks * 100, m.impressions), cpc: div(m.spend, m.clicks), cpm: div(m.spend * 1000, m.impressions) }
+  return { ...m, ctr: div(m.clicks * 100, m.impressions), cpc: div(m.spend, m.clicks), cpm: div(m.spend * 1000, m.impressions), costPerConversation: div(m.spend, m.conversations) }
 }
 
 // Tổng ngân sách hằng ngày của các chiến dịch đang chạy. Ngân sách có thể đặt ở 2 nơi:
@@ -29,9 +29,10 @@ export function runningBudget(camps, adsets, isRunning) {
 // rows: [{ m: số liệu gốc, budget: ngân sách/ngày hoặc null }] → tổng + các chỉ số tính lại từ tổng (không lấy trung bình của các dòng).
 // ROAS gộp = tổng doanh thu / tổng chi tiêu, với doanh thu mỗi dòng = roas × chi tiêu.
 export function totals(rows) {
-  const t = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, budget: 0, budgetRows: 0, value: 0 }
+  const t = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, conversations: 0, checkouts: 0, leads: 0, leadsOnMeta: 0, comments: 0, budget: 0, budgetRows: 0, value: 0 }
   for (const { m, budget } of rows) {
     t.spend += m.spend; t.impressions += m.impressions; t.clicks += m.clicks; t.results += m.results; t.revenue += m.revenue || 0
+    t.conversations += m.conversations || 0; t.checkouts += m.checkouts || 0; t.leads += m.leads || 0; t.leadsOnMeta += m.leadsOnMeta || 0; t.comments += m.comments || 0
     if (budget != null) { t.budget += budget; t.budgetRows++ }
     if (m.roas != null && m.spend > 0) t.value += m.roas * m.spend
   }

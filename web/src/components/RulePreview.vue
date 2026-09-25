@@ -45,7 +45,7 @@ const modeNote = computed(() => {
     <Callout v-else-if="error" tone="danger">{{ error }}</Callout>
     <template v-else-if="data">
       <p class="sum">
-        <template v-if="!data.counts.total">Không có camp nào <b>đang chạy</b> để kiểm tra (rule chỉ xét camp đang chạy).</template>
+        <template v-if="!data.counts.total">Không có {{ rule && rule.level === 'adset' ? 'nhóm QC' : 'camp' }} nào <b>đang chạy</b> để kiểm tra (rule chỉ xét mục đang chạy).</template>
         <template v-else-if="data.counts.match"><b>{{ data.counts.match }}</b> trên {{ data.counts.total }} mục sẽ bị tác động nếu rule chạy ngay bây giờ.</template>
         <template v-else-if="blocked">Có <b>{{ blocked }}</b> mục khớp điều kiện nhưng đang bị bỏ qua — xem lý do bên dưới.</template>
         <template v-else>Hiện <b>không có mục nào</b> khớp rule ({{ data.counts.total }} mục được kiểm tra).</template>

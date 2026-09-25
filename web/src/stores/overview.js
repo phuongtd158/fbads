@@ -17,7 +17,11 @@ export const tz = () => (state.settings && state.settings.timezone) || 'Asia/Ho_
 export const todayISO = () => todayIn(tz())
 
 const SORT_KEYS = new Set(['name', 'account', 'delivery', ...COLUMN_KEYS])
-const okSort = (v) => (v && SORT_KEYS.has(v.key) && ['asc', 'desc'].includes(v.dir) ? { key: v.key, dir: v.dir } : { key: '', dir: 'desc' }) // key '' = thứ tự như trên Facebook
+// Độ rộng cột người dùng kéo: { [key]: px }; cột không có trong đây dùng độ rộng tự động
+export const MAX_COL_W = 800
+const okWidths = (v) => Object.fromEntries(Object.entries(v && typeof v === 'object' ? v : {})
+  .filter(([k, w]) => SORT_KEYS.has(k) && Number.isFinite(w) && w >= 40 && w <= MAX_COL_W).map(([k, w]) => [k, Math.round(w)]))
+const okSort =(v) => (v && SORT_KEYS.has(v.key) && ['asc', 'desc'].includes(v.dir) ? { key: v.key, dir: v.dir } : { key: '', dir: 'desc' }) // key '' = thứ tự như trên Facebook
 
 // đọc cả lựa chọn cũ của bản trước (1 tài khoản, kiểu sắp xếp) để không mất thiết lập của người dùng
 const legacyAcc = legacy('fbads.overviewAccount')
@@ -31,11 +35,12 @@ export const ov = reactive({
   level: rd('level') === 'adset' ? 'adset' : 'campaign',
   columns: cleanColumns(rd('columns')),
   sort: okSort(rd('sort', legacySort)),
+  widths: okWidths(rd('widths')),
   data: null, // { key, since, until, days, at, stale, metrics } của khoảng đang xem (khác hôm nay)
   loading: false,
   err: '',
 })
-for (const k of ['spec', 'accounts', 'status', 'level', 'columns', 'sort']) watch(() => ov[k], (v) => wr(k === 'spec' ? 'range' : k, v), { deep: true })
+for (const k of ['spec', 'accounts', 'status', 'level', 'columns', 'sort', 'widths']) watch(() => ov[k], (v) => wr(k === 'spec' ? 'range' : k, v), { deep: true })
 
 // ----- Khoảng ngày -----
 const clock = ref(0) // đổi để tính lại nhãn khi qua ngày mới

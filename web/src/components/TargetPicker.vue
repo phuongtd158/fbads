@@ -48,7 +48,7 @@ const clear = () => emit('update:modelValue', props.modelValue.filter((id) => !l
         <span class="box"><Check :size="13" /></span>
         <span class="nm">{{ o.name }}</span>
         <span v-if="multiAcc && !account" class="ac" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ accountLabel(o) }}</span>
-        <span class="tag" :class="{ warn: needBudget && o.dailyBudget == null }">{{ needBudget && o.dailyBudget == null ? 'Không có ngân sách (CBO)' : o.level === 'campaign' ? 'Camp' : 'Nhóm QC' }}</span>
+        <span class="tag" :class="{ warn: needBudget && o.dailyBudget == null }">{{ needBudget && o.dailyBudget == null ? (o.level === 'campaign' ? 'Không có ngân sách (ABO)' : 'Không có ngân sách (CBO)') : o.level === 'campaign' ? 'Camp' : 'Nhóm QC' }}</span>
       </button>
       <button v-if="moreItems > 0" type="button" class="morelnk" @click="cap += pageSize()">Hiển thị thêm {{ moreItems }} <small>({{ shown.length }} / {{ list.length }})</small></button>
       <p v-if="!list.length && !state.objsLoading" class="none faint">{{ state.objs.length ? 'Không tìm thấy.' : state.objsErr || 'Chưa có dữ liệu chiến dịch.' }}</p>

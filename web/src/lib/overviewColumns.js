@@ -16,6 +16,12 @@ export const COLUMNS = [
   { key: 'ctr', label: 'CTR', menu: 'CTR (tỉ lệ nhấp)', min: 76 },
   { key: 'cpc', label: 'CPC', menu: 'CPC (chi phí mỗi nhấp)', money: true, first: 'asc', min: 92 },
   { key: 'cpm', label: 'CPM', menu: 'CPM (chi phí 1000 hiển thị)', money: true, first: 'asc', min: 94 },
+  { key: 'conversations', label: 'Cuộc trò chuyện', menu: 'Lượt bắt đầu cuộc trò chuyện', min: 92 },
+  { key: 'costPerConversation', label: 'Chi phí/trò chuyện', menu: 'Chi phí trên mỗi lượt bắt đầu cuộc trò chuyện', money: true, first: 'asc', min: 98 },
+  { key: 'checkouts', label: 'Bắt đầu thanh toán', menu: 'Lượt bắt đầu thanh toán', min: 92 },
+  { key: 'leads', label: 'KH tiềm năng', menu: 'Khách hàng tiềm năng', min: 92 },
+  { key: 'leadsOnMeta', label: 'KH tiềm năng (Meta)', menu: 'Khách hàng tiềm năng trên Meta', min: 92 },
+  { key: 'comments', label: 'Bình luận', menu: 'Bình luận về bài viết', min: 92 },
 ]
 export const COLUMN_KEYS = COLUMNS.map((c) => c.key)
 export const DEFAULT_COLUMNS = ['budget', 'spend', 'results', 'cpa', 'roas']

@@ -282,13 +282,18 @@ export function validateRule(input = {}, ctx = {}) {
         else if (from >= to) e.window = 'Giờ bắt đầu phải nhỏ hơn giờ kết thúc (chưa hỗ trợ khung giờ qua đêm)'
     }
 
+    // Cấp áp dụng: chiến dịch (mặc định, rule cũ) hoặc nhóm QC
+    const level = input.level === 'adset' ? 'adset' : 'campaign'
+    const unit = level === 'adset' ? 'nhóm QC' : 'camp'
     const allActive = input.allActive !== false
     const targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
     if (!allActive) {
-        if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 camp áp dụng'
+        if (!targets.length) e.targets = `Hãy chọn ít nhất 1 ${unit} áp dụng`
         else if (objs) {
             const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
+            const other = targets.filter((id) => objs.some((o) => o.id === id && o.level && o.level !== level))
             if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}.`
+            else if (other.length) e.targets = `Có ${other.length} mục không phải ${level === 'adset' ? 'nhóm QC' : 'chiến dịch'}, hãy chọn lại.`
         }
     }
 
@@ -297,7 +302,18 @@ export function validateRule(input = {}, ctx = {}) {
     if (accountIds.length > LIMITS.accountsMax) e.accountIds = `Tối đa ${LIMITS.accountsMax} tài khoản`
     if (accounts && accountIds.length) {
         const gone = accountIds.filter((id) => !accounts.some((a) => a.id === id))
-        if (gone.length) w.push(`Rule đang giới hạn theo tài khoản ${gone.slice(0, 3).join(', ')} nhưng tài khoản này không còn được quản lý, nên không camp nào được xét.`)
+        if (gone.length) w.push(`Rule đang giới hạn theo tài khoản ${gone.slice(0, 3).join(', ')} nhưng tài khoản này không còn được quản lý, nên không ${unit} nào được xét.`)
+    }
+
+    // Rule đổi ngân sách: ngân sách chỉ nằm ở 1 cấp (CBO: chiến dịch, ABO: nhóm QC) → mục không có ngân sách riêng bị bỏ qua
+    if ((action === 'increase' || action === 'decrease') && objs && !e.targets) {
+        const pool = allActive
+            ? objs.filter((o) => o.level === level && o.effective === 'ACTIVE' && (!accountIds.length || accountIds.includes(o.accountId)))
+            : objs.filter((o) => targets.includes(o.id))
+        const none = pool.filter((o) => o.dailyBudget == null).length
+        const why = level === 'adset' ? 'nằm trong chiến dịch CBO (ngân sách đặt ở chiến dịch)' : 'là chiến dịch ABO (ngân sách đặt ở từng nhóm QC)'
+        if (pool.length && none === pool.length) w.push(`Không ${unit} nào ${allActive ? 'đang chạy ' : 'đã chọn '}có ngân sách riêng (đều ${why}), nên rule này sẽ không đổi được ngân sách. ${level === 'adset' ? 'Hãy dùng rule cấp chiến dịch.' : 'Hãy dùng rule cấp nhóm QC.'}`)
+        else if (none) w.push(`${none} ${unit} không có ngân sách riêng (${why}) sẽ bị bỏ qua.`)
     }
     // Điều kiện so với mục tiêu: mỗi tài khoản trong phạm vi phải có mục tiêu tương ứng, không thì rule bỏ qua camp của tài khoản đó
     const tcs = conds.filter((c) => c.vs === 'target')
@@ -322,6 +338,7 @@ export function validateRule(input = {}, ctx = {}) {
             if (o.id && o.id === input.id) continue
             if (o.enabled === false || !simple(o) || o.metric !== metric || !(o.op === '>' || o.op === '<')) continue
             if (o.action === 'notify' || action === 'notify') continue // rule chỉ thông báo không gây mâu thuẫn
+            if ((o.level || 'campaign') !== level) continue // khác cấp: không tác động lên cùng một ngân sách
             const scopeOverlap = allActive || o.allActive !== false || inter(targets, o.targets || []).length > 0
             if (!scopeOverlap) continue
             if (kind(o.action) !== kind(action) && condOverlap({op, value}, o)) {
@@ -350,7 +367,7 @@ export function validateRule(input = {}, ctx = {}) {
         from: from && to ? from : '',
         to: from && to ? to : '',
         allActive,
-        level: 'campaign',
+        level,
         accountIds,
         targets: allActive ? [] : targets,
         enabled,

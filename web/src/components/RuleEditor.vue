@@ -32,7 +32,8 @@ watch(() => props.modelValue, (open) => {
   const item = JSON.parse(JSON.stringify(props.item || {}))
   f.value = { ...blank(), ...item }
   // rule cũ / mẫu cũ chỉ có metric/op/value ở ngoài cùng → thành 1 điều kiện
-  f.value.conditions = (item.conditions && item.conditions.length ? item.conditions : item.metric ? [{ metric: item.metric, op: item.op, value: item.value }] : blank().conditions).map((c) => ({ ...c }))
+  // vs '' = "Số cụ thể" (ô chọn cần giá trị khớp một lựa chọn, không thì hiện trống)
+  f.value.conditions = (item.conditions && item.conditions.length ? item.conditions : item.metric ? [{ metric: item.metric, op: item.op, value: item.value }] : blank().conditions).map((c) => ({ ...c, vs: c.vs || '' }))
   f.value.match = item.match === 'any' ? 'any' : 'all'
   f.value.accountIds = [...(item.accountIds || [])]
   f.value.maxBudget = f.value.maxBudget || ''; f.value.minBudget = f.value.minBudget || ''
@@ -54,7 +55,7 @@ const cErrors = (i) => ['metric', 'op', 'value'].map((k) => cErr(i, k)).filter(B
 const condsError = computed(() => (submitted.value ? check.value.errors.conditions : ''))
 const canTarget = (c) => TARGET_METRICS.includes(c.metric)
 function addCond() {
-  if (f.value.conditions.length < MAX_CONDITIONS) f.value.conditions.push({ metric: 'roas', op: '<', value: 1.5 })
+  if (f.value.conditions.length < MAX_CONDITIONS) f.value.conditions.push({ metric: 'roas', op: '<', vs: '', value: 1.5 })
 }
 const removeCond = (i) => { if (f.value.conditions.length > 1) f.value.conditions.splice(i, 1) }
 function onMetric(c) { if (!canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS so được với mục tiêu
@@ -94,8 +95,13 @@ async function save() {
   emit('saved'); emit('update:modelValue', false)
 }
 const ops = [{ value: '>', label: 'Lớn hơn' }, { value: '<', label: 'Nhỏ hơn' }]
-const actions = [{ value: 'pause', label: 'Tắt camp' }, { value: 'increase', label: 'Tăng NS' }, { value: 'decrease', label: 'Giảm NS' }, { value: 'notify', label: 'Chỉ thông báo' }]
-const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value: 'pick', label: 'Chọn camp cụ thể' }]
+// Cấp áp dụng: chiến dịch hoặc nhóm QC. Đổi cấp thì bỏ các mục đã chọn (thuộc cấp cũ).
+const levels = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm QC' }]
+const unit = computed(() => (f.value.level === 'adset' ? 'nhóm QC' : 'camp'))
+function setLevel(v) { if (v !== f.value.level) { f.value.level = v; f.value.targets = [] } }
+const isBudget = computed(() => f.value.action === 'increase' || f.value.action === 'decrease')
+const actions = computed(() => [{ value: 'pause', label: `Tắt ${unit.value}` }, { value: 'increase', label: 'Tăng NS' }, { value: 'decrease', label: 'Giảm NS' }, { value: 'notify', label: 'Chỉ thông báo' }])
+const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} đang chạy` }, { value: 'pick', label: `Chọn ${unit.value} cụ thể` }])
 </script>
 
 <template>
@@ -139,13 +145,15 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
     </Field>
 
     <div class="two">
-      <Field label="Không lặp lại cho cùng camp trong (giờ)" tip="cooldown" :error="show('cooldownHours')"><input v-model="f.cooldownHours" type="number" min="0" class="input" @input="touch('cooldownHours')" /></Field>
+      <Field :label="`Không lặp lại cho cùng ${unit} trong (giờ)`" tip="cooldown" :error="show('cooldownHours')"><input v-model="f.cooldownHours" type="number" min="0" class="input" @input="touch('cooldownHours')" /></Field>
       <Field label="Chỉ chạy trong khung giờ" tip="window" :error="show('window')"><div class="inl"><input v-model="f.from" type="time" class="input" @input="touch('window')" />→<input v-model="f.to" type="time" class="input" @input="touch('window')" /></div></Field>
     </div>
 
     <Field label="Áp dụng cho" :error="showTargets">
+      <Segmented :model-value="f.level" :options="levels" block style="margin-bottom: 10px" @update:model-value="setLevel" />
       <Segmented v-model="scope" :options="scopes" block />
-      <div v-if="scope === 'pick'" style="margin-top: 12px"><TargetPicker v-model="f.targets" level="campaign" /></div>
+      <p v-if="isBudget" class="th">Ngân sách chỉ nằm ở một cấp: chiến dịch <b>CBO</b> giữ ngân sách ở chiến dịch, chiến dịch <b>ABO</b> giữ ở từng nhóm QC. {{ f.level === 'adset' ? 'Nhóm QC' : 'Chiến dịch' }} không có ngân sách riêng sẽ được bỏ qua.</p>
+      <div v-if="scope === 'pick'" style="margin-top: 12px"><TargetPicker v-model="f.targets" :level="f.level" :need-budget="isBudget" /></div>
       <div v-else-if="multiAcc" class="accs">
         <span class="lb">Trong tài khoản</span>
         <button type="button" class="chip" :class="{ on: !f.accountIds.length }" @click="f.accountIds = []">Tất cả tài khoản</button>
@@ -189,5 +197,12 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
 .adj label { display: block; } .adj span { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 5px; }
 .adj .e { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 13px; line-height: 1.45; }
 .with { position: relative; } .with .input { padding-right: 30px; } .with em { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-style: normal; color: var(--text-3); }
-@media (max-width: 620px) { .two, .adj { grid-template-columns: 1fr; } }
+@media (max-width: 620px) {
+  .two, .adj { grid-template-columns: 1fr; }
+  /* điều kiện: số liệu chiếm cả hàng, "so với" và ngưỡng chia đôi hàng dưới */
+  .crow .inl { gap: 8px; }
+  .crow .sel { flex: 1 1 100%; width: auto; }
+  .crow .vs, .crow .val, .crow .with { flex: 1 1 120px; width: auto; }
+  .crow .with .val { width: 100%; }
+}
 </style>

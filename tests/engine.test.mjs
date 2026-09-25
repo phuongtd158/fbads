@@ -264,6 +264,28 @@ test('kết quả "purchase": nhận cả Lượt mua trên Meta, không đếm 
   assert.equal(fb.metricsFrom({ spend: '100', actions: [] }, 'purchase').cpa, null)
 })
 
+test('cột kết quả phụ (cuộc trò chuyện, bắt đầu thanh toán, khách hàng tiềm năng, bình luận): độc lập với loại kết quả đã chọn', () => {
+  const act = (t, v) => ({ action_type: t, value: String(v) })
+  const row = {
+    spend: '100',
+    actions: [
+      act('onsite_conversion.messaging_conversation_started_7d', 5),
+      act('omni_initiated_checkout', 3),
+      act('lead', 4),
+      act('onsite_conversion.lead_grouped', 2),
+      act('comment', 9),
+    ],
+  }
+  const m = fb.metricsFrom(row, 'purchase') // dù đang chọn "purchase" làm kết quả chính, các cột phụ vẫn ra đủ
+  assert.equal(m.conversations, 5)
+  assert.equal(m.checkouts, 3)
+  assert.equal(m.leads, 4)
+  assert.equal(m.leadsOnMeta, 2)
+  assert.equal(m.comments, 9)
+  const empty = fb.metricsFrom({ spend: '0', actions: [] }, 'purchase')
+  assert.deepEqual([empty.conversations, empty.checkouts, empty.leads, empty.leadsOnMeta, empty.comments], [0, 0, 0, 0, 0])
+})
+
 /* ------------------------------------------------- lịch theo điều kiện */
 test('lịch theo điều kiện: camp ngân sách dưới 300k → đặt 350k, lọc lại lúc chạy, ghi 1 dòng tóm tắt', async () => {
   // dữ liệu giả: mock_3 (200k, đang tắt), mock_5 (150k, đang chạy) là 2 camp dưới 300k

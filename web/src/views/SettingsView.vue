@@ -49,9 +49,11 @@ const go = (v) => router.replace('/settings/' + v)
 .panel { min-width: 0; }
 @media (max-width: 960px) {
   .layout { grid-template-columns: 1fr; gap: 16px; }
-  .tabs { position: static; flex-direction: row; overflow-x: auto; padding-bottom: 4px; gap: 6px; margin: 0 -16px; padding: 0 16px 6px; scrollbar-width: none; }
+  .tabs { position: static; flex-direction: row; overflow-x: auto; gap: 6px; margin: 0 -36px; padding: 0 36px 6px; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
   .tabs button { white-space: nowrap; background: var(--surface); border: 1px solid var(--border); padding: 9px 14px; flex: none; }
   .tabs button.on { border-color: var(--accent); background: var(--accent-soft); }
 }
+/* khớp lề của trang (App.vue: 36px trên máy tính nhỏ, 16px trên điện thoại) để hàng tab cuộn sát mép màn hình */
+@media (max-width: 820px) { .tabs { margin: 0 -16px; padding: 0 16px 6px; } }
 </style>

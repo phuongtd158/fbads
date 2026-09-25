@@ -30,9 +30,16 @@ export function hintsFor(l) {
   } else if ([4, 17, 32, 613, 80004].includes(e.code) || msg.includes('giới hạn số lần')) {
     add('Facebook đang giới hạn số lần gọi. Chờ 5–10 phút rồi thử lại.')
     add('Nếu gặp thường xuyên, tăng “Kiểm tra rule mỗi (phút)” để tool gọi thưa hơn.', '/settings/general', 'Mở Cài đặt chung')
-  } else if (e.subcode === 1487225 || msg.includes('cbo') || msg.includes('không có ngân sách')) {
-    add('Camp đang dùng ngân sách chiến dịch (CBO), nhóm quảng cáo không có ngân sách riêng. Hãy đổi ngân sách ở cấp camp.')
-    add('Sửa lịch/rule để chọn đúng camp có ngân sách, bỏ các mục CBO.', l.refId ? (kindOf(l) === 'rule' ? '/rules' : '/schedules') : undefined, 'Mở danh sách')
+  } else if (e.subcode === 1487225 || msg.includes('cbo') || msg.includes('abo') || msg.includes('không có ngân sách')) {
+    // Ngân sách chỉ nằm ở 1 cấp: CBO ở chiến dịch, ABO ở từng nhóm QC
+    const back = l.refId ? (kindOf(l) === 'rule' ? '/rules' : '/schedules') : undefined
+    if (l.target && l.target.level === 'campaign') {
+      add('Chiến dịch này dùng ngân sách nhóm quảng cáo (ABO): chiến dịch không có ngân sách riêng, tiền nằm ở từng nhóm QC.')
+      add('Sửa lịch/rule sang cấp **Nhóm QC** để đổi ngân sách của các nhóm bên trong.', back, 'Mở danh sách')
+    } else {
+      add('Nhóm QC này nằm trong chiến dịch dùng ngân sách chiến dịch (CBO) nên không có ngân sách riêng. Hãy đổi ngân sách ở cấp chiến dịch.')
+      add('Sửa lịch/rule sang cấp **Chiến dịch**, hoặc bỏ các nhóm QC thuộc chiến dịch CBO.', back, 'Mở danh sách')
+    }
   } else if (e.network || msg.includes('không kết nối được')) {
     add('Tool không gọi được Facebook. Kiểm tra máy có internet, VPN hoặc tường lửa đang chặn không.')
     add('Nếu máy vừa tắt màn hình/ngủ, hãy tắt chế độ ngủ để lịch chạy ổn định.')

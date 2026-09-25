@@ -31,7 +31,8 @@ const accNames = (r) => {
   return r.accountIds.map((id) => (list.find((a) => a.id === id) || { name: id }).name).join(', ')
 }
 const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
-const actText = (r) => (r.action === 'pause' ? 'tắt camp' : r.action === 'notify' ? 'gửi cảnh báo (không đổi camp)' : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách`)
+const unitOf = (r) => (r.level === 'adset' ? 'nhóm QC' : 'camp')
+const actText = (r) => (r.action === 'pause' ? `tắt ${unitOf(r)}` : r.action === 'notify' ? `gửi cảnh báo (không đổi ${unitOf(r)})` : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách ${unitOf(r)}`)
 
 // Xem trước rule đã lưu: đang khớp camp nào ngay bây giờ
 const pvOpen = ref(false)
@@ -78,8 +79,8 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
         <p class="sentence">Nếu <template v-for="(c, i) in conds(r)" :key="i"><span v-if="i" class="mw">{{ matchWord(r.match) }}</span> <b>{{ METRIC_SHORT[c.metric] || c.metric }}</b><span v-if="conds(r).length === 1 || i === conds(r).length - 1" class="rg"> {{ RANGE_LABEL[r.range || 'today'] }}</span> {{ opText(c.op) }} <b :class="{ acc: c.vs === 'target' }">{{ rhs(c) }}</b> </template><template v-if="r.minSpend">(đã chi ≥ {{ fmt(r.minSpend) }})</template>
           thì <b :class="actTone(r)">{{ actText(r) }}</b><template v-if="r.maxBudget">, tối đa {{ fmt(r.maxBudget) }}</template><template v-if="r.minBudget">, tối thiểu {{ fmt(r.minBudget) }}</template>.</p>
         <div class="tags">
-          <span v-if="r.allActive" class="tag">Tất cả camp đang chạy<i v-if="accNames(r)" class="tac"> · {{ accNames(r) }}</i></span>
-          <template v-else><span v-for="id in r.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="r.targets.length > 3" class="tag">+{{ r.targets.length - 3 }}</span></template>
+          <span v-if="r.allActive" class="tag">Tất cả {{ unitOf(r) }} đang chạy<i v-if="accNames(r)" class="tac"> · {{ accNames(r) }}</i></span>
+          <template v-else><span v-if="r.level === 'adset'" class="tag">Nhóm QC</span><span v-for="id in r.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="r.targets.length > 3" class="tag">+{{ r.targets.length - 3 }}</span></template>
           <span v-if="r.from && r.to" class="tag"><Clock3 :size="12" /> {{ r.from }}–{{ r.to }}</span>
           <span v-if="r.cooldownHours" class="tag">Nghỉ {{ r.cooldownHours }}h</span>
         </div>
@@ -105,7 +106,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
 .presets > span { font-size: 13px; font-weight: 600; margin-right: 4px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13.5px; color: var(--text-2); transition: .18s var(--ease); }
 .chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 16px; }
 .it { padding: 20px; display: flex; flex-direction: column; gap: 14px; transition: transform .2s var(--ease), box-shadow .2s, opacity .2s; }
 .it:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .it.off { opacity: .6; }

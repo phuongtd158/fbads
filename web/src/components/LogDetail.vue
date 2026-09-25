@@ -38,6 +38,8 @@ const status = computed(() => (failed.value ? { tone: 'danger', text: 'Lỗi', i
   : l.value.skipped ? { tone: 'warning', text: 'Bỏ qua', icon: SkipForward }
   : isNotify.value ? { tone: 'info', text: 'Cảnh báo', icon: Bell }
   : dry.value ? { tone: 'warning', text: 'Chạy thử', icon: FlaskConical } : { tone: 'success', text: 'Thành công', icon: CheckCircle2 }))
+// Tiêu đề = đối tượng bị tác động (như danh sách nhật ký); nguồn (lịch/rule) nằm ở dòng phụ
+const headTitle = computed(() => (l.value.target && l.value.target.name) || (l.value.name && l.value.name !== '-' ? l.value.name : '') || l.value.source)
 const err = computed(() => l.value.error || null)
 const hints = computed(() => (failed.value ? hintsFor(l.value) : []))
 const hasDetail = computed(() => !!(l.value.before || l.value.after || l.value.condition || l.value.action || err.value))
@@ -49,9 +51,10 @@ const when = computed(() => (l.value.ts ? new Date(l.value.ts).toLocaleString('v
 const actionText = computed(() => {
   const a = l.value.action
   if (!a) return ''
-  if (a.type === 'on') return 'Bật camp'
-  if (a.type === 'off') return 'Tắt camp'
-  if (a.type === 'notify') return 'Chỉ gửi cảnh báo (không đổi camp)'
+  const u = l.value.target && l.value.target.level === 'adset' ? 'nhóm QC' : 'camp'
+  if (a.type === 'on') return `Bật ${u}`
+  if (a.type === 'off') return `Tắt ${u}`
+  if (a.type === 'notify') return `Chỉ gửi cảnh báo (không đổi ${u})`
   if (a.type === 'budget') {
     const parts = [a.mode === 'percent' ? `${a.value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(a.value)}% ngân sách` : a.mode === 'add' ? `${a.value > 0 ? 'Cộng thêm' : 'Trừ bớt'} ${fmt(Math.abs(a.value))} ngân sách` : `Đặt ngân sách = ${fmt(a.value)}`]
     if (a.max) parts.push(`trần ${fmt(a.max)}`)
@@ -149,8 +152,8 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
       <div class="head">
         <span class="ic" :class="status.tone"><component :is="status.icon" :size="22" /></span>
         <div class="hb">
-          <h4>{{ l.source }}</h4>
-          <p class="muted">{{ l.name }}</p>
+          <h4>{{ headTitle }}</h4>
+          <p v-if="headTitle !== l.source" class="muted">{{ l.source }}</p>
         </div>
         <Badge v-if="l.undone" tone="neutral">Đã hoàn tác</Badge>
         <Badge :tone="status.tone" dot>{{ status.text }}</Badge>

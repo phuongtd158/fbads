@@ -28,4 +28,11 @@ button:hover:not(.on) { color: var(--text); }
 button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border); }
 .cnt { font-size: 11.5px; padding: 0 6px; border-radius: 99px; background: var(--surface-2); color: var(--text-3); }
 .on .cnt { background: var(--accent-soft); color: var(--accent); }
+/* Điện thoại: thu gọn để các lựa chọn vừa một hàng (không phải cuộn ngang mới thấy lựa chọn cuối) */
+@media (max-width: 640px) {
+  .seg { scrollbar-width: none; } .seg::-webkit-scrollbar { display: none; }
+  button { padding: 7px 10px; gap: 5px; font-size: 13.5px; }
+  .sm button { padding: 5px 8px; gap: 4px; font-size: 13px; }
+  .cnt { font-size: 11px; padding: 0 5px; }
+}
 </style>

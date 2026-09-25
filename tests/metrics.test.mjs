@@ -90,3 +90,15 @@ test('doanh thu: cộng vào hàng tổng, dòng cũ chưa có doanh thu vẫn t
   assert.equal(totals([]).revenue, 0)
   assert.equal(EMPTY.revenue, 0)
 })
+
+test('cột kết quả phụ: cộng vào hàng tổng, chi phí/cuộc trò chuyện tính từ tổng', () => {
+  const t = totals([
+    { m: { spend: 100, impressions: 1000, clicks: 10, results: 2, conversations: 4, checkouts: 1, leads: 2, leadsOnMeta: 1, comments: 3, cpa: 50, roas: 5 }, budget: null },
+    { m: { spend: 50, impressions: 500, clicks: 5, results: 1, conversations: 1, checkouts: 0, leads: 1, leadsOnMeta: 0, comments: 1, cpa: 50, roas: 2 }, budget: null },
+    { m: { spend: 10, impressions: 100, clicks: 1, results: 0, cpa: null, roas: null }, budget: null }, // dòng cũ chưa có các cột này
+  ])
+  assert.deepEqual([t.conversations, t.checkouts, t.leads, t.leadsOnMeta, t.comments], [5, 1, 3, 1, 4])
+  near(t.costPerConversation, 160 / 5, 'chi phí/cuộc trò chuyện gộp')
+  assert.equal(totals([]).conversations, 0)
+  assert.equal(derive(EMPTY).costPerConversation, null)
+})

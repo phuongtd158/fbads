@@ -3,7 +3,7 @@ import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
-import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO } from '../stores/overview'
+import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO, MAX_COL_W } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt, fmtDec, fmtCompact } from '../lib/format'
@@ -194,13 +194,64 @@ const footSpend = computed(() => visCurs.value.map((g) => ({ currency: g.currenc
 const footResults = computed(() => visible.value.reduce((t, i) => t + i.m.results, 0))
 
 const lead = computed(() => 3 + (showAccCol.value ? 1 : 0)) // số cột đầu (công tắc, tên, [tài khoản], phân phối) mà nhãn hàng tổng trải ngang qua
-// Bảng có thể rộng hơn khung (nhiều cột): cuộn ngang, giữ cố định 2 cột đầu, tiêu đề và hàng tổng
+
+// Tiêu đề không xuống dòng và căn phải: cột hẹp hơn tiêu đề thì chữ tràn đè lên cột bên trái.
+// Nên độ rộng tối thiểu của cột ≥ chữ tiêu đề (đo thật theo font .hd) + mũi tên sắp xếp + dấu ? + khoảng thở.
+const fontsReady = ref(0)
+if (document.fonts) document.fonts.ready.then(() => fontsReady.value++) // đo lại khi font Inter tải xong
+let measureCtx
+function headWidth(c) {
+  const text = c.short || c.label
+  let w = text.length * 7.6
+  try {
+    measureCtx = measureCtx || document.createElement('canvas').getContext('2d')
+    measureCtx.font = `650 12.5px ${getComputedStyle(document.body).fontFamily}`
+    w = measureCtx.measureText(text).width + text.length * 0.125 // letter-spacing .01em
+  } catch { /* không có canvas: dùng ước lượng */ }
+  return Math.ceil(w + 5 + 13 + (c.tip ? 2 + 22 : 0) + 14)
+}
+const colMins = computed(() => { fontsReady.value; return cols.value.map((c) => Math.max(c.min, headWidth(c))) })
+
+// Các cột sau cột công tắc: { key, min (độ rộng tự động tối thiểu), fr, floor (kéo hẹp nhất được) }
+const tracksSpec = computed(() => [
+  { key: 'name', min: 170, fr: 2.2, floor: 120 },
+  ...(showAccCol.value ? [{ key: 'account', min: 120, fr: 1, floor: 80 }] : []),
+  { key: 'delivery', min: 108, fr: 0.9, floor: 80 },
+  ...cols.value.map((c, i) => ({ key: c.key, min: colMins.value[i], fr: 1, floor: colMins.value[i] })),
+])
+
+// Bảng có thể rộng hơn khung (nhiều cột): cuộn ngang, giữ cố định 2 cột đầu, tiêu đề và hàng tổng.
+// Cột đã kéo tay có độ rộng cố định; cột còn lại co giãn theo khung.
 const gridStyle = computed(() => {
-  const acc = showAccCol.value
-  const tracks = ['70px', 'minmax(170px, 2.2fr)', ...(acc ? ['minmax(120px, 1fr)'] : []), 'minmax(108px, .9fr)', ...cols.value.map((c) => `minmax(${c.min}px, 1fr)`)]
-  const minw = 70 + 170 + (acc ? 120 : 0) + 108 + cols.value.reduce((t, c) => t + c.min, 0) + 18 + 6 * (tracks.length - 1)
+  const t = tracksSpec.value
+  const w = (s) => ov.widths[s.key] && Math.max(s.floor, ov.widths[s.key])
+  const tracks = ['70px', ...t.map((s) => (w(s) ? `${w(s)}px` : `minmax(${s.min}px, ${s.fr}fr)`))]
+  const minw = 70 + t.reduce((sum, s) => sum + (w(s) || s.min), 0) + 18 + 6 * (tracks.length - 1)
   return { '--cols': tracks.join(' '), '--minw': minw + 'px' }
 })
+
+// ----- Kéo đổi độ rộng cột -----
+const resizing = ref('')
+function startResize(key, e) {
+  const s = tracksSpec.value.find((x) => x.key === key)
+  const cell = e.currentTarget.parentElement
+  if (!s || !cell) return
+  e.preventDefault()
+  const handle = e.currentTarget, x0 = e.clientX, w0 = cell.getBoundingClientRect().width
+  handle.setPointerCapture(e.pointerId)
+  resizing.value = key
+  const move = (ev) => { ov.widths[key] = Math.round(Math.min(MAX_COL_W, Math.max(s.floor, w0 + ev.clientX - x0))) }
+  const end = () => {
+    resizing.value = ''
+    handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', end); handle.removeEventListener('pointercancel', end)
+  }
+  handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', end)
+}
+// Bấm đúp tay kéo: cột về độ rộng tự động
+const resetWidth = (key) => { delete ov.widths[key] }
+const hasWidths = computed(() => Object.keys(ov.widths).length > 0)
+const resetWidths = () => { ov.widths = {} }
+const RZ_TITLE = 'Kéo để đổi độ rộng cột · bấm đúp để về mặc định'
 
 // ----- Bộ lọc đang áp dụng -----
 const STATUS_LABEL = { on: 'Đang chạy', off: 'Không chạy' }
@@ -312,7 +363,7 @@ async function bulk(on) {
       <div class="fbar">
         <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" :placeholder="`Tìm ${levelName}${multiAcc ? ' hoặc tài khoản' : ''}…`" aria-label="Tìm kiếm" /><kbd>/</kbd></div>
         <span class="sp" />
-        <ColumnsMenu v-model="ov.columns" />
+        <ColumnsMenu v-model="ov.columns" :has-widths="hasWidths" @reset-widths="resetWidths" />
         <Popover v-model="actOpen" align="right" width="320px" label="Hành động hàng loạt">
           <template #trigger="{ toggle: tg }">
             <button type="button" class="acb" :class="{ on: actOpen }" :disabled="!state.objsLoaded" aria-haspopup="menu" :aria-expanded="actOpen" @click="tg">
@@ -370,16 +421,17 @@ async function bulk(on) {
       </EmptyState>
 
       <div v-else class="tscroll" :class="{ dim: ov.loading && !today }">
-        <div class="table" :class="{ hasacc: showAccCol }" :style="gridStyle">
+        <div class="table" :class="{ hasacc: showAccCol, resizing }" :style="gridStyle">
           <div class="hd row">
             <span class="c-sw" />
-            <span class="c-nm"><button type="button" class="sh" :class="{ on: sortKey === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ ov.level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button></span>
-            <span v-if="showAccCol"><button type="button" class="sh" :class="{ on: sortKey === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button></span>
-            <span><button type="button" class="sh" :class="{ on: sortKey === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button></span>
+            <span class="c-nm"><button type="button" class="sh" :class="{ on: sortKey === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ ov.level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'name' }" :title="RZ_TITLE" @pointerdown="startResize('name', $event)" @dblclick="resetWidth('name')" /></span>
+            <span v-if="showAccCol" class="rzc"><button type="button" class="sh" :class="{ on: sortKey === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'account' }" :title="RZ_TITLE" @pointerdown="startResize('account', $event)" @dblclick="resetWidth('account')" /></span>
+            <span class="rzc"><button type="button" class="sh" :class="{ on: sortKey === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'delivery' }" :title="RZ_TITLE" @pointerdown="startResize('delivery', $event)" @dblclick="resetWidth('delivery')" /></span>
             <div class="metrics">
-              <span v-for="c in cols" :key="c.key" class="r">
+              <span v-for="c in cols" :key="c.key" class="r rzc">
                 <button type="button" class="sh" :class="{ on: sortKey === c.key }" :title="sortTitle(c.key)" @click="sortBy(c.key)">{{ c.short || c.label }}<component :is="sortIcon(c.key)" :size="13" /></button>
                 <InfoTip v-if="c.tip" :tip="c.tip" />
+                <i class="rz" :class="{ on: resizing === c.key }" :title="RZ_TITLE" @pointerdown="startResize(c.key, $event)" @dblclick="resetWidth(c.key)" />
               </span>
             </div>
           </div>
@@ -506,6 +558,13 @@ async function bulk(on) {
 .sh svg { opacity: .45; flex: none; }
 .sh:hover { color: var(--text); background: var(--surface-3); } .sh:hover svg { opacity: .8; }
 .sh.on { color: var(--accent); } .sh.on svg { opacity: 1; }
+/* Tay kéo đổi độ rộng: nằm trên khe giữa 2 cột, cao hết dòng tiêu đề */
+.rzc { position: relative; }
+.rz { position: absolute; top: -11px; bottom: -11px; right: -8px; width: 10px; z-index: 3; cursor: col-resize; touch-action: none; }
+.rz::after { content: ''; position: absolute; top: 9px; bottom: 9px; left: 4px; width: 2px; border-radius: 2px; background: var(--border-strong); opacity: 0; transition: opacity .15s, background .15s; }
+.hd:hover .rz::after { opacity: .7; }
+.rz:hover::after, .rz.on::after { opacity: 1; background: var(--accent); }
+.table.resizing, .table.resizing * { cursor: col-resize !important; user-select: none; }
 .hd { position: sticky; top: 0; z-index: 4; padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
 .hd .r { display: inline-flex; justify-content: flex-end; align-items: center; gap: 2px; }
 .item { min-height: 68px; border-bottom: 1px solid var(--border); background: var(--surface); transition: background .15s; }
@@ -559,7 +618,7 @@ async function bulk(on) {
   .c-nm { padding: 0; }
   .c-nm .acc { display: block; }
   .c-ac { display: none; }
-  .metrics { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+  .metrics { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
   .m { align-items: flex-start; } .r { justify-self: start; text-align: left; }
   .ml { display: block; }
   .c-dl { grid-column: 2; margin-top: -6px; }
@@ -578,5 +637,12 @@ async function bulk(on) {
   .search { max-width: none; flex: 1 1 100%; }
   .fbar .sp { display: none; }
   .chips .cnt { margin-left: 0; width: 100%; }
+  /* các lựa chọn Chiến dịch/Nhóm QC và Tất cả/Đang chạy/Không chạy trải hết chiều ngang */
+  .frow { gap: 8px; }
+  .frow > :deep(.seg) { flex: 1 1 100%; }
+  /* số đếm nằm dưới chữ: nút hẹp lại, 3 lựa chọn vừa cả màn 360px */
+  .frow > :deep(.seg) button { flex: 1; flex-direction: column; gap: 1px; padding: 5px 4px; line-height: 1.25; }
+  .msort { flex: 1 1 100%; }
+  .row, .table.hasacc .row { padding: 12px 14px; }
 }
 </style>

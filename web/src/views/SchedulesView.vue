@@ -109,7 +109,7 @@ async function remove(s) {
         <h4>{{ s.name }}</h4>
         <div v-if="scheduleTimes(s).length > 1" class="tlist num">{{ scheduleTimes(s).join(' · ') }}</div>
         <div class="days"><span v-for="d in DAY_ORDER" :key="d" :class="{ on: s.days.includes(d) }">{{ DAY_LABEL[d] }}</span></div>
-        <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describe(s)">Theo điều kiện: {{ describe(s) }}</span><span v-if="s.exclude && s.exclude.length" class="tag">trừ {{ s.exclude.length }} mục</span><span v-if="matchCount(s) != null" class="tag">hiện áp dụng {{ matchCount(s) }}</span></div>
+        <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describe(s)">Theo điều kiện: {{ describe(s) }}</span><span v-if="s.exclude && s.exclude.length" class="tag">trừ {{ s.exclude.length }} mục</span><span v-if="matchCount(s) != null" class="tag">Đang khớp {{ matchCount(s) }} mục</span></div>
         <div v-else class="tags"><span v-for="id in s.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="s.targets.length > 3" class="tag">+{{ s.targets.length - 3 }}</span></div>
         <div class="acts">
           <Btn size="sm" :icon="Play" :action="() => runNow(s)">Chạy ngay</Btn>
@@ -137,7 +137,7 @@ async function remove(s) {
 .presets > span { font-size: 13px; font-weight: 600; margin-right: 4px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13.5px; color: var(--text-2); transition: .18s var(--ease); }
 .chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 16px; }
 .it { padding: 20px; display: flex; flex-direction: column; gap: 12px; transition: transform .2s var(--ease), box-shadow .2s, opacity .2s; }
 .it:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
 .it.off { opacity: .6; }

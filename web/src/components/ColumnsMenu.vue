@@ -1,13 +1,13 @@
 <script setup>
 // Chọn cột hiển thị trong bảng (giống mục "Cột" của Ads Manager). v-model = mảng key cột; luôn giữ ít nhất 1 cột.
 import { ref, computed, watch } from 'vue'
-import { Columns3, RotateCcw } from 'lucide-vue-next'
+import { Columns3, RotateCcw, MoveHorizontal } from 'lucide-vue-next'
 import Popover from './Popover.vue'
 import { COLUMNS, DEFAULT_COLUMNS, cleanColumns } from '../lib/overviewColumns'
 
 // Bản sao cục bộ ghi ngay khi bấm (props chỉ đổi sau khi cha vẽ lại), nên bấm liên tiếp nhiều ô không bị mất lần nào
-const props = defineProps({ modelValue: { type: Array, required: true } })
-const emit = defineEmits(['update:modelValue'])
+const props = defineProps({ modelValue: { type: Array, required: true }, hasWidths: Boolean })
+const emit = defineEmits(['update:modelValue', 'reset-widths'])
 const local = ref([...props.modelValue])
 watch(() => props.modelValue, (v) => { local.value = [...v] })
 const open = ref(false)
@@ -21,6 +21,9 @@ function toggle(key) {
   commit(cleanColumns([...next]))
 }
 const reset = () => commit([...DEFAULT_COLUMNS])
+// Bảng luôn cần ít nhất 1 cột: đang bật hết mà bỏ tích "Tất cả" thì về các cột mặc định
+const allOn = computed(() => local.value.length === COLUMNS.length)
+const toggleAll = () => commit(allOn.value ? [...DEFAULT_COLUMNS] : COLUMNS.map((c) => c.key))
 </script>
 
 <template>
@@ -32,11 +35,16 @@ const reset = () => commit([...DEFAULT_COLUMNS])
     </template>
     <div class="cm">
       <p class="hd">Hiển thị trong bảng</p>
+      <label class="row all">
+        <input type="checkbox" :checked="allOn" :indeterminate="!allOn" @change="toggleAll" />
+        <span>Tất cả các cột</span><em class="num">{{ local.length }}/{{ COLUMNS.length }}</em>
+      </label>
       <label v-for="c in COLUMNS" :key="c.key" class="row" :class="{ lock: on.has(c.key) && on.size === 1 }">
         <input type="checkbox" :checked="on.has(c.key)" :disabled="on.has(c.key) && on.size === 1" @change="toggle(c.key)" />
         <span>{{ c.menu || c.label }}</span>
       </label>
       <button type="button" class="reset" :disabled="isDefault" @click="reset"><RotateCcw :size="14" />Đặt lại mặc định</button>
+      <button type="button" class="reset sub" :disabled="!hasWidths" title="Kéo mép phải tiêu đề cột để đổi độ rộng" @click="emit('reset-widths')"><MoveHorizontal :size="14" />Đặt lại độ rộng cột</button>
     </div>
   </Popover>
 </template>
@@ -54,10 +62,13 @@ const reset = () => commit([...DEFAULT_COLUMNS])
 .hd { margin: 4px 8px 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-3); }
 .row { display: flex; align-items: center; gap: 11px; padding: 8px 10px; border-radius: 9px; cursor: pointer; font-size: 14px; }
 .row:hover { background: var(--surface-2); }
-.row input { accent-color: var(--accent); width: 17px; height: 17px; margin: 0; cursor: pointer; }
+.row input { flex: none; accent-color: var(--accent); width: 17px; height: 17px; margin: 0; cursor: pointer; }
+.row.all { font-weight: 650; border-bottom: 1px solid var(--border); border-radius: 9px 9px 0 0; margin-bottom: 4px; }
+.row.all em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--text-3); }
 .row.lock { opacity: .6; cursor: not-allowed; } .row.lock input { cursor: not-allowed; }
 .reset { display: inline-flex; align-items: center; gap: 7px; width: 100%; margin-top: 6px; padding: 9px 10px; border: 0; border-top: 1px solid var(--border); background: none; color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; border-radius: 0 0 9px 9px; }
 .reset:hover:not(:disabled) { background: var(--accent-soft); }
 .reset:disabled { color: var(--text-3); cursor: default; }
+.reset.sub { margin-top: 0; border-top: 0; }
 @media (max-width: 640px) { .cbtn .lb { display: none; } }
 </style>

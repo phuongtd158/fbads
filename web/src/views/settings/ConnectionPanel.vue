@@ -353,5 +353,15 @@ details summary { cursor: pointer; font-weight: 600; font-size: 14px; } details 
 .input.bad { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
 .wz-enter-active, .wz-leave-active { transition: all .35s var(--ease); }
 .wz-enter-from, .wz-leave-to { opacity: 0; transform: translateY(-10px); }
-@media (max-width: 640px) { .step { flex-direction: column; gap: 10px; padding: 18px; } dt { width: 100px; } }
+@media (max-width: 640px) {
+  .step { flex-direction: column; gap: 10px; padding: 18px; }
+  /* thẻ trạng thái: nhãn nằm trên giá trị để giá trị dài (tên tài khoản, hạn token) không tràn ngang */
+  .st { padding: 18px; gap: 14px; }
+  .ci { width: 42px; height: 42px; border-radius: 14px; }
+  .cb { min-width: 0; }
+  dl > div { flex-direction: column; align-items: flex-start; gap: 3px; }
+  dt { width: auto; font-size: 13px; }
+  dd :deep(.badge) { white-space: normal; }
+  .btns { width: 100%; }
+}
 </style>
