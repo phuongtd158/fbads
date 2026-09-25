@@ -196,7 +196,7 @@ async function api(req, res, url) {
   for (const [name, list] of [['schedules', d.schedules], ['rules', d.rules]]) {
     if (m === 'POST' && p === `/api/${name}`) {
       const b = await readBody(req);
-      const ctx = { objs: fb.peekObjects(), [name]: list };
+      const ctx = { objs: fb.peekObjects(), [name]: list, accountTargets: d.settings.accountTargets || {}, accounts: fb.objectsMeta().accounts };
       const r = name === 'schedules' ? V.validateSchedule(b, ctx) : V.validateRule(b, ctx);
       if (!r.ok) return bad(res, r);
       if (!r.value.id && list.length >= 200) return send(res, 400, { error: 'Đã đạt giới hạn 200 mục. Hãy xoá bớt trước khi thêm mới.' });
@@ -219,7 +219,7 @@ async function api(req, res, url) {
   // Xem trước: rule (chưa lưu) đang khớp camp nào ngay bây giờ — không thay đổi gì
   if (m === 'POST' && p === '/api/rules/preview') {
     const b = await readBody(req);
-    const r = V.validateRule({ ...b, enabled: true }, { objs: fb.peekObjects(), rules: [] });
+    const r = V.validateRule({ ...b, enabled: true }, { objs: fb.peekObjects(), rules: [], accountTargets: d.settings.accountTargets || {}, accounts: fb.objectsMeta().accounts });
     if (!r.ok) return bad(res, r);
     return send(res, 200, { ...(await engine.previewRule(r.value)), warnings: r.warnings });
   }

@@ -8,7 +8,8 @@ import { api } from '../lib/api'
 import { fmt, fmtDec } from '../lib/format'
 import { rich } from '../lib/rich'
 import { hintsFor, kindOf, KIND_LABEL, MODE_LABEL } from '../lib/logHints'
-import { METRICS, RANGE_LABEL } from '../lib/constants'
+import { METRICS, METRIC_SHORT, RANGE_LABEL } from '../lib/constants'
+import { evaluated, opText } from '../lib/ruleText'
 import { undoBlocker } from '../lib/validate'
 import Modal from './Modal.vue'
 import Btn from './Btn.vue'
@@ -59,12 +60,29 @@ const actionText = computed(() => {
   }
   return ''
 })
+const spendTail = (c) => (c.minSpend ? ` · đã chi ${fmt(c.spend)} (≥ ${fmt(c.minSpend)} tối thiểu)` : '')
+// Rule nhiều điều kiện: mỗi điều kiện một dòng kèm giá trị thực tế lúc rule chạy; rule 1 điều kiện / nhật ký cũ: một câu như trước
+const condLines = computed(() => {
+  const c = l.value.condition
+  if (!c || !Array.isArray(c.conditions) || c.conditions.length < 2) return []
+  return c.conditions.map((x) => {
+    const e = evaluated(x)
+    if (e.unknown) return { ok: false, text: `${METRIC_SHORT[x.metric]} = ${e.actual} — tài khoản chưa đặt mục tiêu nên không so được` }
+    const rel = e.hit ? opText(x.op) : x.op === '>' ? 'không lớn hơn' : 'không nhỏ hơn'
+    return { ok: e.hit, text: `${METRIC_SHORT[x.metric]} = ${e.actual} ${rel} ngưỡng ${e.threshold}${e.target ? ` (${e.target})` : ''}` }
+  })
+})
+const condHead = computed(() => {
+  const c = l.value.condition
+  return c ? `Rule khớp khi ${c.match === 'any' ? 'MỘT TRONG' : 'TẤT CẢ'} điều kiện đúng (${RANGE_LABEL[c.range || 'today']}):` : ''
+})
 const cond = computed(() => {
   const c = l.value.condition
   if (!c) return null
+  if (condLines.value.length) return condHead.value + spendTail(c)
   const val = c.actualInf ? '∞ (chưa có kết quả)' : c.actual == null ? '–' : c.metric === 'roas' ? fmtDec(c.actual) : fmt(c.actual)
   const th = c.metric === 'roas' ? c.threshold : fmt(c.threshold)
-  return `${METRICS[c.metric]} (${RANGE_LABEL[c.range || 'today']}) = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}` + (c.minSpend ? ` · đã chi ${fmt(c.spend)} (≥ ${fmt(c.minSpend)} tối thiểu)` : '')
+  return `${METRICS[c.metric]} (${RANGE_LABEL[c.range || 'today']}) = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}` + spendTail(c)
 })
 const stateText = (s) => (s ? ({ ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng' }[s] || s) : '–')
 const rows = computed(() => {
@@ -175,6 +193,7 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
       <section v-if="cond" class="box">
         <h5>Điều kiện rule đã khớp</h5>
         <p>{{ cond }}</p>
+        <ul v-if="condLines.length" class="cl"><li v-for="(x, i) in condLines" :key="i" :class="{ no: !x.ok }"><CheckCircle2 v-if="x.ok" :size="15" /><AlertCircle v-else :size="15" />{{ x.text }}</li></ul>
       </section>
 
       <!-- Trước / sau -->
@@ -240,6 +259,9 @@ dd code { margin-left: 8px; font-weight: 400; }
 .box { margin-bottom: 14px; padding: 14px 16px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
 .box.danger { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
 .box h5 { display: flex; align-items: center; gap: 7px; margin: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--text-2); letter-spacing: .02em; }
+.cl { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.cl li { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--success); }
+.cl li svg { flex: none; margin-top: 3px; } .cl li.no { color: var(--text-3); }
 .box.danger h5 { color: var(--danger); } .box p { margin: 0; font-size: 14.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .hints { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
 .hints li { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; font-size: 14px; line-height: 1.55; color: var(--text-2); }

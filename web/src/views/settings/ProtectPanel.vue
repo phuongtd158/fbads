@@ -10,6 +10,7 @@ import Field from '../../components/Field.vue'
 import Switch from '../../components/Switch.vue'
 import InfoTip from '../../components/InfoTip.vue'
 import Callout from '../../components/Callout.vue'
+import Segmented from '../../components/Segmented.vue'
 
 const s = state.settings
 const f = reactive({
@@ -17,7 +18,20 @@ const f = reactive({
   dailyChangeCapPct: s.dailyChangeCapPct || 30,
   killSwitchEnabled: !!s.killSwitchEnabled,
   dailySpendLimit: s.dailySpendLimit || '',
+  killScope: s.killScope === 'account' ? 'account' : 'total', // tổng mọi tài khoản (như trước) hay từng tài khoản
 })
+const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
+const multiAcc = computed(() => accounts.value.length > 1)
+const mixedCur = computed(() => new Set(accounts.value.map((a) => a.currency).filter(Boolean)).size > 1)
+const scopes = [{ value: 'total', label: 'Tổng mọi tài khoản' }, { value: 'account', label: 'Từng tài khoản' }]
+// Từng tài khoản: mức riêng (Cài đặt → Mục tiêu) hoặc mức chung; số đã chi hôm nay để so
+const ownLimit = (id) => Number(((state.settings.accountTargets || {})[id] || {}).dailySpendLimit) || 0
+const accMeters = computed(() => accounts.value.map((a) => {
+  const limit = ownLimit(a.id) || Number(f.dailySpendLimit) || 0
+  const spend = state.objs.filter((o) => o.level === 'campaign' && o.accountId === a.id).reduce((t, o) => t + o.metrics.spend, 0)
+  return { ...a, limit, spend, own: !!ownLimit(a.id), pct: limit > 0 ? Math.min(100, (spend / limit) * 100) : 0 }
+}))
+const noLimitAnywhere = computed(() => f.killScope === 'account' && accMeters.value.length > 0 && accMeters.value.every((m) => !m.limit))
 const submitted = ref(false)
 const touched = reactive({})
 onMounted(() => ensureObjs())
@@ -68,11 +82,27 @@ async function save() {
       <span class="ic danger"><ShieldAlert :size="20" /></span>
       <div class="rb">
         <h4>Dừng khẩn khi chi tiêu vượt mức <InfoTip tip="killSwitch" /></h4>
-        <p class="muted">Khi <b>tổng chi tiêu hôm nay</b> của mọi camp đạt mức này, tool tự tắt tất cả camp đang chạy (mỗi ngày tối đa một lần) và báo qua Telegram. Kiểm tra theo chu kỳ rule ở Cài đặt → Chung.</p>
-        <Field label="Mức chi tiêu tối đa mỗi ngày" :error="show('dailySpendLimit')">
+        <p class="muted">Khi chi tiêu hôm nay đạt mức này, tool tự tắt các camp đang chạy (mỗi ngày tối đa một lần) và báo qua Telegram. Kiểm tra theo chu kỳ rule ở Cài đặt → Chung.</p>
+        <div v-if="multiAcc" class="scope">
+          <Segmented v-model="f.killScope" :options="scopes" size="sm" />
+          <p class="muted">
+            <template v-if="f.killScope === 'total'">Cộng chi tiêu của <b>mọi tài khoản</b>, vượt mức thì tắt <b>tất cả</b> camp đang chạy.</template>
+            <template v-else>Mỗi tài khoản có mức riêng (đặt ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>), chưa đặt thì dùng mức chung bên dưới. Tài khoản nào vượt mức thì chỉ tắt camp của tài khoản đó, các tài khoản khác không bị ảnh hưởng.</template>
+          </p>
+        </div>
+        <Callout v-if="multiAcc && mixedCur && f.killScope === 'total'" tone="warning">Các tài khoản dùng <b>nhiều loại tiền</b> khác nhau nên tổng chi tiêu không có nghĩa. Nên chọn “Từng tài khoản”.</Callout>
+        <Callout v-if="noLimitAnywhere" tone="warning">Chưa có mức nào (không có mức chung, không tài khoản nào có mức riêng) nên dừng khẩn sẽ không làm gì.</Callout>
+        <Field :label="f.killScope === 'account' ? 'Mức chung cho mỗi tài khoản chưa đặt mức riêng' : 'Mức chi tiêu tối đa mỗi ngày'" :error="show('dailySpendLimit')">
           <input v-model="f.dailySpendLimit" class="input num lim" type="number" min="0" step="10000" placeholder="Ví dụ 3000000" @blur="touched.dailySpendLimit = true" />
         </Field>
-        <div v-if="hasData && Number(f.dailySpendLimit) > 0" class="meter">
+        <div v-if="hasData && f.killScope === 'account' && multiAcc" class="ameters">
+          <div v-for="m in accMeters" :key="m.id" class="am">
+            <div class="ah"><b>{{ m.name }}</b><small class="faint">{{ m.limit ? (m.own ? 'mức riêng' : 'mức chung') : 'chưa có mức' }}</small></div>
+            <div v-if="m.limit" class="bar"><i :style="{ width: m.pct + '%' }" :class="{ hot: m.pct >= 80 }" /></div>
+            <small class="muted">Hôm nay đã chi <b class="num">{{ fmt(m.spend) }}</b><template v-if="m.limit"> / {{ fmt(m.limit) }} ({{ Math.round(m.pct) }}%)</template> {{ m.currency }}</small>
+          </div>
+        </div>
+        <div v-else-if="hasData && Number(f.dailySpendLimit) > 0 && f.killScope === 'total'" class="meter">
           <div class="bar"><i :style="{ width: pct + '%' }" :class="{ hot: pct >= 80 }" /></div>
           <small class="muted">Hôm nay đã chi <b class="num">{{ fmt(spendToday) }}</b> / {{ fmt(f.dailySpendLimit) }} ({{ Math.round(pct) }}%)</small>
         </div>
@@ -95,6 +125,8 @@ h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 8px; font-s
 .ic.danger { background: var(--danger-soft); color: var(--danger); }
 .rb { flex: 1; min-width: 0; } h4 { font-size: 15.5px; margin-bottom: 4px; letter-spacing: -.01em; } .rb > p { font-size: 14px; margin-bottom: 12px; line-height: 1.6; }
 .inl { display: flex; gap: 10px; align-items: center; } .inl .input { width: 110px; } .lim { max-width: 240px; }
+.scope { margin: 2px 0 12px; } .scope .muted { margin: 8px 0 0; font-size: 13.5px; }
+.ameters { display: grid; gap: 12px; margin: -2px 0 6px; } .am .ah { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; font-size: 14px; }
 .meter { margin: -4px 0 4px; } .bar { height: 7px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-bottom: 6px; }
 .bar i { display: block; height: 100%; background: var(--accent-grad); border-radius: 99px; transition: width .5s var(--ease); } .bar i.hot { background: linear-gradient(90deg, var(--warning), var(--danger)); }
 @media (max-width: 640px) { .row { flex-wrap: wrap; } }

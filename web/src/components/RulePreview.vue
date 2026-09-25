@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { Loader2, CheckCircle2, MinusCircle, SkipForward, CircleAlert, Eye, Bell } from 'lucide-vue-next'
 import { fmt, fmtDec } from '../lib/format'
-import { METRICS, RANGE_LABEL } from '../lib/constants'
+import { METRICS, METRIC_SHORT, RANGE_LABEL } from '../lib/constants'
+import { evaluated, matchWord } from '../lib/ruleText'
 import Badge from './Badge.vue'
 import Callout from './Callout.vue'
 
@@ -12,6 +13,14 @@ const props = defineProps({ data: Object, rule: Object, loading: Boolean, error:
 const order = { match: 0, error: 1, skip: 2, nochange: 3, nomatch: 4 }
 const items = computed(() => [...((props.data && props.data.items) || [])].sort((a, b) => order[a.status] - order[b.status]))
 const val = (i) => (i.inf ? '∞' : i.value == null ? '–' : props.rule && props.rule.metric === 'roas' ? fmtDec(i.value) : fmt(i.value))
+// Từng điều kiện với giá trị thực tế: "CPA 250.000 > 150.000 ✓ VÀ ROAS 2,00 < 1,50 ✗" (? = tài khoản chưa đặt mục tiêu)
+const line = (i) => {
+  if (!i.conds || !i.conds.length) return `${METRICS[props.rule.metric]} = ${val(i)}`
+  return i.conds.map((c) => {
+    const e = evaluated(c)
+    return `${METRIC_SHORT[c.metric]} ${e.actual} ${e.op} ${e.threshold}${e.target ? ` (${e.target})` : ''} ${e.unknown ? '?' : e.hit ? '✓' : '✗'}`
+  }).join(` ${matchWord(props.rule && props.rule.match)} `)
+}
 const meta = {
   match: { tone: 'success', label: 'Sẽ tác động', icon: CheckCircle2 },
   error: { tone: 'danger', label: 'Sẽ lỗi', icon: CircleAlert },
@@ -48,9 +57,9 @@ const modeNote = computed(() => {
           <component :is="meta[i.status].icon" :size="17" class="ic" />
           <div class="tx">
             <b>{{ i.name }}<Badge v-if="i.learning" tone="info">Đang học</Badge></b>
-            <small v-if="i.status === 'match'" class="muted"><Bell v-if="i.result && i.result.notify" :size="12" /> {{ METRICS[rule.metric] }} = <b>{{ val(i) }}</b> · {{ i.result ? i.result.detail : '' }}</small>
-            <small v-else-if="i.reason" class="muted"><template v-if="i.hit">{{ METRICS[rule.metric] }} = <b>{{ val(i) }}</b> · </template>{{ i.reason }}</small>
-            <small v-else class="faint">{{ METRICS[rule.metric] }} = {{ val(i) }} · chi tiêu {{ fmt(i.spend) }}</small>
+            <small v-if="i.status === 'match'" class="muted"><Bell v-if="i.result && i.result.notify" :size="12" /> <b>{{ line(i) }}</b> · {{ i.result ? i.result.detail : '' }}</small>
+            <small v-else-if="i.reason" class="muted"><template v-if="i.hit || i.code === 'notarget'"><b>{{ line(i) }}</b> · </template>{{ i.reason }}</small>
+            <small v-else class="faint">{{ line(i) }} · chi tiêu {{ fmt(i.spend) }}</small>
           </div>
           <Badge :tone="meta[i.status].tone">{{ meta[i.status].label }}</Badge>
         </li>

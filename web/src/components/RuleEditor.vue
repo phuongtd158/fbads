@@ -1,9 +1,9 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { Check, Eye } from 'lucide-vue-next'
+import { Check, Eye, Plus, X } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { METRICS, RANGES } from '../lib/constants'
-import { validateRule } from '../lib/validate'
+import { validateRule, MAX_CONDITIONS, TARGET_METRICS } from '../lib/validate'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
 import Modal from './Modal.vue'
@@ -17,7 +17,7 @@ import RulePreview from './RulePreview.vue'
 const props = defineProps({ modelValue: Boolean, item: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const blank = () => ({ name: '', metric: 'cpa', op: '>', range: 'last_3d', value: 150000, minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, from: '', to: '', allActive: true, level: 'campaign', targets: [], enabled: true })
+const blank = () => ({ name: '', conditions: [{ metric: 'cpa', op: '>', value: 150000 }], match: 'all', range: 'last_3d', minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, from: '', to: '', allActive: true, accountIds: [], level: 'campaign', targets: [], enabled: true })
 const f = ref(blank())
 const scope = ref('all')
 const submitted = ref(false)
@@ -29,7 +29,12 @@ const pvError = ref('')
 watch(() => props.modelValue, (open) => {
   if (!open) return
   pv.value = null; pvError.value = ''
-  f.value = { ...blank(), ...JSON.parse(JSON.stringify(props.item || {})) }
+  const item = JSON.parse(JSON.stringify(props.item || {}))
+  f.value = { ...blank(), ...item }
+  // rule cũ / mẫu cũ chỉ có metric/op/value ở ngoài cùng → thành 1 điều kiện
+  f.value.conditions = (item.conditions && item.conditions.length ? item.conditions : item.metric ? [{ metric: item.metric, op: item.op, value: item.value }] : blank().conditions).map((c) => ({ ...c }))
+  f.value.match = item.match === 'any' ? 'any' : 'all'
+  f.value.accountIds = [...(item.accountIds || [])]
   f.value.maxBudget = f.value.maxBudget || ''; f.value.minBudget = f.value.minBudget || ''
   scope.value = f.value.allActive ? 'all' : 'pick'
   submitted.value = false
@@ -38,8 +43,25 @@ watch(() => props.modelValue, (open) => {
 
 // Kiểm tra theo thời gian thực bằng đúng luật của server
 const objs = computed(() => (state.objsLoaded && state.objs.length ? state.objs : null))
-const check = computed(() => validateRule({ ...f.value, allActive: scope.value === 'all' }, { objs: objs.value, rules: state.rules }))
+const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
+const multiAcc = computed(() => accounts.value.length > 1)
+const check = computed(() => validateRule({ ...f.value, allActive: scope.value === 'all' }, { objs: objs.value, rules: state.rules, accountTargets: state.settings.accountTargets || {}, accounts: accounts.value.length ? accounts.value : null }))
 const show = (k) => (submitted.value || touched[k] ? check.value.errors[k] : '')
+
+// ----- Điều kiện -----
+const cErr = (i, field) => (submitted.value || touched[`c${i}`] ? check.value.errors[`c${i}.${field}`] : '')
+const cErrors = (i) => ['metric', 'op', 'value'].map((k) => cErr(i, k)).filter(Boolean)
+const condsError = computed(() => (submitted.value ? check.value.errors.conditions : ''))
+const canTarget = (c) => TARGET_METRICS.includes(c.metric)
+function addCond() {
+  if (f.value.conditions.length < MAX_CONDITIONS) f.value.conditions.push({ metric: 'roas', op: '<', value: 1.5 })
+}
+const removeCond = (i) => { if (f.value.conditions.length > 1) f.value.conditions.splice(i, 1) }
+function onMetric(c) { if (!canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS so được với mục tiêu
+function onMode(c) { if (c.vs === 'target') { c.factor = c.factor || 100 } else { c.vs = ''; delete c.factor } }
+const modes = [{ value: '', label: 'Số cụ thể' }, { value: 'target', label: '% mục tiêu' }]
+const matchOptions = [{ value: 'all', label: 'Tất cả điều kiện đúng (VÀ)' }, { value: 'any', label: 'Một trong các điều kiện đúng (HOẶC)' }]
+const toggleAcc = (id) => { const s = new Set(f.value.accountIds); s.has(id) ? s.delete(id) : s.add(id); f.value.accountIds = [...s] }
 const showTargets = computed(() => (submitted.value ? check.value.errors.targets : ''))
 const touch = (k) => { touched[k] = true }
 // các ô trần / sàn / % nằm chung một khối: gom lỗi lại
@@ -84,11 +106,23 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
       <Segmented v-model="f.range" :options="RANGES" block />
     </Field>
 
-    <Field label="Nếu" :error="show('value')">
-      <div class="inl">
-        <select v-model="f.metric" class="input sel"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
-        <Segmented v-model="f.op" :options="ops" />
-        <input v-model="f.value" type="number" step="any" min="0" class="input val" @input="touch('value')" />
+    <Field label="Nếu" :error="condsError">
+      <div class="conds">
+        <div v-if="f.conditions.length > 1" class="mrow"><span>Rule chạy khi</span><Segmented v-model="f.match" :options="matchOptions" size="sm" /></div>
+        <div v-for="(c, i) in f.conditions" :key="i" class="crow" :class="{ bad: cErrors(i).length }">
+          <span v-if="i > 0" class="join">{{ f.match === 'any' ? 'HOẶC' : 'VÀ' }}</span>
+          <div class="inl">
+            <select v-model="c.metric" class="input sel" :aria-label="'Số liệu điều kiện ' + (i + 1)" @change="onMetric(c); touch('c' + i)"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
+            <Segmented v-model="c.op" :options="ops" size="sm" />
+            <select v-if="canTarget(c)" v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c)"><option v-for="m in modes" :key="m.value" :value="m.value">{{ m.label }}</option></select>
+            <div v-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
+            <input v-else v-model="c.value" type="number" step="any" min="0" class="input val" aria-label="Ngưỡng" @input="touch('c' + i)" />
+            <button v-if="f.conditions.length > 1" type="button" class="rm" :aria-label="'Bỏ điều kiện ' + (i + 1)" @click="removeCond(i)"><X :size="15" /></button>
+          </div>
+          <p v-if="c.vs === 'target'" class="th">Ngưỡng = <b>{{ c.metric === 'roas' ? 'ROAS' : 'CPA' }} mục tiêu</b> của từng tài khoản × {{ c.factor || 100 }}%. Đặt mục tiêu ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>.</p>
+          <p v-for="m in cErrors(i)" :key="m" class="e">{{ m }}</p>
+        </div>
+        <Btn v-if="f.conditions.length < MAX_CONDITIONS" size="sm" :icon="Plus" class="addc" @click="addCond">Thêm điều kiện</Btn>
       </div>
     </Field>
 
@@ -112,6 +146,11 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
     <Field label="Áp dụng cho" :error="showTargets">
       <Segmented v-model="scope" :options="scopes" block />
       <div v-if="scope === 'pick'" style="margin-top: 12px"><TargetPicker v-model="f.targets" level="campaign" /></div>
+      <div v-else-if="multiAcc" class="accs">
+        <span class="lb">Trong tài khoản</span>
+        <button type="button" class="chip" :class="{ on: !f.accountIds.length }" @click="f.accountIds = []">Tất cả tài khoản</button>
+        <button v-for="a in accounts" :key="a.id" type="button" class="chip" :class="{ on: f.accountIds.includes(a.id) }" :aria-pressed="f.accountIds.includes(a.id)" @click="toggleAcc(a.id)">{{ a.name }}</button>
+      </div>
     </Field>
 
     <Callout v-for="w in check.warnings" :key="w" tone="warning">{{ w }}</Callout>
@@ -128,7 +167,22 @@ const scopes = [{ value: 'all', label: 'Tất cả camp đang chạy' }, { value
 
 <style scoped>
 .inl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.sel { width: 150px; } .val { width: 150px; }
+.sel { width: 190px; } .val { width: 130px; } .vs { width: 130px; }
+.conds { display: grid; gap: 10px; }
+.mrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-2); font-weight: 600; }
+.crow { position: relative; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.crow.bad { box-shadow: inset 0 0 0 1px var(--danger); }
+.join { display: inline-block; margin-bottom: 8px; padding: 1px 10px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.rm { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 9px; background: transparent; color: var(--text-3); cursor: pointer; }
+.rm:hover { background: var(--danger-soft); color: var(--danger); }
+.crow .e { margin: 8px 0 0; color: var(--danger); font-size: 13px; line-height: 1.45; }
+.th { margin: 8px 0 0; font-size: 13px; color: var(--text-3); line-height: 1.5; } .th b { color: var(--text-2); }
+.addc { justify-self: start; }
+.accs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.accs .lb { font-size: 13px; font-weight: 600; color: var(--text-2); margin-right: 2px; }
+.chip { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); padding: 6px 13px; border-radius: 99px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: .15s; }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .adj { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 12px; margin-top: 12px; padding: 14px; border-radius: var(--r-md); background: var(--surface-2); }
 .adj.bad { box-shadow: inset 0 0 0 1px var(--danger); }

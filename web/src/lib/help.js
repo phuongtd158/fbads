@@ -70,19 +70,22 @@ export const TOPICS = [
       { t: 'p', text: 'Rule cho tool tự quyết định dựa trên **số liệu của khoảng thời gian bạn chọn** (hôm nay, hôm qua, 3 hoặc 7 ngày gần nhất) của từng camp. Cứ mỗi vài phút (mặc định 15 phút, đổi được ở Cài đặt → Chung), tool kiểm tra từng camp đang chạy và làm theo rule nếu điều kiện đúng.' },
       { t: 'table', head: ['Ô trong form', 'Ý nghĩa'], rows: [
         ['Khoảng thời gian', 'Số liệu tính trong khoảng nào. Chuyển đổi thường về trễ nên khi **tắt hoặc giảm** camp nên dùng “3 ngày”, tránh chỉ dựa vào hôm nay.'],
-        ['Nếu (số liệu)', 'Chọn CPA, ROAS, Chi tiêu hoặc Số kết quả, rồi “lớn hơn” hoặc “nhỏ hơn” một giá trị.'],
+        ['Nếu (số liệu)', 'Chọn CPA, ROAS, Chi tiêu, Số kết quả, CTR, CPC hoặc CPM, rồi “lớn hơn” hoặc “nhỏ hơn” một giá trị. Bấm **Thêm điều kiện** (tối đa 5) rồi chọn **VÀ** (tất cả đều đúng) hoặc **HOẶC** (một trong số đó đúng). Ví dụ: CPA cao **VÀ** ROAS thấp mới tắt.'],
+        ['% mục tiêu', 'Với CPA và ROAS, thay vì số cụ thể bạn chọn **% mục tiêu** (ví dụ CPA lớn hơn 120% mục tiêu). Mục tiêu đặt riêng cho từng tài khoản ở **Cài đặt → Mục tiêu**, nên một rule dùng chung được cho nhiều tài khoản có mức hoà vốn khác nhau. Tài khoản chưa đặt mục tiêu sẽ bị rule bỏ qua (Nhật ký ghi rõ).'],
         ['Chi tiêu tối thiểu', 'Chỉ xét camp đã tiêu ít nhất số tiền này. **Rất quan trọng** để không tắt nhầm camp mới chạy, chưa đủ dữ liệu.'],
         ['Thì', 'Tắt camp, Tăng/Giảm ngân sách theo %, hoặc **Chỉ thông báo** (không đổi camp, chỉ ghi Nhật ký và gửi Telegram).'],
         ['Trần / Sàn ngân sách', 'Giới hạn để ngân sách không tăng quá cao hoặc giảm quá thấp sau nhiều lần áp dụng.'],
         ['Không lặp lại trong (giờ)', 'Sau khi rule đã áp dụng cho một camp, chờ số giờ này mới áp dụng lại cho chính camp đó. Tránh tăng/giảm liên tục.'],
         ['Khung giờ', 'Chỉ chạy rule trong khoảng giờ này (để trống là chạy cả ngày).'],
-        ['Áp dụng cho', 'Tất cả camp đang chạy, hoặc chọn từng camp cụ thể.'],
+        ['Áp dụng cho', 'Tất cả camp đang chạy, hoặc chọn từng camp cụ thể. Khi chọn “tất cả” và có nhiều tài khoản, có thể giới hạn **Trong tài khoản** nào.'],
       ] },
       { t: 'example', title: 'Ví dụ rule hay dùng', items: [
         '**Tắt camp CPA cao:** nếu CPA trong 3 ngày gần nhất lớn hơn 150.000 và đã chi ≥ 300.000 thì tắt camp.',
         '**Tắt camp không ra kết quả:** nếu số kết quả trong 3 ngày nhỏ hơn 1 và đã chi ≥ 500.000 thì tắt camp.',
         '**Tăng khi ROAS tốt:** nếu ROAS lớn hơn 3 và đã chi ≥ 200.000 thì tăng 20% ngân sách, trần 2.000.000, nghỉ 24 giờ.',
         '**Giảm khi ROAS thấp:** nếu ROAS nhỏ hơn 1,5 thì giảm 20% ngân sách, nghỉ 24 giờ.',
+        '**Tắt khi CPA cao VÀ ROAS thấp:** nếu CPA lớn hơn 150.000 **và** ROAS nhỏ hơn 1,5 thì tắt camp (tránh tắt camp CPA cao nhưng vẫn lãi).',
+        '**Theo mục tiêu từng tài khoản:** nếu CPA lớn hơn 120% mục tiêu thì tắt camp, dùng chung cho mọi tài khoản.',
       ] },
       { t: 'tips', items: [
         'Luôn đặt **chi tiêu tối thiểu**. Không có nó, camp vừa chạy vài phút chưa ra kết quả sẽ bị tắt oan.',
@@ -131,7 +134,7 @@ export const TOPICS = [
       { t: 'table', head: ['Tính năng', 'Làm gì', 'Áp dụng cho'], rows: [
         ['Bỏ qua camp đang học', 'Không để **rule** tăng/giảm ngân sách camp đang trong giai đoạn học, vì Facebook sẽ học lại từ đầu.', 'Rule đổi ngân sách'],
         ['Giới hạn thay đổi mỗi ngày', 'Tổng % ngân sách một camp được đổi trong ngày, tính trên ngân sách đầu ngày. Ví dụ 30%: gốc 500.000 thì tối đa lên 650.000 hoặc xuống 350.000 dù rule chạy nhiều lần.', 'Rule đổi ngân sách (lịch do bạn đặt không bị giới hạn)'],
-        ['Dừng khẩn', 'Khi tổng chi tiêu hôm nay của mọi camp đạt mức bạn đặt, tự **tắt tất cả camp đang chạy** và báo Telegram. Mỗi ngày tối đa một lần.', 'Toàn bộ tài khoản'],
+        ['Dừng khẩn', 'Khi chi tiêu hôm nay đạt mức bạn đặt, tự **tắt camp đang chạy** và báo Telegram. Mỗi ngày tối đa một lần. Có hai cách: **Tổng mọi tài khoản** (cộng chi tiêu rồi tắt tất cả) hoặc **Từng tài khoản** (mỗi tài khoản một mức, vượt mức nào chỉ tắt camp của tài khoản đó; mức riêng đặt ở Cài đặt → Mục tiêu, chưa đặt thì dùng mức chung).', 'Toàn bộ hoặc từng tài khoản'],
       ] },
       { t: 'tips', items: [
         'Camp đang học có nhãn **Đang học** ở trang Tổng quan.',
@@ -291,6 +294,6 @@ export const TIPS = {
   notify: { text: 'Rule chỉ thông báo không đổi camp, chỉ ghi Nhật ký và gửi Telegram. Rất hợp để thử rule vài ngày trước khi cho nó tự hành động.', topic: 'rules' },
   skipLearning: { text: 'Camp mới hoặc vừa đổi lớn sẽ vào giai đoạn học. Đổi ngân sách lúc này khiến Facebook học lại từ đầu, nên rule sẽ bỏ qua các camp đó.', topic: 'protect' },
   dailyCap: { text: 'Tổng % ngân sách một camp được phép thay đổi trong một ngày do rule, tính trên ngân sách đầu ngày. Chống việc tăng/giảm dồn dập nhiều lần.', topic: 'protect' },
-  killSwitch: { text: 'Khi tổng chi tiêu hôm nay của mọi camp vượt mức bạn đặt, tool tự tắt tất cả camp đang chạy (mỗi ngày tối đa một lần).', topic: 'protect' },
+  killSwitch: { text: 'Khi chi tiêu hôm nay vượt mức bạn đặt (tổng mọi tài khoản, hoặc từng tài khoản), tool tự tắt các camp đang chạy (mỗi ngày tối đa một lần).', topic: 'protect' },
   interval: { text: 'Tool kiểm tra toàn bộ rule mỗi khoảng phút này. Tối thiểu 5 phút.', topic: 'rules' },
 }

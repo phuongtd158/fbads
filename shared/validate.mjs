@@ -20,11 +20,15 @@ export const LIMITS = {
 
 // Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
 export const scheduleTimes = (s) => (Array.isArray(s && s.times) ? s.times.map(String) : s && s.time ? [String(s.time)] : [])
-const METRICS = ['cpa', 'roas', 'spend', 'results']
+const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm']
+export const MAX_CONDITIONS = 5 // một rule tối đa 5 điều kiện
+export const TARGET_METRICS = ['cpa', 'roas'] // số liệu so được với "mục tiêu" đặt theo tài khoản (Cài đặt → Mục tiêu)
+// Các điều kiện của rule. Rule cũ chỉ có metric/op/value ở ngoài cùng → coi như 1 điều kiện. Điều kiện đầu luôn được chép ra 3 trường cũ.
+export const conditionsOf = (r) => (r && Array.isArray(r.conditions) && r.conditions.length ? r.conditions : r && r.metric ? [{metric: r.metric, op: r.op, value: r.value}] : [])
 // Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
 export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
 export const RANGE_LABEL = {today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất'}
-const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả'}
+const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM'}
 const isBlank = (v) => v === '' || v === null || v === undefined
 const num = (v) => (isBlank(v) ? NaN : Number(v))
 const uniq = (a) => [...new Set(a)]
@@ -197,32 +201,59 @@ function condOverlap(a, b) {
 }
 
 export function validateRule(input = {}, ctx = {}) {
-    const {objs = null, rules = []} = ctx
+    const {objs = null, rules = [], accountTargets = null, accounts = null} = ctx
     const e = {}, w = []
     const name = String(input.name ?? '').trim()
     if (name.length > LIMITS.nameMax) e.name = `Tên tối đa ${LIMITS.nameMax} ký tự`
 
-    const metric = input.metric
-    if (!METRICS.includes(metric)) e.metric = 'Số liệu không hợp lệ'
-    const op = input.op === '<' ? '<' : input.op === '>' ? '>' : null
-    if (!op) e.op = 'Phép so sánh không hợp lệ'
+    // ----- Điều kiện (1..5), gộp bằng VÀ / HOẶC. Lỗi của điều kiện thứ i nằm ở khoá `c{i}.{trường}`; điều kiện đầu còn ghi ra khoá cũ (metric/op/value).
+    const rawConds = Array.isArray(input.conditions) && input.conditions.length ? input.conditions : [{metric: input.metric, op: input.op, value: input.value}]
+    if (rawConds.length > MAX_CONDITIONS) e.conditions = `Tối đa ${MAX_CONDITIONS} điều kiện cho mỗi rule`
+    const put = (i, field, msg) => { e[`c${i}.${field}`] = msg; if (i === 0) e[field] = msg }
+    const conds = rawConds.slice(0, MAX_CONDITIONS).map((c0, i) => {
+        const c = c0 || {}
+        const metric = c.metric
+        if (!METRICS.includes(metric)) put(i, 'metric', 'Số liệu không hợp lệ')
+        const op = c.op === '<' ? '<' : c.op === '>' ? '>' : null
+        if (!op) put(i, 'op', 'Phép so sánh không hợp lệ')
+        if (c.vs === 'target') { // so với mục tiêu của từng tài khoản: ngưỡng = mục tiêu × factor%
+            if (!TARGET_METRICS.includes(metric)) put(i, 'metric', 'Chỉ CPA và ROAS so được với mục tiêu')
+            const factor = isBlank(c.factor) ? 100 : num(c.factor)
+            if (!Number.isFinite(factor) || factor <= 0 || factor > 1000) put(i, 'value', 'Phần trăm so với mục tiêu phải từ 1 đến 1000')
+            return {metric, op, vs: 'target', factor: Number.isFinite(factor) ? factor : 100, value: 0}
+        }
+        const value = num(c.value)
+        if (!Number.isFinite(value)) put(i, 'value', 'Nhập ngưỡng so sánh')
+        else if (value < 0) put(i, 'value', 'Ngưỡng không được âm')
+        else if (['cpa', 'spend', 'cpc', 'cpm'].includes(metric) && op === '>' && value <= 0) put(i, 'value', `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`)
+        else if (metric === 'roas' && value > 100) put(i, 'value', 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại')
+        else if (metric === 'ctr' && value > 100) put(i, 'value', 'CTR là phần trăm, tối đa 100')
+        return {metric, op, value: Number.isFinite(value) ? value : 0}
+    })
+    const first = conds[0] || {}
+    const metric = first.metric, op = first.op, value = first.value
+    const match = input.match === 'any' ? 'any' : 'all'
+    // Điều kiện tự mâu thuẫn (VÀ): cùng một số liệu vừa phải lớn hơn a vừa nhỏ hơn b mà a ≥ b thì không bao giờ khớp
+    if (match === 'all' && !Object.keys(e).length) {
+        for (const m of uniq(conds.filter((c) => c.vs !== 'target').map((c) => c.metric))) {
+            const same = conds.filter((c) => c.metric === m && c.vs !== 'target')
+            const lo = Math.max(...same.filter((c) => c.op === '>').map((c) => c.value), -Infinity)
+            const hi = Math.min(...same.filter((c) => c.op === '<').map((c) => c.value), Infinity)
+            if (lo >= hi) { w.push(`Các điều kiện về ${METRIC_LABEL[m]} mâu thuẫn nhau (vừa lớn hơn ${lo}, vừa nhỏ hơn ${hi}) nên rule sẽ không bao giờ khớp.`); break }
+        }
+    }
 
     const range = isBlank(input.range) ? 'today' : RANGES.includes(input.range) ? input.range : null
     if (!range) e.range = 'Khoảng thời gian không hợp lệ'
 
-    const value = num(input.value)
-    if (!Number.isFinite(value)) e.value = 'Nhập ngưỡng so sánh'
-    else if (value < 0) e.value = 'Ngưỡng không được âm'
-    else if ((metric === 'cpa' || metric === 'spend') && op === '>' && value <= 0) e.value = `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`
-    else if (metric === 'roas' && value > 100) e.value = 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại'
-
+    const hasDataMetric = conds.some((c) => c.metric && c.metric !== 'spend')
     const minSpend = isBlank(input.minSpend) ? 0 : num(input.minSpend)
     if (!Number.isFinite(minSpend) || minSpend < 0) e.minSpend = 'Chi tiêu tối thiểu phải là số không âm'
-    else if (metric && metric !== 'spend' && minSpend <= 0) e.minSpend = 'Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.'
+    else if (hasDataMetric && minSpend <= 0) e.minSpend = 'Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.'
 
     const action = input.action
     if (!['pause', 'increase', 'decrease', 'notify'].includes(action)) e.action = 'Hành động không hợp lệ'
-    if (range === 'today' && metric && metric !== 'spend' && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
+    if (range === 'today' && hasDataMetric && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
     let pct = num(input.pct)
     if (action === 'increase' || action === 'decrease') {
         if (!Number.isFinite(pct) || pct <= 0) e.pct = 'Nhập % thay đổi lớn hơn 0'
@@ -261,13 +292,35 @@ export function validateRule(input = {}, ctx = {}) {
         }
     }
 
-    // Cảnh báo mâu thuẫn với rule khác đang bật
+    // Phạm vi tài khoản (chỉ khi áp dụng cho "tất cả camp đang chạy"): trống = mọi tài khoản đang quản lý
+    const accountIds = allActive ? uniq((Array.isArray(input.accountIds) ? input.accountIds : []).map((x) => String(x).trim()).filter(Boolean)) : []
+    if (accountIds.length > LIMITS.accountsMax) e.accountIds = `Tối đa ${LIMITS.accountsMax} tài khoản`
+    if (accounts && accountIds.length) {
+        const gone = accountIds.filter((id) => !accounts.some((a) => a.id === id))
+        if (gone.length) w.push(`Rule đang giới hạn theo tài khoản ${gone.slice(0, 3).join(', ')} nhưng tài khoản này không còn được quản lý, nên không camp nào được xét.`)
+    }
+    // Điều kiện so với mục tiêu: mỗi tài khoản trong phạm vi phải có mục tiêu tương ứng, không thì rule bỏ qua camp của tài khoản đó
+    const tcs = conds.filter((c) => c.vs === 'target')
+    if (tcs.length && accountTargets && accounts) {
+        const inScope = accountIds.length ? accountIds
+            : allActive ? accounts.map((a) => a.id)
+                : uniq(targets.map((id) => ((objs || []).find((o) => o.id === id) || {}).accountId).filter(Boolean))
+        for (const id of inScope) {
+            const missing = uniq(tcs.map((c) => c.metric)).filter((m) => !(Number((accountTargets[id] || {})[m]) > 0))
+            if (!missing.length) continue
+            const nm = (accounts.find((a) => a.id === id) || {}).name || id
+            w.push(`Tài khoản “${nm}” chưa đặt mục tiêu ${missing.map((m) => METRIC_LABEL[m]).join(', ')}: rule sẽ bỏ qua camp của tài khoản này (đặt ở Cài đặt → Mục tiêu).`)
+        }
+    }
+
+    // Cảnh báo mâu thuẫn với rule khác đang bật (chỉ so được khi cả hai rule chỉ có 1 điều kiện số cụ thể)
     const enabled = input.enabled !== false
-    if (enabled && !e.metric && !e.op && !e.value && !e.action) {
+    const simple = (r) => conditionsOf(r).length === 1 && conditionsOf(r)[0].vs !== 'target'
+    if (enabled && !e.metric && !e.op && !e.value && !e.action && conds.length === 1 && conds[0].vs !== 'target') {
         const kind = (a) => (a === 'increase' ? 'up' : 'down') // pause & decrease đều là "giảm chi"
         for (const o of rules) {
             if (o.id && o.id === input.id) continue
-            if (o.enabled === false || o.metric !== metric || !(o.op === '>' || o.op === '<')) continue
+            if (o.enabled === false || !simple(o) || o.metric !== metric || !(o.op === '>' || o.op === '<')) continue
             if (o.action === 'notify' || action === 'notify') continue // rule chỉ thông báo không gây mâu thuẫn
             const scopeOverlap = allActive || o.allActive !== false || inter(targets, o.targets || []).length > 0
             if (!scopeOverlap) continue
@@ -281,10 +334,13 @@ export function validateRule(input = {}, ctx = {}) {
     return done(e, w, {
         ...(input.id ? {id: String(input.id)} : {}),
         name: name || 'Rule mới',
+        // 3 trường cũ (metric/op/value) = điều kiện đầu tiên, để phần đọc kiểu cũ vẫn chạy
         metric,
         op,
-        range: range || 'today',
         value: Number.isFinite(value) ? value : 0,
+        conditions: conds,
+        match,
+        range: range || 'today',
         minSpend: Number.isFinite(minSpend) ? minSpend : 0,
         action,
         pct: Number.isFinite(pct) ? pct : 0,
@@ -295,6 +351,7 @@ export function validateRule(input = {}, ctx = {}) {
         to: from && to ? to : '',
         allActive,
         level: 'campaign',
+        accountIds,
         targets: allActive ? [] : targets,
         enabled,
     })
@@ -423,11 +480,40 @@ export function validateSettings(patch = {}, current = {}) {
         if (!Number.isFinite(n) || n < 0 || n > LIMITS.budgetMax) e.dailySpendLimit = 'Mức chi tiêu tối đa mỗi ngày phải là số không âm'
         else v.dailySpendLimit = Math.round(n)
     }
+    // Dừng khẩn tính trên "tổng mọi tài khoản" (như trước) hay "từng tài khoản" (mỗi tài khoản một mức)
+    if (has('killScope')) {
+        if (patch.killScope === 'account' || patch.killScope === 'total') v.killScope = patch.killScope
+        else e.killScope = 'Phạm vi dừng khẩn không hợp lệ'
+    }
+    // Mục tiêu theo từng tài khoản: { [mã tài khoản]: { cpa: CPA tối đa, roas: ROAS tối thiểu, dailySpendLimit: mức dừng khẩn riêng } }. 0/trống = chưa đặt.
+    if (has('accountTargets')) {
+        const raw = patch.accountTargets
+        const out = {}
+        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) e.accountTargets = 'Mục tiêu theo tài khoản không hợp lệ'
+        else {
+            const cap = {cpa: LIMITS.budgetMax, roas: 100, dailySpendLimit: LIMITS.budgetMax}
+            const label = {cpa: 'CPA mục tiêu', roas: 'ROAS mục tiêu', dailySpendLimit: 'Mức dừng khẩn'}
+            outer: for (const [id, t] of Object.entries(raw)) {
+                if (!/^[A-Za-z0-9_]{1,40}$/.test(id)) { e.accountTargets = `Mã tài khoản không hợp lệ: ${id.slice(0, 20)}`; break }
+                const o = {}
+                for (const k of Object.keys(cap)) {
+                    const n = isBlank(t && t[k]) ? 0 : num(t[k])
+                    if (!Number.isFinite(n) || n < 0 || n > cap[k]) { e.accountTargets = `${label[k]} của tài khoản ${id.slice(0, 20)} phải là số không âm${k === 'roas' ? ' (tối đa 100)' : ''}`; break outer }
+                    if (n > 0) o[k] = k === 'roas' ? Math.round(n * 100) / 100 : Math.round(n)
+                }
+                if (Object.keys(o).length) out[id] = o
+                if (Object.keys(out).length > LIMITS.accountsMax) { e.accountTargets = `Tối đa ${LIMITS.accountsMax} tài khoản`; break }
+            }
+        }
+        if (!e.accountTargets) v.accountTargets = out
+    }
     if (has('mock')) v.mock = !!patch.mock
     if (has('dryRun')) v.dryRun = !!patch.dryRun
 
     const eff = {...current, ...v}
-    if ((has('killSwitchEnabled') || has('dailySpendLimit')) && !e.dailySpendLimit && eff.killSwitchEnabled && !(Number(eff.dailySpendLimit) > 0)) e.dailySpendLimit = 'Hãy nhập mức chi tiêu tối đa mỗi ngày (lớn hơn 0) để bật dừng khẩn'
+    // Từng tài khoản: chỉ cần có mức chung HOẶC ít nhất một tài khoản có mức riêng
+    const ownLimit = eff.killScope === 'account' && Object.values(eff.accountTargets || {}).some((t) => t && Number(t.dailySpendLimit) > 0)
+    if ((has('killSwitchEnabled') || has('dailySpendLimit') || has('killScope') || has('accountTargets')) && !e.dailySpendLimit && eff.killSwitchEnabled && !(Number(eff.dailySpendLimit) > 0) && !ownLimit) e.dailySpendLimit = eff.killScope === 'account' ? 'Hãy nhập mức chung hoặc đặt mức riêng cho ít nhất một tài khoản (Cài đặt → Mục tiêu) để bật dừng khẩn' : 'Hãy nhập mức chi tiêu tối đa mỗi ngày (lớn hơn 0) để bật dừng khẩn'
     if (has('mock') || has('dryRun') || has('adAccountId') || has('adAccountIds') || has('accessToken')) {
         if (eff.mock === false && (!eff.accessToken || !accountIdsOf(eff).length)) e.mock = 'Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.'
     }

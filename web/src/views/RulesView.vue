@@ -5,8 +5,9 @@ import { state, loadState, ensureObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { METRICS, RULE_PRESETS, RANGE_LABEL } from '../lib/constants'
+import { METRIC_SHORT, RULE_PRESETS, RANGE_LABEL } from '../lib/constants'
 import { labelOf } from '../lib/accounts'
+import { opText, rhs, matchWord, conditionsOfRule } from '../lib/ruleText'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -22,7 +23,13 @@ onMounted(() => ensureObjs())
 const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || []).length > 1)
 // tên đích + tên tài khoản (chỉ khi có nhiều tài khoản)
 const tagOf = (id) => labelOf(state.objs, id, multiAcc.value)
-const val = (r) => (r.metric === 'roas' ? r.value : fmt(r.value))
+const conds = (r) => conditionsOfRule(r)
+// tên các tài khoản mà rule "tất cả camp đang chạy" giới hạn (trống = không hiện, tức mọi tài khoản)
+const accNames = (r) => {
+  if (!r.accountIds || !r.accountIds.length) return ''
+  const list = (state.objsMeta && state.objsMeta.accounts) || []
+  return r.accountIds.map((id) => (list.find((a) => a.id === id) || { name: id }).name).join(', ')
+}
 const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
 const actText = (r) => (r.action === 'pause' ? 'tắt camp' : r.action === 'notify' ? 'gửi cảnh báo (không đổi camp)' : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách`)
 
@@ -68,10 +75,10 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     <div v-if="state.rules.length" class="grid stagger">
       <article v-for="r in state.rules" :key="r.id" class="card it" :class="{ off: !r.enabled }">
         <div class="hd"><h4>{{ r.name }}</h4><Switch :model-value="r.enabled" :loading="busy[r.id]" :label="'Bật/tắt rule ' + r.name" @update:model-value="(v) => setEnabled(r, v)" /></div>
-        <p class="sentence">Nếu <b>{{ METRICS[r.metric] }}</b> <span class="rg">{{ RANGE_LABEL[r.range || 'today'] }}</span> {{ r.op === '>' ? 'lớn hơn' : 'nhỏ hơn' }} <b>{{ val(r) }}</b><template v-if="r.minSpend"> (đã chi ≥ {{ fmt(r.minSpend) }})</template>
+        <p class="sentence">Nếu <template v-for="(c, i) in conds(r)" :key="i"><span v-if="i" class="mw">{{ matchWord(r.match) }}</span> <b>{{ METRIC_SHORT[c.metric] || c.metric }}</b><span v-if="conds(r).length === 1 || i === conds(r).length - 1" class="rg"> {{ RANGE_LABEL[r.range || 'today'] }}</span> {{ opText(c.op) }} <b :class="{ acc: c.vs === 'target' }">{{ rhs(c) }}</b> </template><template v-if="r.minSpend">(đã chi ≥ {{ fmt(r.minSpend) }})</template>
           thì <b :class="actTone(r)">{{ actText(r) }}</b><template v-if="r.maxBudget">, tối đa {{ fmt(r.maxBudget) }}</template><template v-if="r.minBudget">, tối thiểu {{ fmt(r.minBudget) }}</template>.</p>
         <div class="tags">
-          <span v-if="r.allActive" class="tag">Tất cả camp đang chạy</span>
+          <span v-if="r.allActive" class="tag">Tất cả camp đang chạy<i v-if="accNames(r)" class="tac"> · {{ accNames(r) }}</i></span>
           <template v-else><span v-for="id in r.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="r.targets.length > 3" class="tag">+{{ r.targets.length - 3 }}</span></template>
           <span v-if="r.from && r.to" class="tag"><Clock3 :size="12" /> {{ r.from }}–{{ r.to }}</span>
           <span v-if="r.cooldownHours" class="tag">Nghỉ {{ r.cooldownHours }}h</span>
@@ -111,6 +118,7 @@ h4 { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
 .sentence b.inf { background: var(--info-soft); color: var(--info); }
 .rg { color: var(--text-3); font-size: .88em; }
 .sentence b.acc { background: var(--accent-soft); color: var(--accent); }
+.sentence .mw { display: inline-block; padding: 0 9px; margin: 0 2px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: .78em; font-weight: 700; letter-spacing: .04em; line-height: 1.7; }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .tac { font-style: normal; color: var(--text-3); }
 .tag { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-3); color: var(--text-2); padding: 2px 10px; border-radius: 8px; font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

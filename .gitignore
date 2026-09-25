@@ -15,3 +15,6 @@ web/dist/
 .fastRequest/
 # Cấu hình ngrok cá nhân
 ngrok-domain.txt
+
+# Cấu hình chạy thử cục bộ của công cụ (không đưa lên repo)
+.claude/
