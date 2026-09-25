@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, X, FilterX } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
@@ -158,6 +158,14 @@ const visible = computed(() => {
     && (!s || i.o.name.toLowerCase().includes(s) || (multiAcc.value && accountLabel(i.o).toLowerCase().includes(s))))
   return sortKey.value ? [...list].sort(compare) : list
 })
+// Chỉ VẼ một trang: vài nghìn chiến dịch mà vẽ hết thì trang nặng và giật (nhất là điện thoại). Lọc, sắp xếp, đếm, hàng Tổng
+// và bật/tắt hàng loạt vẫn tính trên toàn bộ danh sách đã lọc (visible); nút "Xem thêm" vẽ thêm từng trang.
+const pageSize = () => (window.matchMedia('(max-width: 860px)').matches ? 30 : 60)
+const limit = ref(pageSize())
+const shown = computed(() => (visible.value.length > limit.value ? visible.value.slice(0, limit.value) : visible.value))
+const moreCount = computed(() => Math.min(pageSize(), visible.value.length - shown.value.length))
+// đổi bộ lọc / sắp xếp / khoảng ngày → về trang đầu (làm mới số liệu tự động thì giữ nguyên số dòng đang xem)
+watch([q, () => ov.status, () => ov.level, () => ov.accounts, () => ov.sort, () => ov.spec], () => { limit.value = pageSize() }, { deep: true })
 const statusOptions = computed(() => [
   { value: 'all', label: 'Tất cả', count: inLevel.value.length },
   { value: 'on', label: 'Đang chạy', count: inLevel.value.filter((i) => isRunning(i.o)).length },
@@ -311,8 +319,8 @@ async function bulk(on) {
           <template #default="{ close }">
             <div class="menu" role="menu">
               <button type="button" class="mi" role="menuitem" @click="close(); bulkBudget = true"><Wallet :size="18" /><span><b>Đổi ngân sách hàng loạt</b><small>Lọc theo điều kiện rồi đổi nhiều mục một lúc</small></span></button>
-              <button type="button" class="mi" role="menuitem" :disabled="!toOn" @click="close(); bulk(true)"><Power :size="18" /><span><b>Bật {{ toOn }} mục đang hiển thị</b><small>Chỉ các mục đang tắt trong danh sách đã lọc</small></span></button>
-              <button type="button" class="mi danger" role="menuitem" :disabled="!toOff" @click="close(); bulk(false)"><Power :size="18" /><span><b>Tắt {{ toOff }} mục đang hiển thị</b><small>Chỉ các mục đang bật trong danh sách đã lọc</small></span></button>
+              <button type="button" class="mi" role="menuitem" :disabled="!toOn" @click="close(); bulk(true)"><Power :size="18" /><span><b>Bật {{ toOn }} mục trong danh sách đã lọc</b><small>Chỉ các mục đang tắt, kể cả phần chưa bấm “Xem thêm”</small></span></button>
+              <button type="button" class="mi danger" role="menuitem" :disabled="!toOff" @click="close(); bulk(false)"><Power :size="18" /><span><b>Tắt {{ toOff }} mục trong danh sách đã lọc</b><small>Chỉ các mục đang bật, kể cả phần chưa bấm “Xem thêm”</small></span></button>
             </div>
           </template>
         </Popover>
@@ -373,8 +381,8 @@ async function bulk(on) {
             </div>
           </div>
 
-          <TransitionGroup name="row" tag="div">
-            <div v-for="it in visible" :key="it.o.id" class="row item" :class="{ off: it.o.status !== 'ACTIVE' }">
+          <TransitionGroup name="row" tag="div" :css="shown.length <= 40">
+            <div v-for="it in shown" :key="it.o.id" class="row item" :class="{ off: it.o.status !== 'ACTIVE' }">
               <div class="c-sw"><Switch :model-value="it.o.status === 'ACTIVE'" :disabled="locked(it.o)" :title="locked(it.o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[it.o.id]" :label="'Bật/tắt ' + it.o.name" @update:model-value="(v) => toggle(it.o, v)" /></div>
               <div class="c-nm"><b :title="it.o.name">{{ it.o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
               <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + it.o.accountId"><b>{{ accountLabel(it.o) }}</b><small v-if="it.o.currency" class="faint">{{ it.o.currency }}</small></div>
@@ -393,6 +401,11 @@ async function bulk(on) {
               </div>
             </div>
           </TransitionGroup>
+
+          <div v-if="moreCount > 0" class="more">
+            <Btn :icon="ChevronsDown" @click="limit += pageSize()">Xem thêm {{ moreCount }}</Btn>
+            <span class="faint" aria-live="polite">Đang hiển thị <b class="num">{{ shown.length }}</b> / <b class="num">{{ visible.length }}</b> {{ levelName }}</span>
+          </div>
 
           <div class="tot row">
             <span class="t-l" :style="{ gridColumn: '1 / span ' + lead }"><b>Tổng</b> · {{ visible.length }} {{ levelName }}<small v-if="visMixed" class="faint"> · khác loại tiền</small></span>
@@ -520,6 +533,8 @@ async function bulk(on) {
 .mini { width: 74px; height: 4px; border-radius: 9px; background: var(--surface-3); overflow: hidden; }
 .mini b { display: block; height: 100%; background: var(--accent-grad); }
 /* hàng tổng cố định ở đáy bảng */
+.more { position: sticky; left: 0; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 16px 18px; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.more b { color: var(--text); }
 .tot { position: sticky; bottom: 0; z-index: 4; min-height: 52px; background: var(--surface-2); border-top: 1px solid var(--border-strong); font-size: 14px; }
 .tot .t-l { position: sticky; left: 0; z-index: 5; padding-left: 18px; background: inherit; align-self: stretch; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
 .tot b { font-weight: 700; }
@@ -534,6 +549,8 @@ async function bulk(on) {
   .tscroll { max-height: none; overflow: visible; }
   .table { min-width: 0; }
   .hd, .tot { display: none; }
+  .more { position: static; justify-content: center; text-align: center; padding: 14px 16px 18px; }
+  .more .btn { width: 100%; }
   .row, .table.hasacc .row { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; gap: 10px 14px; }
   .c-sw, .c-nm { position: static; box-shadow: none; padding-left: 0; background: none; }
   .c-nm { padding: 0; }

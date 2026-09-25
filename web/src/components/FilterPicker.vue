@@ -60,6 +60,12 @@ const rows = computed(() => {
   if (key) list.sort((a, b) => { const r = key === 'name' || key === 'account' ? collator.compare(SORT_GET[key](a), SORT_GET[key](b)) : SORT_GET[key](a) - SORT_GET[key](b); return dir === 'asc' ? r : -r })
   return list.map((o) => ({ o, ch: props.change && o.dailyBudget != null ? props.change(o) : null }))
 })
+// Chỉ VẼ một phần danh sách (vài nghìn mục thì vẽ hết sẽ giật, nhất là điện thoại). Chọn tất cả / đếm vẫn tính trên toàn bộ rows.
+const pageSize = () => (window.matchMedia('(max-width: 620px)').matches ? 40 : 100)
+const cap = ref(pageSize())
+const shownRows = computed(() => (rows.value.length > cap.value ? rows.value.slice(0, cap.value) : rows.value))
+const moreRows = computed(() => Math.min(pageSize(), rows.value.length - shownRows.value.length))
+watch([() => flt.value.level, () => flt.value.op, () => flt.value.x, () => flt.value.y, () => flt.value.name, () => flt.value.onlyRunning, () => flt.value.account, () => sort.value.key, () => sort.value.dir, onlySel], () => { cap.value = pageSize() })
 function sortBy(k) {
   const s = sort.value
   sort.value = s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: k === 'name' || k === 'account' ? 'asc' : 'desc' }
@@ -155,7 +161,7 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
             <span v-if="change" class="ra">Ngân sách mới</span>
           </div>
           <div class="list">
-            <label v-for="r in rows" :key="r.o.id" class="r it" :class="[rowCls, { on: isOn(r.o.id), off: auto && !isOn(r.o.id) }]" :title="auto && !isOn(r.o.id) ? 'Đã loại trừ: lịch sẽ bỏ qua mục này' : ''">
+            <label v-for="r in shownRows" :key="r.o.id" class="r it" :class="[rowCls, { on: isOn(r.o.id), off: auto && !isOn(r.o.id) }]" :title="auto && !isOn(r.o.id) ? 'Đã loại trừ: lịch sẽ bỏ qua mục này' : ''">
               <input type="checkbox" :checked="isOn(r.o.id)" @change="toggle(r.o.id)" />
               <span class="nm"><b :title="r.o.name">{{ r.o.name }}</b>
                 <small class="dl" :class="deliveryOf(r.o).tone"><i />{{ deliveryOf(r.o).label }}<em v-if="r.o.level === 'adset'"> · Nhóm QC</em><em v-if="showAcc" class="acc-in"> · {{ accountLabel(r.o) }}</em></small></span>
@@ -169,6 +175,7 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
                 <small v-else class="badc">không hợp lệ</small>
               </span>
             </label>
+            <button v-if="moreRows > 0" type="button" class="morelnk" @click="cap += pageSize()">Hiển thị thêm {{ moreRows }} <small>(đang hiển thị {{ shownRows.length }} / {{ rows.length }})</small></button>
           </div>
         </div>
         <p v-else class="faint hintp">{{ showOnlySel ? 'Chưa chọn mục nào.' : `Không có ${levelName} nào khớp. Thử nới điều kiện.` }}</p>
@@ -220,6 +227,8 @@ const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // w
 .sh svg { opacity: .45; } .sh:hover { color: var(--text); background: var(--surface-3); } .sh.on { color: var(--accent); } .sh.on svg { opacity: 1; }
 .ra { text-align: right; justify-self: end; }
 .list { max-height: 320px; overflow-y: auto; }
+.morelnk { display: block; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--border); background: var(--surface-2); color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer; }
+.morelnk small { color: var(--text-3); font-weight: 500; } .morelnk:hover { background: var(--accent-soft); }
 .it { border-bottom: 1px solid var(--border); font-size: 14px; transition: background .12s; }
 .it { cursor: pointer; }
 .it.off .nm b { text-decoration: line-through; color: var(--text-3); }
