@@ -7,9 +7,11 @@ import { vi } from 'date-fns/locale/vi'
 import { resolvedTheme } from '../stores/ui'
 
 const model = defineModel({ type: Array, default: null }) // [Date, Date] hoặc null
-defineProps({ min: { type: Date, default: undefined }, max: { type: Date, default: undefined }, months: { type: Number, default: 2 } })
+const props = defineProps({ min: { type: Date, default: undefined }, max: { type: Date, default: undefined }, months: { type: Number, default: 2 } })
 const emit = defineEmits(['start']) // đã bấm ngày bắt đầu, đang chờ ngày kết thúc
 const dark = computed(() => resolvedTheme.value === 'dark')
+// bảng chọn năm chỉ liệt kê các năm chọn được (mặc định của thư viện là 1900–2100)
+const yearRange = computed(() => (props.min && props.max ? [props.min.getFullYear(), props.max.getFullYear()] : [1900, 2100]))
 </script>
 
 <template>
@@ -17,7 +19,7 @@ const dark = computed(() => resolvedTheme.value === 'dark')
     <VueDatePicker
       v-model="model" inline auto-apply hide-offset-dates :dark="dark" :locale="vi" :week-start="1"
       :range="{ partialRange: false }" :multi-calendars="months > 1 ? months : false" :min-date="min" :max-date="max"
-      :time-config="{ enableTimePicker: false }" :config="{ noSwipe: false }" @range-start="(d) => emit('start', d)"
+      :year-range="yearRange" prevent-min-max-navigation :time-config="{ enableTimePicker: false }" :config="{ noSwipe: false }" @range-start="(d) => emit('start', d)"
     />
   </div>
 </template>
@@ -25,7 +27,8 @@ const dark = computed(() => resolvedTheme.value === 'dark')
 <style>
 /* Màu của lịch lấy từ bộ màu của ứng dụng để khớp cả giao diện sáng lẫn tối */
 .calpane .dp--theme-light, .calpane .dp--theme-dark {
-  --dp-background-color: transparent;
+  /* phải là màu ĐẶC: bảng chọn tháng/năm (.dp--overlay) dùng màu này để che lịch phía sau; khung nổi cũng là --surface nên nhìn như cũ */
+  --dp-background-color: var(--surface);
   --dp-text-color: var(--text);
   --dp-hover-color: var(--surface-3);
   --dp-hover-text-color: var(--text);
