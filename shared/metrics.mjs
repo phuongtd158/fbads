@@ -2,7 +2,7 @@
 //   { spend, impressions, clicks, results, cpa, roas }
 // Mẫu số bằng 0 thì trả null (giao diện hiện "–"), không trả 0 hay Infinity.
 
-export const EMPTY = { spend: 0, impressions: 0, clicks: 0, results: 0, cpa: null, roas: null }
+export const EMPTY = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, cpa: null, roas: null }
 
 const div = (a, b) => (b > 0 ? a / b : null)
 
@@ -29,9 +29,9 @@ export function runningBudget(camps, adsets, isRunning) {
 // rows: [{ m: số liệu gốc, budget: ngân sách/ngày hoặc null }] → tổng + các chỉ số tính lại từ tổng (không lấy trung bình của các dòng).
 // ROAS gộp = tổng doanh thu / tổng chi tiêu, với doanh thu mỗi dòng = roas × chi tiêu.
 export function totals(rows) {
-  const t = { spend: 0, impressions: 0, clicks: 0, results: 0, budget: 0, budgetRows: 0, value: 0 }
+  const t = { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, budget: 0, budgetRows: 0, value: 0 }
   for (const { m, budget } of rows) {
-    t.spend += m.spend; t.impressions += m.impressions; t.clicks += m.clicks; t.results += m.results
+    t.spend += m.spend; t.impressions += m.impressions; t.clicks += m.clicks; t.results += m.results; t.revenue += m.revenue || 0
     if (budget != null) { t.budget += budget; t.budgetRows++ }
     if (m.roas != null && m.spend > 0) t.value += m.roas * m.spend
   }

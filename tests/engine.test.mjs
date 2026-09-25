@@ -255,6 +255,8 @@ test('kết quả "purchase": nhận cả Lượt mua trên Meta, không đếm 
   assert.equal(m.results, 24)
   assert.equal(Math.round(m.cpa), 369371)
   assert.equal(m.roas.toFixed(2), '2.87')
+  assert.equal(m.revenue, 25430000) // doanh thu = giá trị chuyển đổi cùng loại kết quả (không cộng trùng các tên khác)
+  assert.equal(fb.metricsFrom({ spend: '100', actions: [act('purchase', 2)] }, 'purchase').revenue, 0) // không có giá trị → 0
   // tài khoản chỉ có pixel web
   assert.equal(fb.metricsFrom({ spend: '100', actions: [act('purchase', 2), act('offsite_conversion.fb_pixel_purchase', 2)] }, 'purchase').results, 2)
   // loại không có bí danh: khớp đúng tên

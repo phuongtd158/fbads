@@ -78,3 +78,15 @@ test('ngân sách đang chạy: không cộng đôi khi camp CBO có nhóm QC; n
   assert.equal(runningBudget([], adsets, () => true), 0)
   assert.equal(runningBudget([{ id: 'x', dailyBudget: null }], [], () => true), 0) // không có gì để cộng: 0, không phải NaN
 })
+
+test('doanh thu: cộng vào hàng tổng, dòng cũ chưa có doanh thu vẫn tính được', () => {
+  const t = totals([
+    { m: { spend: 100, impressions: 1000, clicks: 10, results: 2, revenue: 500, cpa: 50, roas: 5 }, budget: null },
+    { m: { spend: 50, impressions: 500, clicks: 5, results: 1, revenue: 100, cpa: 50, roas: 2 }, budget: null },
+    { m: { spend: 10, impressions: 100, clicks: 1, results: 0, cpa: null, roas: null }, budget: null }, // không có trường revenue
+  ])
+  assert.equal(t.revenue, 600)
+  near(t.roas, 600 / 160, 'ROAS gộp = tổng doanh thu / tổng chi tiêu')
+  assert.equal(totals([]).revenue, 0)
+  assert.equal(EMPTY.revenue, 0)
+})

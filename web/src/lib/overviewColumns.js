@@ -10,6 +10,7 @@ export const COLUMNS = [
   { key: 'results', label: 'Kết quả', tip: 'results', min: 78 },
   { key: 'cpa', label: 'CPA', money: true, first: 'asc', tip: 'cpa', min: 92 },
   { key: 'roas', label: 'ROAS', tip: 'roas', min: 78 },
+  { key: 'revenue', label: 'Doanh thu', menu: 'Doanh thu (giá trị chuyển đổi)', money: true, min: 112 },
   { key: 'impressions', label: 'Lượt hiển thị', min: 112 },
   { key: 'clicks', label: 'Lượt nhấp', min: 92 },
   { key: 'ctr', label: 'CTR', menu: 'CTR (tỉ lệ nhấp)', min: 76 },
