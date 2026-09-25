@@ -21,6 +21,14 @@ const router = useRouter()
 const showTech = ref(false)
 
 const l = computed(() => props.log || {})
+// Tài khoản quảng cáo của đối tượng: lấy từ nhật ký (ghi lúc thao tác), thiếu thì tra theo id trong danh sách hiện tại
+const acc = computed(() => {
+  const t = l.value.target
+  if (!t) return null
+  if (t.accountId) return { id: t.accountId, name: t.accountName || t.accountId }
+  const o = state.objs.find((x) => x.id === t.id)
+  return o && o.accountId ? { id: o.accountId, name: o.accountName || o.accountId } : null
+})
 const kind = computed(() => kindOf(l.value))
 const failed = computed(() => l.value.ok === false)
 const dry = computed(() => !!l.value.dry)
@@ -140,6 +148,7 @@ const canRetry = computed(() => failed.value && (kind.value === 'rule' ? !!ref_.
           <a v-if="ref_" href="#" class="lk" @click.prevent="go(kind === 'rule' ? '/rules' : '/schedules')">Mở <ExternalLink :size="13" /></a>
           <span v-else-if="l.refId" class="faint"> (đã bị xoá)</span></dd></div>
         <div v-if="l.target"><dt>Đối tượng</dt><dd>{{ l.target.name || l.name }}<span v-if="l.target.level" class="faint"> · {{ l.target.level === 'adset' ? 'Nhóm quảng cáo' : 'Chiến dịch' }}</span><code v-if="l.target.id">{{ l.target.id }}</code></dd></div>
+        <div v-if="acc"><dt>Tài khoản QC</dt><dd>{{ acc.name }}<code>{{ acc.id }}</code></dd></div>
         <div v-if="actionText"><dt>Hành động</dt><dd>{{ actionText }}</dd></div>
         <div v-if="l.mode"><dt>Chế độ lúc chạy</dt><dd>{{ MODE_LABEL[l.mode] }}</dd></div>
         <div v-if="!failed"><dt>Kết quả</dt><dd>{{ l.detail }}</dd></div>

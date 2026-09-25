@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CheckCircle2, AlertTriangle, FlaskConical, Loader2, KeyRound, RefreshCw, ExternalLink, X, Check, ShieldCheck, Copy, LogIn } from 'lucide-vue-next'
+import { CheckCircle2, AlertTriangle, FlaskConical, Loader2, KeyRound, RefreshCw, ExternalLink, X, Check, ShieldCheck, Copy, LogIn, ListPlus } from 'lucide-vue-next'
 import { state, checkConn, loadState, resetData } from '../../stores/app'
 import { toast, toastError } from '../../stores/ui'
 import { api } from '../../lib/api'
@@ -22,6 +22,7 @@ const manual = ref('')
 const loading = ref(false)
 const ext = reactive({ appId: '', secret: '' })
 const wiz = ref(null)
+const step3 = ref(null)
 const tokErr = ref('')
 const manualErr = ref('')
 
@@ -90,6 +91,14 @@ onMounted(() => {
 
 async function recheck() { await checkConn(true); if (state.conn && state.conn.ok) toast('Kết nối hoạt động tốt') }
 function openWiz() { wizOpen.value = true; info.value = null; accs.value = [...(s.value.adAccountIds && s.value.adAccountIds.length ? s.value.adAccountIds : s.value.adAccountId ? [s.value.adAccountId] : [])]; nextTick(() => wiz.value && wiz.value.scrollIntoView({ behavior: 'smooth', block: 'start' })) }
+// Mở thẳng phần chọn tài khoản bằng token đã lưu (không phải làm lại bước lấy token)
+async function openAccounts() {
+  openWiz()
+  if (!s.value.has_accessToken) return
+  await verify()
+  await nextTick()
+  if (step3.value) step3.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 function closeWiz() { wizOpen.value = false; token.value = ''; info.value = null }
 defineExpose({ openWiz })
 
@@ -179,7 +188,7 @@ async function saveConn() {
           <div v-if="tk"><dt>Access Token</dt><dd><Badge :tone="tokenTone === 'ok' ? 'success' : tokenTone === 'warn' ? 'warning' : 'danger'">{{ tokenText }}</Badge></dd></div>
         </dl>
       </div>
-      <div class="btns"><Btn :icon="RefreshCw" :action="recheck">Kiểm tra lại</Btn><Btn @click="openWiz">Đổi token / tài khoản</Btn></div>
+      <div class="btns"><Btn :icon="RefreshCw" :action="recheck">Kiểm tra lại</Btn><Btn :icon="ListPlus" :action="openAccounts">Thêm / bớt tài khoản</Btn><Btn @click="openWiz">Đổi token</Btn></div>
     </section>
 
     <!-- Trình hướng dẫn -->
@@ -256,7 +265,7 @@ async function saveConn() {
           </div>
         </div>
 
-        <div class="step" :class="{ done: accs.length && info }">
+        <div ref="step3" class="step" :class="{ done: accs.length && info }">
           <span class="no"><Check v-if="accs.length && info" :size="16" /><template v-else>3</template></span>
           <div class="body">
             <h4>Chọn tài khoản quảng cáo</h4>

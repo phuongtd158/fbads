@@ -101,7 +101,7 @@ async function oauthCallback(res, url) {
 async function manualAction(id, name, action, okDetail, after, fn) {
   const s = store.get().settings;
   const cur = (fb.peekObjects() || []).find((o) => o.id === id);
-  const base = { kind: 'manual', source: 'Thủ công', name: name || id, target: { id, name: name || id, level: cur && cur.level }, action, before: fb.snapshot(cur), mode: s.mock ? 'mock' : s.dryRun ? 'dry' : 'live' };
+  const base = { kind: 'manual', source: 'Thủ công', name: name || id, target: { id, name: name || id, level: cur && cur.level, ...(cur && cur.accountId ? { accountId: cur.accountId, accountName: cur.accountName } : {}) }, action, before: fb.snapshot(cur), mode: s.mock ? 'mock' : s.dryRun ? 'dry' : 'live' };
   try {
     await fn();
     store.log({ ...base, detail: okDetail, ok: true, after });

@@ -6,6 +6,7 @@ import { state, loadState } from '../stores/app'
 import { toastError } from '../stores/ui'
 import { timeOf, dayLabel } from '../lib/format'
 import { kindOf, KIND_LABEL } from '../lib/logHints'
+import { accountLabel } from '../lib/accounts'
 import Btn from '../components/Btn.vue'
 import Segmented from '../components/Segmented.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -33,10 +34,19 @@ const options = computed(() => [
   { value: 'err', label: 'Lỗi', count: logs.value.filter((l) => bucket(l) === 'err').length },
 ])
 const sources = computed(() => [{ value: 'all', label: 'Mọi nguồn' }, ...Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))])
+// Nhiều tài khoản: hiện tên tài khoản cạnh tên đối tượng (nhật ký cũ chưa ghi tài khoản thì tra theo id trong danh sách hiện tại)
+const accOf = (l) => {
+  const t = l.target
+  if (!t) return ''
+  if (t.accountId) return t.accountName || t.accountId
+  const o = state.objs.find((x) => x.id === t.id)
+  return o ? accountLabel(o) : ''
+}
+const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || []).length > 1 || new Set(logs.value.map((l) => l.target && l.target.accountId).filter(Boolean)).size > 1)
 const shown = computed(() => {
   const s = q.value.trim().toLowerCase()
   return logs.value.filter((l) => (filter.value === 'all' || bucket(l) === filter.value) && (source.value === 'all' || kindOf(l) === source.value)
-    && (!s || `${l.source} ${l.name} ${l.detail} ${(l.error && l.error.code) || ''}`.toLowerCase().includes(s)))
+    && (!s || `${l.source} ${l.name} ${l.detail} ${(l.error && l.error.code) || ''} ${multiAcc.value ? accOf(l) : ''}`.toLowerCase().includes(s)))
 })
 const groups = computed(() => {
   const g = {}
@@ -68,7 +78,7 @@ const view = (l) => { current.value = l; open.value = true }
           <span class="ic" :class="kind(l)"><component :is="icon(l)" :size="18" /></span>
           <div class="bd">
             <b>{{ l.source }}</b>
-            <p><span class="nm">{{ l.name }}</span> <span class="muted">— {{ l.detail }}</span></p>
+            <p><span class="nm">{{ l.name }}</span><span v-if="multiAcc && accOf(l)" class="acc" :title="'Tài khoản quảng cáo'">{{ accOf(l) }}</span> <span class="muted">— {{ l.detail }}</span></p>
             <span v-if="l.undone" class="chip">Đã hoàn tác</span>
             <span v-if="l.ok === false && l.error && (l.error.code || l.error.network)" class="code">{{ l.error.network ? 'Lỗi mạng' : `Facebook #${l.error.code}${l.error.subcode ? '/' + l.error.subcode : ''}` }}</span>
           </div>
@@ -101,6 +111,7 @@ const view = (l) => { current.value = l; open.value = true }
 .ic.ok { background: var(--success-soft); color: var(--success); } .ic.dry { background: var(--warning-soft); color: var(--warning); } .ic.err { background: var(--danger-soft); color: var(--danger); }
 .bd { flex: 1; min-width: 0; } .bd b { font-size: 14.5px; font-weight: 620; } .bd p { font-size: 14.5px; margin-top: 1px; overflow-wrap: anywhere; }
 .nm { font-weight: 550; }
+.acc { margin-left: 8px; padding: 1px 8px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .code { display: inline-block; margin-top: 6px; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 650; background: var(--danger-soft); color: var(--danger); }
 time { font-size: 13px; white-space: nowrap; padding-top: 2px; }
 .more { display: inline-flex; align-items: center; gap: 2px; align-self: center; font-size: 13px; font-weight: 600; color: var(--text-3); white-space: nowrap; padding: 4px 8px; border-radius: 9px; transition: .15s; }

@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { fmt } from '../lib/format'
 import { scheduleTimes } from '../lib/validate'
 import { describeFilter, matchFilter } from '../lib/bulkBudget'
+import { labelOf } from '../lib/accounts'
 import { DAY_LABEL, DAY_ORDER, SCHEDULE_PRESETS } from '../lib/constants'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
@@ -22,7 +23,9 @@ const busy = ref({})
 onMounted(() => ensureObjs())
 
 const list = computed(() => [...state.schedules].sort((a, b) => scheduleTimes(a)[0].localeCompare(scheduleTimes(b)[0])))
-const nameOf = (id) => (state.objs.find((o) => o.id === id) || { name: id }).name
+const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || []).length > 1)
+// tên đích + tên tài khoản (chỉ khi có nhiều tài khoản)
+const tagOf = (id) => labelOf(state.objs, id, multiAcc.value)
 
 function nextRun(s) {
   const now = new Date(), times = [...scheduleTimes(s)].sort()
@@ -107,7 +110,7 @@ async function remove(s) {
         <div v-if="scheduleTimes(s).length > 1" class="tlist num">{{ scheduleTimes(s).join(' · ') }}</div>
         <div class="days"><span v-for="d in DAY_ORDER" :key="d" :class="{ on: s.days.includes(d) }">{{ DAY_LABEL[d] }}</span></div>
         <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describe(s)">Theo điều kiện: {{ describe(s) }}</span><span v-if="s.exclude && s.exclude.length" class="tag">trừ {{ s.exclude.length }} mục</span><span v-if="matchCount(s) != null" class="tag">hiện áp dụng {{ matchCount(s) }}</span></div>
-        <div v-else class="tags"><span v-for="id in s.targets.slice(0, 3)" :key="id" class="tag" :title="nameOf(id)">{{ nameOf(id) }}</span><span v-if="s.targets.length > 3" class="tag">+{{ s.targets.length - 3 }}</span></div>
+        <div v-else class="tags"><span v-for="id in s.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="s.targets.length > 3" class="tag">+{{ s.targets.length - 3 }}</span></div>
         <div class="acts">
           <Btn size="sm" :icon="Play" :action="() => runNow(s)">Chạy ngay</Btn>
           <Btn size="sm" :icon="Pencil" @click="open(s)">Sửa</Btn>
@@ -147,8 +150,9 @@ h4 { font-size: 15.5px; font-weight: 620; }
 .days span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 650; background: var(--surface-3); color: var(--text-3); }
 .days span.on { background: var(--accent-grad); color: #fff; }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; min-height: 26px; }
+.tac { font-style: normal; color: var(--text-3); }
 .tag.flt { max-width: 100%; background: var(--accent-soft); color: var(--accent); }
-.tag { background: var(--surface-3); color: var(--text-2); padding: 2px 10px; border-radius: 8px; font-size: 13px; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { background: var(--surface-3); color: var(--text-2); padding: 2px 10px; border-radius: 8px; font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acts { display: flex; gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); }
 .grow { flex: 1; }
 .note { margin-top: 18px; font-size: 13px; }

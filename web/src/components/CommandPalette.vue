@@ -6,12 +6,14 @@ import { state, loadObjs, logout } from '../stores/app'
 import { palette, toggleTheme, toast, toastError } from '../stores/ui'
 import { api } from '../lib/api'
 import { TOPICS } from '../lib/help'
+import { accountLabel } from '../lib/accounts'
 
 const router = useRouter()
 const q = ref('')
 const active = ref(0)
 const input = ref(null)
 
+const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || []).length > 1)
 const go = (path) => () => router.push(path)
 const actions = computed(() => [
   { group: 'Đi tới', title: 'Tổng quan', icon: LayoutDashboard, run: go('/') },
@@ -27,13 +29,13 @@ const actions = computed(() => [
   ...(state.auth.required ? [{ group: 'Thao tác', title: 'Đăng xuất', icon: LogOut, run: logout }] : []),
   ...TOPICS.map((t) => ({ group: 'Hướng dẫn', title: t.title, icon: BookOpen, sub: t.summary, run: go('/help/' + t.id) })),
   ...state.objs.filter((o) => o.level === 'campaign').map((o) => ({
-    group: 'Chiến dịch', title: o.name, icon: Megaphone, sub: o.effective === 'ACTIVE' ? 'Đang chạy' : 'Tạm dừng',
+    group: 'Chiến dịch', title: o.name, icon: Megaphone, sub: (o.effective === 'ACTIVE' ? 'Đang chạy' : 'Tạm dừng') + (multiAcc.value ? ' · ' + accountLabel(o) : ''), hay: multiAcc.value ? accountLabel(o) : '',
     run: () => router.push({ path: '/', query: { q: o.name } }),
   })),
 ])
 const results = computed(() => {
   const s = q.value.trim().toLowerCase()
-  return actions.value.filter((a) => !s || a.title.toLowerCase().includes(s)).slice(0, 12).map((a, n) => ({ ...a, n }))
+  return actions.value.filter((a) => !s || a.title.toLowerCase().includes(s) || (a.hay || '').toLowerCase().includes(s)).slice(0, 12).map((a, n) => ({ ...a, n }))
 })
 const grouped = computed(() => {
   const out = []

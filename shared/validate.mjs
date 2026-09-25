@@ -334,7 +334,7 @@ export function checkToken(t) {
 export const cleanAccountId = (v) => String(v ?? '').trim().replace(/^act_/i, '')
 // Các tài khoản quảng cáo đang quản lý (bản cũ chỉ có adAccountId). lib/fb.js có bản CommonJS tương tự.
 export const accountIdsOf = (s = {}) => uniq((Array.isArray(s.adAccountIds) && s.adAccountIds.length ? s.adAccountIds : s.adAccountId ? [s.adAccountId] : []).map(cleanAccountId).filter(Boolean))
-export const checkAccountId = (v) => (/^\d{5,}$/.test(cleanAccountId(v)) ? '' : 'ID tài khoản quảng cáo chỉ gồm chữ số (ví dụ 1234567890)')
+export const checkAccountId = (v) => (/^\d{5,}$/.test(cleanAccountId(v)) ? '' : 'ID tài khoản quảng cáo chỉ gồm chữ số và có ít nhất 5 số (ví dụ 1234567890)')
 export const checkAppId = (v) => (/^\d{8,}$/.test(String(v ?? '').trim()) ? '' : 'App ID chỉ gồm chữ số (ít nhất 8 số)')
 export const checkAppSecret = (v) => (/^[a-f0-9]{16,}$/i.test(String(v ?? '').trim()) ? '' : 'App Secret gồm chữ và số (thường 32 ký tự)')
 export const checkConfigId = (v) => (!v || /^\d{5,}$/.test(String(v).trim()) ? '' : 'Configuration ID chỉ gồm chữ số')

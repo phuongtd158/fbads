@@ -81,6 +81,14 @@ test('act: rule tăng ngân sách nhiều lần trong ngày bị chặn ở gi�
   assert.equal(S().logs.filter((l) => l.skipped).length, 1) // cùng lý do chỉ ghi 1 lần/ngày
 })
 
+test('act: nhật ký ghi tài khoản quảng cáo của camp (để lịch sử còn đúng khi camp bị xoá)', async () => {
+  await engine.act(await camp('mock_1'), { type: 'off' }, 'Thủ công', { kind: 'manual' })
+  await engine.act(await camp('mock_5'), { type: 'off' }, 'Thủ công', { kind: 'manual' })
+  const byId = Object.fromEntries(S().logs.map((l) => [l.target.id, l.target]))
+  assert.deepEqual([byId.mock_1.accountId, byId.mock_1.accountName], ['mock_a', 'Tài khoản mẫu A'])
+  assert.deepEqual([byId.mock_5.accountId, byId.mock_5.accountName], ['mock_b', 'Tài khoản mẫu B'])
+})
+
 test('act: rule bỏ qua camp đang học và ghi nhận', async () => {
   const before = (await camp('mock_5')).dailyBudget
   assert.equal((await camp('mock_5')).learning, true)

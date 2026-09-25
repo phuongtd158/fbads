@@ -31,6 +31,7 @@ export const TOPICS = [
         '**Bật/tắt một camp:** gạt công tắc ở đầu dòng. Thay đổi có hiệu lực ngay trên Facebook.',
         '**Sửa ngân sách:** bấm vào số ngân sách, gõ số mới rồi nhấn Enter (Esc để huỷ).',
         '**Tìm và lọc:** gõ vào ô tìm kiếm (phím tắt `/`) hoặc lọc Tất cả / Đang chạy / Tạm dừng. Nếu tài khoản có nhóm quảng cáo, chuyển qua lại bằng nút Chiến dịch / Nhóm QC.',
+        '**Nhiều tài khoản quảng cáo:** ô “Tất cả tài khoản” lọc theo từng tài khoản (bên cạnh có số chiến dịch), cột **Tài khoản** cho biết chiến dịch thuộc tài khoản nào kèm loại tiền của nó. Nếu các tài khoản dùng **khác loại tiền** (vd VND và USD), tổng chi tiêu và ngân sách được tách riêng từng loại tiền, còn CPA / ROAS chỉ hiện khi bạn chọn 1 tài khoản.',
         '**Bật/tắt hàng loạt:** nút Bật tất cả / Tắt tất cả áp dụng cho các dòng **đang hiển thị** sau khi lọc, và luôn hỏi xác nhận trước.',
         '**Làm mới:** số liệu tự cập nhật mỗi 60 giây, hoặc bấm nút Làm mới.',
       ] },
@@ -150,6 +151,7 @@ export const TOPICS = [
       { t: 'tips', items: [
         'Thẻ trạng thái ở đầu trang Cài đặt cho biết đã kết nối đúng chưa, token còn bao nhiêu ngày và có đủ quyền không. Bấm **Kiểm tra lại** bất cứ lúc nào.',
         'Token sắp hết hạn (còn dưới 7 ngày) sẽ có thanh cảnh báo màu vàng ở đầu mọi trang.',
+        'Muốn thêm hoặc bớt tài khoản sau này? Bấm **Thêm / bớt tài khoản** ở thẻ “Đã kết nối”: tool dùng token đã lưu để liệt kê các tài khoản, bạn tick hoặc bỏ tick rồi lưu, không cần lấy lại token.',
         'Không thấy tài khoản quảng cáo nào trong danh sách? Dùng mục “Nhập ID tài khoản thủ công” (ID nằm cạnh tên tài khoản trong Ads Manager).',
       ] },
       { t: 'note', tone: 'warning', text: 'Token giống như mật khẩu. **Đừng gửi cho ai** và đừng đưa file `data.json` lên mạng.' },

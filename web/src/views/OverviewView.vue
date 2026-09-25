@@ -7,6 +7,7 @@ import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt, fmtDec, fmtCompact } from '../lib/format'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
+import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import Badge from '../components/Badge.vue'
@@ -54,14 +55,25 @@ const accErrors = computed(() => (state.objsMeta && state.objsMeta.accountErrors
 // tài khoản đã chọn không còn trong danh sách (đổi kết nối) → về "tất cả"
 watch(accounts, (list) => { if (account.value && list.length && !list.some((a) => a.id === account.value)) account.value = '' })
 const inAcc = (o) => !account.value || o.accountId === account.value
-// Loại tiền cho các ô tổng: theo tài khoản đang xem; nhiều tài khoản khác loại tiền thì không cộng chung được
-const currency = computed(() => {
-  const list = account.value ? accounts.value.filter((a) => a.id === account.value) : accounts.value
-  const cur = [...new Set(list.map((a) => a.currency).filter(Boolean))]
-  return cur.length > 1 ? 'nhiều loại tiền' : cur[0] || (state.conn && state.conn.currency) || 'VND'
-})
-const accountOptions = computed(() => [{ id: '', name: `Tất cả tài khoản (${accounts.value.length})` }, ...accounts.value])
+const showAccCol = computed(() => multiAcc.value && !account.value) // đang xem 1 tài khoản thì cột này chỉ lặp lại
+const accCount = computed(() => countByAccount(state.objs.filter((o) => o.level === level.value)))
+const errIds = computed(() => new Set(accErrors.value.map((x) => x.id)))
+const accountOptions = computed(() => [
+  { id: '', name: `Tất cả tài khoản (${accounts.value.length})` },
+  ...accounts.value.map((a) => ({ id: a.id, name: `${a.name}${errIds.value.has(a.id) ? ' — không tải được' : ` (${accCount.value[a.id] || 0})`}` })),
+])
 const camps = computed(() => state.objs.filter((o) => o.level === 'campaign' && inAcc(o)))
+// Khác loại tiền (vd VND + USD) thì không cộng chung được: tổng chi tiêu/ngân sách tính riêng từng loại tiền,
+// CPA và ROAS chỉ hiện khi đang xem một loại tiền (chọn 1 tài khoản ở ô lọc)
+// loại tiền khi chưa có camp nào để lấy (tài khoản đang chọn, không thì loại tiền đầu tiên của kết nối; conn.currency có thể là "VND, USD")
+const fallbackCur = computed(() => {
+  const a = accounts.value.find((x) => x.id === account.value)
+  return (a && a.currency) || String((state.conn && state.conn.currency) || 'VND').split(',')[0].trim() || 'VND'
+})
+const curGroups = computed(() => groupByCurrency(camps.value, fallbackCur.value))
+const mixed = computed(() => curGroups.value.length > 1)
+const currency = computed(() => (curGroups.value[0] && curGroups.value[0].currency) || fallbackCur.value)
+const money = (n, cur) => (decimalsOf(cur) ? fmtDec(n, 2) : fmt(n))
 const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
 // Phân phối như Ads Manager (xét cả nhóm QC bên trong); "đang chạy" = thực sự đang phân phối
 const deliv = computed(() => deliveryMap(state.objs))
@@ -72,13 +84,20 @@ const totalSpend = computed(() => camps.value.reduce((t, o) => t + o.metrics.spe
 const totalResults = computed(() => camps.value.reduce((t, o) => t + o.metrics.results, 0))
 const activeBudget = computed(() => running.value.reduce((t, o) => t + (o.dailyBudget || 0), 0))
 const budgetPct = computed(() => (activeBudget.value ? Math.min(100, (totalSpend.value / activeBudget.value) * 100) : 0))
-const avgCpa = computed(() => (totalResults.value ? totalSpend.value / totalResults.value : null))
+// Tổng chi tiêu / ngân sách theo từng loại tiền (chỉ dùng khi xem nhiều loại tiền cùng lúc)
+const byCur = computed(() => curGroups.value.map((g) => ({
+  currency: g.currency,
+  spend: g.items.reduce((t, o) => t + o.metrics.spend, 0),
+  budget: g.items.filter(isRunning).reduce((t, o) => t + (o.dailyBudget || 0), 0),
+})))
+const avgCpa = computed(() => (!mixed.value && totalResults.value ? totalSpend.value / totalResults.value : null))
 const avgRoas = computed(() => {
+  if (mixed.value) return null
   const w = camps.value.filter((o) => o.metrics.roas != null && o.metrics.spend > 0)
   const s = w.reduce((t, o) => t + o.metrics.spend, 0)
   return s ? w.reduce((t, o) => t + o.metrics.roas * o.metrics.spend, 0) / s : null
 })
-const top = computed(() => [...camps.value].filter((o) => o.metrics.spend > 0).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3))
+const top = computed(() => (mixed.value ? [] : [...camps.value].filter((o) => o.metrics.spend > 0).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3)))
 const topMax = computed(() => (top.value[0] ? top.value[0].metrics.spend : 1))
 
 const inLevel = computed(() => state.objs.filter((o) => o.level === level.value && inAcc(o)))
@@ -86,6 +105,7 @@ const inLevel = computed(() => state.objs.filter((o) => o.level === level.value 
 // Giá trị trống (CPA khi chưa có kết quả, ngân sách CBO…) luôn nằm cuối, dù tăng hay giảm.
 const SORTS = {
   name: { label: 'Tên', get: (o) => o.name, text: true, first: 'asc' },
+  account: { label: 'Tài khoản', get: (o) => accountLabel(o), text: true, first: 'asc' },
   delivery: { label: 'Phân phối', get: (o) => deliveryOf(o).rank, first: 'asc' },
   budget: { label: 'Ngân sách/ngày', get: (o) => o.dailyBudget },
   spend: { label: 'Chi tiêu', get: (o) => o.metrics.spend },
@@ -115,12 +135,13 @@ const mobileSort = computed({
   get: () => (sort.key ? `${sort.key}:${sort.dir}` : ''),
   set: (v) => { const [k, d] = v.split(':'); sort.key = k || ''; sort.dir = d || 'desc' },
 })
-const mobileSortOptions = [
+const mobileSortOptions = computed(() => [
   ['', 'Mặc định (như Facebook)'], ['spend:desc', 'Chi tiêu: cao → thấp'], ['spend:asc', 'Chi tiêu: thấp → cao'],
   ['results:desc', 'Kết quả: nhiều → ít'], ['cpa:asc', 'CPA: thấp → cao'], ['cpa:desc', 'CPA: cao → thấp'],
   ['roas:desc', 'ROAS: cao → thấp'], ['budget:desc', 'Ngân sách: cao → thấp'], ['delivery:asc', 'Phân phối: đang chạy trước'],
   ['name:asc', 'Tên: A → Z'], ['name:desc', 'Tên: Z → A'],
-]
+  ...(multiAcc.value && !account.value ? [['account:asc', 'Tài khoản: A → Z'], ['account:desc', 'Tài khoản: Z → A']] : []),
+])
 
 const visible = computed(() => {
   const s = q.value.trim().toLowerCase()
@@ -133,7 +154,9 @@ const filterOptions = computed(() => [
   { value: 'off', label: 'Không chạy', count: inLevel.value.filter((o) => !isRunning(o)).length },
 ])
 const levelOptions = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm QC' }]
-const footTotals = computed(() => visible.value.reduce((a, o) => ({ s: a.s + o.metrics.spend, r: a.r + o.metrics.results }), { s: 0, r: 0 }))
+const footResults = computed(() => visible.value.reduce((t, o) => t + o.metrics.results, 0))
+// Chi tiêu ở chân bảng: nhiều loại tiền thì tách riêng từng loại
+const footSpend = computed(() => groupByCurrency(visible.value, fallbackCur.value).map((g) => ({ currency: g.currency, s: g.items.reduce((t, o) => t + o.metrics.spend, 0) })))
 
 const roasTone = (o) => (!o.metrics.spend || o.metrics.roas == null ? null : o.metrics.roas >= 2 ? 'success' : o.metrics.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
@@ -180,13 +203,19 @@ async function bulk(on) {
         <template v-else>
           <div class="hero-l">
             <p class="lbl">Chi tiêu hôm nay</p>
-            <p class="big"><AnimatedNumber :value="totalSpend" /><small>{{ currency }}</small></p>
-            <p class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${fmt(activeBudget)}` : 'Chưa có ngân sách cấp camp' }}</p>
+            <template v-if="!mixed">
+              <p class="big"><AnimatedNumber :value="totalSpend" :decimals="decimalsOf(currency)" /><small>{{ currency }}</small></p>
+              <p class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${money(activeBudget, currency)}` : 'Chưa có ngân sách cấp camp' }}</p>
+            </template>
+            <template v-else>
+              <p v-for="g in byCur" :key="g.currency" class="big cur"><AnimatedNumber :value="g.spend" :decimals="decimalsOf(g.currency)" /><small>{{ g.currency }}</small><em v-if="g.budget" class="faint">trên ngân sách {{ money(g.budget, g.currency) }}</em></p>
+              <p class="muted sub">Các tài khoản dùng {{ byCur.length }} loại tiền khác nhau nên không cộng chung. Chọn 1 tài khoản ở ô lọc để xem CPA và ROAS.</p>
+            </template>
             <div v-if="top.length" class="tops">
               <div v-for="t in top" :key="t.id" class="top"><span class="tn" :title="t.name">{{ t.name }}</span><i class="tbar"><b :style="{ width: (t.metrics.spend / topMax) * 100 + '%' }" /></i><em class="num">{{ fmtCompact(t.metrics.spend) }}</em></div>
             </div>
           </div>
-          <ProgressRing :value="budgetPct" :size="128" :stroke="12"><div class="rc"><b class="num">{{ Math.round(budgetPct) }}%</b><small class="faint">ngân sách</small></div></ProgressRing>
+          <ProgressRing v-if="!mixed" :value="budgetPct" :size="128" :stroke="12"><div class="rc"><b class="num">{{ Math.round(budgetPct) }}%</b><small class="faint">ngân sách</small></div></ProgressRing>
         </template>
       </section>
 
@@ -200,11 +229,11 @@ async function bulk(on) {
       </section>
       <section class="card kpi"><p class="lbl">CPA trung bình <InfoTip tip="cpa" /></p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="110px" />
-        <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" /></template><template v-else>–</template></p><p class="sub faint">{{ avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
+        <template v-else><p class="val"><template v-if="avgCpa != null"><AnimatedNumber :value="avgCpa" /></template><template v-else>–</template></p><p class="sub faint">{{ mixed ? 'Khác loại tiền, chọn 1 tài khoản' : avgCpa != null ? 'Chi tiêu chia số kết quả' : 'Chưa có kết quả' }}</p></template>
       </section>
       <section class="card kpi"><p class="lbl">ROAS trung bình <InfoTip tip="roas" /></p>
         <Skeleton v-if="!state.objsLoaded" h="30px" w="80px" />
-        <template v-else><p class="val" :class="avgRoas != null && (avgRoas >= 2 ? 'ok' : avgRoas < 1 ? 'bad' : 'warn')">{{ avgRoas != null ? fmtDec(avgRoas) : '–' }}</p><p class="sub faint">Doanh thu chia chi tiêu</p></template>
+        <template v-else><p class="val" :class="avgRoas != null && (avgRoas >= 2 ? 'ok' : avgRoas < 1 ? 'bad' : 'warn')">{{ avgRoas != null ? fmtDec(avgRoas) : '–' }}</p><p class="sub faint">{{ mixed ? 'Khác loại tiền, chọn 1 tài khoản' : 'Doanh thu chia chi tiêu' }}</p></template>
       </section>
     </div>
 
@@ -239,10 +268,11 @@ async function bulk(on) {
       </EmptyState>
       <EmptyState v-else-if="!visible.length" :icon="q ? SearchX : Megaphone" :title="q ? 'Không có kết quả phù hợp' : 'Chưa có chiến dịch nào'" :text="q ? 'Thử đổi từ khoá hoặc bộ lọc.' : 'Khi tài khoản có chiến dịch, chúng sẽ hiện ở đây.'" />
 
-      <div v-else class="table">
+      <div v-else class="table" :class="{ hasacc: showAccCol }">
         <div class="hd row">
           <span />
           <span><button type="button" class="sh" :class="{ on: sort.key === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button></span>
+          <span v-if="showAccCol" class="h-ac"><button type="button" class="sh" :class="{ on: sort.key === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button></span>
           <span><button type="button" class="sh" :class="{ on: sort.key === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button></span>
           <div class="metrics">
             <span v-for="k in ['budget', 'spend', 'results', 'cpa', 'roas']" :key="k" class="r">
@@ -254,7 +284,8 @@ async function bulk(on) {
         <TransitionGroup name="row" tag="div">
           <div v-for="o in visible" :key="o.id" class="row item" :class="{ off: o.status !== 'ACTIVE' }">
             <div class="c-sw"><Switch :model-value="o.status === 'ACTIVE'" :disabled="locked(o)" :title="locked(o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[o.id]" :label="'Bật/tắt ' + o.name" @update:model-value="(v) => toggle(o, v)" /></div>
-            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><small v-if="multiAcc && !account" class="acc faint" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ o.accountName || o.accountId }}</small><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+            <div class="c-nm"><b :title="o.name">{{ o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ accountLabel(o) }}</small><span v-if="o.learning && o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+            <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + o.accountId"><b>{{ accountLabel(o) }}</b><small v-if="o.currency" class="faint">{{ o.currency }}</small></div>
             <div class="c-dl"><span class="dl" :class="deliveryOf(o).tone" :title="deliveryOf(o).label"><i />{{ deliveryOf(o).label }}</span></div>
             <div class="metrics">
               <div class="m r"><span class="ml">Ngân sách/ngày</span><BudgetCell :o="o" /></div>
@@ -270,8 +301,8 @@ async function bulk(on) {
 
       <div v-if="state.objsLoaded && visible.length" class="foot faint">
         <span><b class="num">{{ visible.length }}</b> mục</span>
-        <span>Chi tiêu <b class="num">{{ fmt(footTotals.s) }}</b></span>
-        <span>Kết quả <b class="num">{{ fmt(footTotals.r) }}</b></span>
+        <span>Chi tiêu <template v-for="(g, i) in footSpend" :key="g.currency"><template v-if="i"> + </template><b class="num">{{ money(g.s, g.currency) }}</b><template v-if="footSpend.length > 1"> {{ g.currency }}</template></template></span>
+        <span>Kết quả <b class="num">{{ fmt(footResults) }}</b></span>
         <span v-if="state.objsMeta && state.objsMeta.usage" class="right" :title="`Mức dùng lượt gọi Facebook API (${state.objsMeta.usage.tier || 'không rõ hạng'}). Tới 100% thì Facebook tạm chặn; tool tự giãn thời gian làm mới khi vượt 60%.`">
           API Facebook <b class="num" :class="{ warnc: state.objsMeta.usage.pct >= 60 }">{{ state.objsMeta.usage.pct }}%</b></span>
         <span v-if="state.objsAt" :class="{ right: !(state.objsMeta && state.objsMeta.usage) }">Số liệu lúc {{ state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }}</span>
@@ -348,14 +379,23 @@ async function bulk(on) {
 .foot b { color: var(--text); } .foot .right { margin-left: auto; } .foot b.warnc { color: var(--warning); }
 .stale { margin: 14px 18px 0; }
 .accsel { width: auto; max-width: 240px; padding: 7px 10px; font-size: 13.5px; }
-.c-nm .acc { font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
+/* cột Tài khoản (chỉ máy tính; điện thoại không có hàng tiêu đề nên hiện tên tài khoản dưới tên chiến dịch) */
+.table.hasacc .row { grid-template-columns: 70px minmax(180px, 1.9fr) minmax(130px, 1.1fr) minmax(140px, .9fr) minmax(0, 3.4fr); }
+.c-nm .acc { display: none; font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
+.c-ac { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 0; }
+.c-ac b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; color: var(--text-2); }
+.c-ac small { font-size: 11.5px; padding: 1px 7px; border-radius: 6px; background: var(--surface-3); }
+.big.cur { font-size: 30px; display: flex; align-items: baseline; flex-wrap: wrap; }
+.big.cur em { font-style: normal; font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 12px; }
 .row-enter-active, .row-leave-active { transition: all .3s var(--ease); }
 .row-enter-from, .row-leave-to { opacity: 0; transform: translateX(-10px); }
 
 @media (max-width: 1100px) { .hero { grid-column: span 12; grid-row: auto; } .kpi { grid-column: span 6; } }
 @media (max-width: 860px) {
   .hd { display: none; }
-  .row { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; gap: 10px 14px; }
+  .row, .table.hasacc .row { grid-template-columns: auto minmax(0, 1fr); padding: 14px 16px; gap: 10px 14px; }
+  .c-nm .acc { display: block; }
+  .c-ac { display: none; }
   .metrics { grid-column: 1 / -1; grid-template-columns: repeat(2, 1fr); gap: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
   .m { align-items: flex-start; } .r { justify-self: start; text-align: left; }
   .ml { display: block; }

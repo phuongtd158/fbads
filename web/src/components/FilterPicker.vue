@@ -16,6 +16,7 @@ import { state } from '../stores/app'
 import { fmt } from '../lib/format'
 import { CONDS, parseMoney, readFilter, matchFilter } from '../lib/bulkBudget'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
+import { accountLabel } from '../lib/accounts'
 import Segmented from './Segmented.vue'
 
 const selected = defineModel({ type: Array, default: () => [] })
@@ -31,6 +32,7 @@ const ex = computed(() => new Set(exclude.value))
 const hasAdsets = computed(() => state.objs.some((o) => o.level === 'adset'))
 const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
 const multiAcc = computed(() => accounts.value.length > 1)
+const showAcc = computed(() => multiAcc.value && !flt.value.account) // đã lọc 1 tài khoản thì cột này chỉ lặp lại
 const levelName = computed(() => (flt.value.level === 'adset' ? 'nhóm QC' : 'chiến dịch'))
 const typed = (v) => v != null && v !== ''
 const moneyHint = (v) => { const n = parseMoney(v); return typed(v) && Number.isFinite(n) ? fmt(n) : '' }
@@ -48,19 +50,19 @@ const dm = computed(() => deliveryMap(state.objs))
 const deliveryOf = (o) => DELIVERY[dm.value[o.id]] || DELIVERY.off
 const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' })
 const sort = ref({ key: '', dir: 'asc' })
-const SORT_GET = { name: (o) => o.name, budget: (o) => o.dailyBudget ?? -1, spend: (o) => o.metrics.spend }
+const SORT_GET = { name: (o) => o.name, account: (o) => accountLabel(o), budget: (o) => o.dailyBudget ?? -1, spend: (o) => o.metrics.spend }
 const rows = computed(() => {
   let list
   if (showOnlySel.value) list = state.objs.filter((o) => sel.value.has(o.id))
   else if (!matched.value) return []
   else list = props.needBudget ? matched.value.filter((o) => o.dailyBudget != null) : [...matched.value]
   const { key, dir } = sort.value
-  if (key) list.sort((a, b) => { const r = key === 'name' ? collator.compare(SORT_GET.name(a), SORT_GET.name(b)) : SORT_GET[key](a) - SORT_GET[key](b); return dir === 'asc' ? r : -r })
+  if (key) list.sort((a, b) => { const r = key === 'name' || key === 'account' ? collator.compare(SORT_GET[key](a), SORT_GET[key](b)) : SORT_GET[key](a) - SORT_GET[key](b); return dir === 'asc' ? r : -r })
   return list.map((o) => ({ o, ch: props.change && o.dailyBudget != null ? props.change(o) : null }))
 })
 function sortBy(k) {
   const s = sort.value
-  sort.value = s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: k === 'name' ? 'asc' : 'desc' }
+  sort.value = s.key === k ? { key: k, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: k, dir: k === 'name' || k === 'account' ? 'asc' : 'desc' }
 }
 const sortIcon = (k) => (sort.value.key !== k ? ArrowUpDown : sort.value.dir === 'asc' ? ArrowUp : ArrowDown)
 
@@ -97,7 +99,7 @@ const dropMissing = () => { const m = new Set(missing.value); selected.value = s
 
 const pct = (r) => `${r.ch.to > r.o.dailyBudget ? '+' : ''}${Math.round((r.ch.to / r.o.dailyBudget - 1) * 100)}%`
 const big = (r) => r.ch.to / r.o.dailyBudget >= 2 || r.ch.to / r.o.dailyBudget <= 0.5
-const rowCls = computed(() => ({ nc: !props.change }))
+const rowCls = computed(() => ({ nc: !props.change, wacc: showAcc.value })) // wacc = dòng có cột Tài khoản
 </script>
 
 <template>
@@ -147,6 +149,7 @@ const rowCls = computed(() => ({ nc: !props.change }))
           <div class="r hd" :class="rowCls">
             <input type="checkbox" :checked="allOn" :indeterminate="someOn" aria-label="Chọn tất cả" :title="auto ? 'Áp dụng / loại trừ tất cả mục đang hiện' : 'Chọn / bỏ chọn tất cả mục đang hiện'" @change="toggleAll" />
             <button type="button" class="sh" :class="{ on: sort.key === 'name' }" @click="sortBy('name')">Tên<component :is="sortIcon('name')" :size="12" /></button>
+            <button v-if="showAcc" type="button" class="sh h-ac" :class="{ on: sort.key === 'account' }" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="12" /></button>
             <button type="button" class="sh ra" :class="{ on: sort.key === 'budget' }" @click="sortBy('budget')">Ngân sách<component :is="sortIcon('budget')" :size="12" /></button>
             <button type="button" class="sh ra sp" :class="{ on: sort.key === 'spend' }" @click="sortBy('spend')">Chi tiêu hôm nay<component :is="sortIcon('spend')" :size="12" /></button>
             <span v-if="change" class="ra">Ngân sách mới</span>
@@ -155,7 +158,8 @@ const rowCls = computed(() => ({ nc: !props.change }))
             <label v-for="r in rows" :key="r.o.id" class="r it" :class="[rowCls, { on: isOn(r.o.id), off: auto && !isOn(r.o.id) }]" :title="auto && !isOn(r.o.id) ? 'Đã loại trừ: lịch sẽ bỏ qua mục này' : ''">
               <input type="checkbox" :checked="isOn(r.o.id)" @change="toggle(r.o.id)" />
               <span class="nm"><b :title="r.o.name">{{ r.o.name }}</b>
-                <small class="dl" :class="deliveryOf(r.o).tone"><i />{{ deliveryOf(r.o).label }}<em v-if="r.o.level === 'adset'"> · Nhóm QC</em><em v-if="multiAcc && !flt.account"> · {{ r.o.accountName || r.o.accountId }}</em></small></span>
+                <small class="dl" :class="deliveryOf(r.o).tone"><i />{{ deliveryOf(r.o).label }}<em v-if="r.o.level === 'adset'"> · Nhóm QC</em><em v-if="showAcc" class="acc-in"> · {{ accountLabel(r.o) }}</em></small></span>
+              <span v-if="showAcc" class="ac" :title="'Tài khoản quảng cáo ID ' + r.o.accountId"><b>{{ accountLabel(r.o) }}</b><small v-if="r.o.currency">{{ r.o.currency }}</small></span>
               <span class="num ra" :class="{ faint: r.o.dailyBudget == null }" :title="r.o.dailyBudget == null ? 'Dùng ngân sách chiến dịch (CBO)' : ''">{{ r.o.dailyBudget == null ? 'CBO' : fmt(r.o.dailyBudget) }}</span>
               <span class="num ra faint sp">{{ fmt(r.o.metrics.spend) }}</span>
               <span v-if="change" class="num ra nw">
@@ -203,6 +207,13 @@ const rowCls = computed(() => ({ nc: !props.change }))
 .tbl { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
 .r { display: grid; grid-template-columns: 20px minmax(0, 1fr) 110px 130px 150px; gap: 12px; align-items: center; padding: 9px 14px; }
 .r.nc { grid-template-columns: 20px minmax(0, 1fr) 110px 130px; }
+/* cột Tài khoản (khi có nhiều tài khoản và chưa lọc theo 1 tài khoản) */
+.r.wacc { grid-template-columns: 20px minmax(0, 1fr) minmax(110px, 150px) 110px 130px 150px; }
+.r.wacc.nc { grid-template-columns: 20px minmax(0, 1fr) minmax(110px, 150px) 110px 130px; }
+.ac { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ac b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 13px; color: var(--text-2); }
+.ac small { align-self: flex-start; font-size: 11px; color: var(--text-3); padding: 0 6px; border-radius: 5px; background: var(--surface-3); }
+.acc-in { display: none; }
 .r input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; }
 .hd { background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 650; color: var(--text-3); }
 .sh { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 3px 5px; margin: -3px -5px; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
@@ -226,6 +237,10 @@ const rowCls = computed(() => ({ nc: !props.change }))
 @media (max-width: 620px) {
   .r { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; gap: 8px; }
   .r.nc { grid-template-columns: 20px minmax(0, 1fr) 90px; }
+  .r.wacc { grid-template-columns: 20px minmax(0, 1fr) 90px 110px; }
+  .r.wacc.nc { grid-template-columns: 20px minmax(0, 1fr) 90px; }
+  .ac, .h-ac { display: none; }
+  .acc-in { display: inline; }
   .sp { display: none; }
 }
 </style>
