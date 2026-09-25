@@ -47,3 +47,34 @@ test('ROAS gộp bỏ qua dòng chưa chi tiêu', () => {
   near(t.roas, 4, 'ROAS')
   assert.equal(t.budget, 1000)
 })
+
+// ----- Ngân sách đang chạy (vòng % ngân sách ở Tổng quan) -----
+import { runningBudget } from '../shared/metrics.mjs'
+
+test('ngân sách đang chạy: camp có ngân sách riêng (CBO) lấy của camp', () => {
+  const camps = [{ id: 'c1', dailyBudget: 500000 }, { id: 'c2', dailyBudget: 300000 }]
+  assert.equal(runningBudget(camps, [], () => true), 800000)
+})
+
+test('ngân sách đang chạy: camp không có ngân sách riêng (ABO) cộng các nhóm QC ĐANG CHẠY của camp đó', () => {
+  const camps = [{ id: 'c1', dailyBudget: null }]
+  const adsets = [
+    { id: 'a1', campaignId: 'c1', dailyBudget: 100000, on: true },
+    { id: 'a2', campaignId: 'c1', dailyBudget: 250000, on: true },
+    { id: 'a3', campaignId: 'c1', dailyBudget: 900000, on: false }, // nhóm đang tắt: không tính
+    { id: 'a4', campaignId: 'other', dailyBudget: 700000, on: true }, // của camp khác: không tính
+  ]
+  assert.equal(runningBudget(camps, adsets, (a) => a.on), 350000)
+})
+
+test('ngân sách đang chạy: không cộng đôi khi camp CBO có nhóm QC; ngân sách trọn đời (null) bị bỏ qua', () => {
+  const camps = [{ id: 'c1', dailyBudget: 500000 }, { id: 'c2', dailyBudget: null }]
+  const adsets = [
+    { id: 'a1', campaignId: 'c1', dailyBudget: 999, on: true }, // camp c1 đã có ngân sách riêng → bỏ qua nhóm của nó
+    { id: 'a2', campaignId: 'c2', dailyBudget: null, on: true }, // ngân sách trọn đời
+    { id: 'a3', campaignId: 'c2', dailyBudget: 40000, on: true },
+  ]
+  assert.equal(runningBudget(camps, adsets, (a) => a.on), 540000)
+  assert.equal(runningBudget([], adsets, () => true), 0)
+  assert.equal(runningBudget([{ id: 'x', dailyBudget: null }], [], () => true), 0) // không có gì để cộng: 0, không phải NaN
+})

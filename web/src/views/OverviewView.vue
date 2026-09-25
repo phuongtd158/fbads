@@ -9,7 +9,7 @@ import { api } from '../lib/api'
 import { fmt, fmtDec, fmtCompact } from '../lib/format'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
-import { totals } from '../lib/metrics'
+import { totals, runningBudget } from '../lib/metrics'
 import { isToday } from '../lib/dates'
 import { colOf, cellValue, cellText, money } from '../lib/overviewColumns'
 import Btn from '../components/Btn.vue'
@@ -98,13 +98,16 @@ const curGroups = computed(() => groupByCurrency(campItems.value, fallbackCur.va
 const mixed = computed(() => curGroups.value.length > 1)
 const currency = computed(() => (curGroups.value[0] && curGroups.value[0].currency) || fallbackCur.value)
 const T = computed(() => totals(campItems.value.map((i) => ({ m: i.m, budget: null }))))
-const activeBudget = computed(() => running.value.reduce((t, i) => t + (i.o.dailyBudget || 0), 0))
+// Ngân sách có thể đặt ở chiến dịch (CBO) hoặc ở nhóm QC (ABO): tính cả hai, không chỉ ngân sách cấp chiến dịch
+const adsetObjs = computed(() => state.objs.filter((o) => o.level === 'adset'))
+const budgetOf = (items) => runningBudget(items.map((i) => i.o), adsetObjs.value, isRunning)
+const activeBudget = computed(() => budgetOf(running.value))
 const budgetPct = computed(() => (activeBudget.value ? Math.min(100, (T.value.spend / activeBudget.value) * 100) : 0))
 // Tổng chi tiêu / ngân sách theo từng loại tiền (chỉ dùng khi xem nhiều loại tiền cùng lúc)
 const byCur = computed(() => curGroups.value.map((g) => ({
   currency: g.currency,
   spend: g.items.reduce((t, i) => t + i.m.spend, 0),
-  budget: g.items.filter((i) => isRunning(i.o)).reduce((t, i) => t + (i.o.dailyBudget || 0), 0),
+  budget: budgetOf(g.items.filter((i) => isRunning(i.o))),
 })))
 const avgCpa = computed(() => (mixed.value ? null : T.value.cpa))
 const avgRoas = computed(() => (mixed.value ? null : T.value.roas))
@@ -270,7 +273,7 @@ async function bulk(on) {
             <p class="lbl">Chi tiêu {{ today ? 'hôm nay' : '· ' + rangeInfo.title.toLowerCase() }}</p>
             <template v-if="!mixed">
               <p class="big"><AnimatedNumber :value="T.spend" :decimals="decimalsOf(currency)" /><small>{{ currency }}</small></p>
-              <p v-if="today" class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${money(activeBudget, currency)}` : 'Chưa có ngân sách cấp camp' }}</p>
+              <p v-if="today" class="muted sub">{{ activeBudget ? `trên tổng ngân sách ${money(activeBudget, currency)}` : 'Chưa có ngân sách hằng ngày (chỉ có ngân sách trọn đời?)' }}</p>
               <p v-else class="muted sub">{{ rangeInfo.dates }}<template v-if="rangeInfo.days"> · {{ rangeInfo.days }} ngày</template><template v-if="avgPerDay != null"> · TB {{ money(avgPerDay, currency) }}/ngày</template></p>
             </template>
             <template v-else>
