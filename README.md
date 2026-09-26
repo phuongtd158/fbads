@@ -1,13 +1,14 @@
 # FB Ads Auto
 
 Tool tự động bật/tắt camp, chỉnh ngân sách Facebook Ads theo lịch và theo hiệu quả, báo cáo qua Telegram.
-Backend Node.js (không cần cài thư viện), giao diện Vue 3 + Vite.
+Backend Node.js + Express, giao diện Vue 3 + Vite.
 
 ## Chạy
-Bấm đúp `start.bat` (hoặc `node server.js`) rồi mở http://localhost:3000.
+Bấm đúp `start.bat` rồi mở http://localhost:3000. Lần đầu `start.bat` tự chạy `npm install` để cài thư viện của server (cần mạng).
+Chạy bằng tay thì: `npm install` (lần đầu và sau mỗi lần cập nhật code) rồi `node server.js`.
 Giữ cửa sổ mở (máy bật) để lịch tự chạy. Muốn tự khởi động cùng Windows: đặt shortcut `start.bat` vào `shell:startup`.
 
-Giao diện đã được build sẵn trong `public/`, dùng tool **không cần** cài Vue hay npm.
+Giao diện đã được build sẵn trong `public/`, dùng tool **không cần** cài Vue hay build lại giao diện.
 
 ## Phát triển giao diện (Vue 3 + Vite)
 ```bash
@@ -16,7 +17,7 @@ npm install
 npm run dev        # http://localhost:5173 (tự proxy /api sang server ở cổng 3000)
 npm run build      # build ra ../public
 ```
-Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. Cấu trúc `web/src`: `views/` (các trang), `components/` (thành phần dùng chung), `stores/` (trạng thái), `lib/` (api, định dạng), `styles/` (design token sáng/tối).
+Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API nằm trong `lib/routes/` (mỗi file một nhóm: đăng nhập, cài đặt, camp, lịch/rule, Facebook), middleware chung ở `lib/middleware.js`. Cấu trúc `web/src`: `views/` (các trang), `components/` (thành phần dùng chung), `stores/` (trạng thái), `lib/` (api, định dạng), `styles/` (design token sáng/tối).
 
 ## Tính năng
 - Tổng quan: bật/tắt camp, sửa ngân sách ngay trên dòng, xem chi tiêu/kết quả/CPA/ROAS hôm nay.
