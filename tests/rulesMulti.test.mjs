@@ -61,12 +61,12 @@ test('tối đa 5 điều kiện; match chỉ nhận all/any', () => {
   assert.equal(validateRule({ ...okRule, metric: 'cpa', op: '>', value: 1, match: 'linh tinh' }).value.match, 'all')
 })
 
-test('điều kiện so với mục tiêu: chỉ CPA/ROAS, phần trăm hợp lệ, không cần nhập ngưỡng', () => {
+test('điều kiện so với mục tiêu: chỉ CPA/ROAS/chi tiêu, phần trăm hợp lệ, không cần nhập ngưỡng', () => {
   const t = validateRule({ ...okRule, conditions: [{ metric: 'cpa', op: '>', vs: 'target', factor: 120 }] })
   assert.equal(t.ok, true)
   assert.deepEqual(t.value.conditions[0], { metric: 'cpa', op: '>', vs: 'target', factor: 120, value: 0 })
   assert.equal(validateRule({ ...okRule, conditions: [{ metric: 'cpa', op: '>', vs: 'target' }] }).value.conditions[0].factor, 100) // mặc định 100%
-  assert.ok(validateRule({ ...okRule, conditions: [{ metric: 'spend', op: '>', vs: 'target', factor: 100 }] }).errors.metric)
+  assert.ok(validateRule({ ...okRule, conditions: [{ metric: 'ctr', op: '>', vs: 'target', factor: 100 }] }).errors.metric)
   for (const f of [0, -5, 1001, 'abc']) assert.ok(validateRule({ ...okRule, conditions: [{ metric: 'cpa', op: '>', vs: 'target', factor: f }] }).errors.value, String(f))
 })
 

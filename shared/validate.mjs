@@ -20,17 +20,19 @@ export const LIMITS = {
 
 // Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
 export const scheduleTimes = (s) => (Array.isArray(s && s.times) ? s.times.map(String) : s && s.time ? [String(s.time)] : [])
-const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm', 'messages', 'costPerMessage', 'leads', 'costPerLead']
+const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm', 'messages', 'costPerMessage', 'leads', 'costPerLead', 'frequency']
 // Số liệu dạng chi phí (tiền): ngưỡng "lớn hơn" phải > 0, và giao diện nhập được kiểu 150k / 1,5tr
 export const COST_METRICS = ['cpa', 'spend', 'cpc', 'cpm', 'costPerMessage', 'costPerLead']
 export const MAX_CONDITIONS = 5 // một rule tối đa 5 điều kiện
-export const TARGET_METRICS = ['cpa', 'roas'] // số liệu so được với "mục tiêu" đặt theo tài khoản (Cài đặt → Mục tiêu)
+export const TARGET_METRICS = ['cpa', 'roas', 'spend'] // số liệu so được với "mục tiêu" đặt theo tài khoản (Cài đặt → Mục tiêu)
+// Chi tiêu so với CPA mục tiêu (vd "đã chi quá 200% CPA mục tiêu" = cắt lỗ khi chưa ra kết quả); CPA/ROAS so với mục tiêu cùng tên
+export const targetKey = (metric) => (metric === 'spend' ? 'cpa' : metric)
 // Các điều kiện của rule. Rule cũ chỉ có metric/op/value ở ngoài cùng → coi như 1 điều kiện. Điều kiện đầu luôn được chép ra 3 trường cũ.
 export const conditionsOf = (r) => (r && Array.isArray(r.conditions) && r.conditions.length ? r.conditions : r && r.metric ? [{metric: r.metric, op: r.op, value: r.value}] : [])
 // Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
 export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
 export const RANGE_LABEL = {today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất'}
-const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM', messages: 'Số tin nhắn', costPerMessage: 'Chi phí/tin nhắn', leads: 'Số lead', costPerLead: 'Chi phí/lead'}
+const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM', messages: 'Số tin nhắn', costPerMessage: 'Chi phí/tin nhắn', leads: 'Số lead', costPerLead: 'Chi phí/lead', frequency: 'Tần suất'}
 const isBlank = (v) => v === '' || v === null || v === undefined
 const num = (v) => (isBlank(v) ? NaN : Number(v))
 const uniq = (a) => [...new Set(a)]
@@ -219,7 +221,7 @@ export function validateRule(input = {}, ctx = {}) {
         const op = c.op === '<' ? '<' : c.op === '>' ? '>' : null
         if (!op) put(i, 'op', 'Phép so sánh không hợp lệ')
         if (c.vs === 'target') { // so với mục tiêu của từng tài khoản: ngưỡng = mục tiêu × factor%
-            if (!TARGET_METRICS.includes(metric)) put(i, 'metric', 'Chỉ CPA và ROAS so được với mục tiêu')
+            if (!TARGET_METRICS.includes(metric)) put(i, 'metric', 'Chỉ CPA, ROAS và Chi tiêu so được với mục tiêu')
             const factor = isBlank(c.factor) ? 100 : num(c.factor)
             if (!Number.isFinite(factor) || factor <= 0 || factor > 1000) put(i, 'value', 'Phần trăm so với mục tiêu phải từ 1 đến 1000')
             return {metric, op, vs: 'target', factor: Number.isFinite(factor) ? factor : 100, value: 0}
@@ -230,6 +232,7 @@ export function validateRule(input = {}, ctx = {}) {
         else if (COST_METRICS.includes(metric) && op === '>' && value <= 0) put(i, 'value', `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`)
         else if (metric === 'roas' && value > 100) put(i, 'value', 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại')
         else if (metric === 'ctr' && value > 100) put(i, 'value', 'CTR là phần trăm, tối đa 100')
+        else if (metric === 'frequency' && value > 50) put(i, 'value', 'Tần suất lớn hơn 50 là bất thường, hãy kiểm tra lại')
         return {metric, op, value: Number.isFinite(value) ? value : 0}
     })
     const first = conds[0] || {}
@@ -256,8 +259,17 @@ export function validateRule(input = {}, ctx = {}) {
     const action = input.action
     if (!['pause', 'increase', 'decrease', 'notify'].includes(action)) e.action = 'Hành động không hợp lệ'
     if (range === 'today' && hasDataMetric && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
+    // Đổi ngân sách theo % (mặc định) hoặc theo số tiền cố định mỗi lần (amount)
+    const budgetMode = (action === 'increase' || action === 'decrease') && input.budgetMode === 'amount' ? 'amount' : 'percent'
+    let amount = num(input.amount)
+    if (budgetMode === 'amount') {
+        if (!Number.isFinite(amount) || amount <= 0) e.amount = 'Nhập số tiền thay đổi lớn hơn 0'
+        else if (amount > LIMITS.budgetMax) e.amount = 'Số tiền quá lớn, hãy kiểm tra lại số 0'
+        else amount = Math.round(amount)
+    } else amount = 0
     let pct = num(input.pct)
-    if (action === 'increase' || action === 'decrease') {
+    if (budgetMode === 'amount') pct = 0
+    else if (action === 'increase' || action === 'decrease') {
         if (!Number.isFinite(pct) || pct <= 0) e.pct = 'Nhập % thay đổi lớn hơn 0'
         else if (action === 'decrease' && pct > LIMITS.rulePctDecreaseMax) e.pct = `Giảm tối đa ${LIMITS.rulePctDecreaseMax}% mỗi lần (giảm 100% là đưa ngân sách về 0)`
         else if (action === 'increase' && pct > LIMITS.rulePctIncreaseMax) e.pct = `Tăng tối đa ${LIMITS.rulePctIncreaseMax}% mỗi lần`
@@ -330,7 +342,7 @@ export function validateRule(input = {}, ctx = {}) {
             : allActive ? accounts.map((a) => a.id)
                 : uniq(targets.map((id) => ((objs || []).find((o) => o.id === id) || {}).accountId).filter(Boolean))
         for (const id of inScope) {
-            const missing = uniq(tcs.map((c) => c.metric)).filter((m) => !(Number((accountTargets[id] || {})[m]) > 0))
+            const missing = uniq(tcs.map((c) => targetKey(c.metric))).filter((m) => !(Number((accountTargets[id] || {})[m]) > 0))
             if (!missing.length) continue
             const nm = (accounts.find((a) => a.id === id) || {}).name || id
             w.push(`Tài khoản “${nm}” chưa đặt mục tiêu ${missing.map((m) => METRIC_LABEL[m]).join(', ')}: rule sẽ bỏ qua camp của tài khoản này (đặt ở Cài đặt → Mục tiêu).`)
@@ -369,6 +381,8 @@ export function validateRule(input = {}, ctx = {}) {
         minSpend: Number.isFinite(minSpend) ? minSpend : 0,
         action,
         pct: Number.isFinite(pct) ? pct : 0,
+        budgetMode,
+        amount: Number.isFinite(amount) ? amount : 0,
         maxBudget: Number.isFinite(maxBudget) ? maxBudget : 0,
         minBudget: Number.isFinite(minBudget) ? minBudget : 0,
         cooldownHours: Number.isFinite(cooldown) ? cooldown : 0,
