@@ -35,31 +35,43 @@ export const MODES = { set: 'Đặt bằng', percent: 'Tăng/giảm theo %', add
 const money = (n) => Math.round(n).toLocaleString('vi-VN')
 const COND_TEXT = { lt: 'dưới', lte: 'từ %x trở xuống', gt: 'trên', gte: 'từ %x trở lên' }
 
+// Trạng thái cần lọc: 'all' | 'running' (đang phân phối, như cột Phân phối) | 'off' (chính mục đó đang tắt).
+// Dữ liệu cũ chỉ có onlyRunning: true = 'running'.
+export const STATUS_FILTERS = { all: 'Tất cả', running: 'Đang chạy', off: 'Đang tắt' }
+export const statusOf = (f = {}) => (STATUS_FILTERS[f.status] ? f.status : f.onlyRunning ? 'running' : 'all')
+// Ô "Tên chứa": nhiều từ khoá cách nhau bằng dấu phẩy, khớp một từ bất kỳ
+export const nameTerms = (name) => String(name || '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean)
+
 // Mô tả điều kiện cho người đọc, vd "Nhóm QC ngân sách dưới 100.000 · tên chứa “Phương” · đang chạy"
 // accountName(id) (không bắt buộc): tên tài khoản quảng cáo để hiện thay cho mã số
 export function describeFilter(f = {}, accountName = (id) => id) {
   const parts = [f.level === 'adset' ? 'Nhóm QC' : 'Chiến dịch']
   if (f.op === 'between') parts[0] += ` ngân sách từ ${money(Math.min(f.x, f.y))} đến ${money(Math.max(f.x, f.y))}`
   else if (COND_TEXT[f.op]) parts[0] += ` ngân sách ${COND_TEXT[f.op].includes('%x') ? COND_TEXT[f.op].replace('%x', money(f.x)) : `${COND_TEXT[f.op]} ${money(f.x)}`}`
-  if (f.name) parts.push(`tên chứa “${f.name}”`)
-  if (f.onlyRunning) parts.push('đang chạy')
+  const terms = String(f.name || '').split(',').map((t) => t.trim()).filter(Boolean)
+  if (terms.length) parts.push(`tên chứa ${terms.map((t) => `“${t}”`).join(' hoặc ')}`)
+  const st = statusOf(f)
+  if (st === 'running') parts.push('đang chạy')
+  else if (st === 'off') parts.push('đang tắt')
   if (f.account) parts.push(`tài khoản ${accountName(f.account)}`)
   if (parts.length === 1 && (!f.op || f.op === 'any')) parts[0] = f.level === 'adset' ? 'Mọi nhóm QC' : 'Mọi chiến dịch'
   return parts.join(' · ')
 }
 
-// Các mục khớp điều kiện { level, op, x, y, name, onlyRunning, account }. Bỏ qua mục đã lưu trữ/xoá.
-// "Đang chạy" tính như cột Phân phối (xét cả nhóm QC bên trong camp).
+// Các mục khớp điều kiện { level, op, x, y, name, status, account }. Bỏ qua mục đã lưu trữ/xoá.
+// "Đang chạy" tính như cột Phân phối (xét cả nhóm QC bên trong camp); "Đang tắt" = chính mục đó đang ở trạng thái tắt.
 export function matchFilter(objs, f = {}, now = Date.now()) {
   const level = f.level === 'adset' ? 'adset' : 'campaign'
-  const q = String(f.name || '').trim().toLowerCase()
+  const terms = nameTerms(f.name)
   const c = CONDS[f.op] || CONDS.any
-  const dm = f.onlyRunning ? deliveryMap(objs, now) : null
+  const st = statusOf(f)
+  const dm = st === 'running' ? deliveryMap(objs, now) : null
   return objs.filter((o) => o.level === level
     && !['ARCHIVED', 'DELETED'].includes(o.effective)
     && (!f.account || o.accountId === f.account)
     && (!dm || (DELIVERY[dm[o.id]] || {}).running)
-    && (!q || String(o.name).toLowerCase().includes(q))
+    && (st !== 'off' || o.status === 'PAUSED')
+    && (!terms.length || terms.some((t) => String(o.name).toLowerCase().includes(t)))
     && (c === CONDS.any || (o.dailyBudget != null && c.test(o.dailyBudget, f.x, f.y))))
 }
 
@@ -76,7 +88,8 @@ export function readFilter(f) {
   const x = parseMoney(f.x), y = parseMoney(f.y)
   if (f.op !== 'any' && !(x >= 0)) e.x = 'Nhập mức ngân sách để so sánh (vd 100000 hoặc 100k)'
   if (f.op === 'between' && !(y >= 0)) e.y = 'Nhập mức thứ hai của khoảng'
-  return { errors: e, filter: { level: f.level, op: f.op, x, y, name: f.name || '', onlyRunning: !!f.onlyRunning, account: f.account || '' } }
+  const status = statusOf(f)
+  return { errors: e, filter: { level: f.level, op: f.op, x, y, name: f.name || '', status, onlyRunning: status === 'running', account: f.account || '' } }
 }
 // Phần "đổi thành" → { errors, action }
 export function readAction(f) {

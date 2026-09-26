@@ -211,7 +211,7 @@ test('lịch theo điều kiện: không cần chọn từng mục, kiểm tra �
   const base = { name: 'Nâng nhóm nhỏ', action: 'budget', mode: 'set', value: 500000, time: '06:00', days: [1], targetMode: 'filter' }
   const r = validateSchedule({ ...base, filter: { level: 'adset', op: 'lt', x: 100000 } }, { objs })
   assert.equal(r.ok, true)
-  assert.deepEqual(r.value.filter, { level: 'adset', op: 'lt', x: 100000, name: '', onlyRunning: false })
+  assert.deepEqual(r.value.filter, { level: 'adset', op: 'lt', x: 100000, name: '', status: 'all', onlyRunning: false })
   assert.deepEqual(r.value.targets, [])
   assert.ok(validateSchedule({ ...base, filter: { level: 'adset', op: 'lt' } }, { objs }).errors.filter) // thiếu mức so sánh
   assert.ok(validateSchedule({ ...base, filter: { level: 'adset', op: 'any' } }, { objs }).warnings.some((w) => w.includes('mọi nhóm QC')))

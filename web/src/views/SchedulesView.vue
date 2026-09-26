@@ -1,11 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Play, Pencil, Trash2, CalendarClock, Clock } from 'lucide-vue-next'
+import { Plus, Play, Pencil, Trash2, CalendarClock, Clock, Moon } from 'lucide-vue-next'
 import { state, loadState, ensureObjs, loadObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { scheduleTimes } from '../lib/validate'
+import { scheduleTimes, scheduleEvents, eventOnDay } from '../lib/validate'
 import { describeFilter, matchFilter } from '../lib/bulkBudget'
 import { labelOf } from '../lib/accounts'
 import { DAY_LABEL, DAY_ORDER, SCHEDULE_PRESETS } from '../lib/constants'
@@ -28,12 +28,12 @@ const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || 
 const tagOf = (id) => labelOf(state.objs, id, multiAcc.value)
 
 function nextRun(s) {
-  const now = new Date(), times = [...scheduleTimes(s)].sort()
+  const now = new Date(), evs = [...scheduleEvents(s)].sort((a, b) => a.time.localeCompare(b.time))
   for (let i = 0; i < 8; i++) {
-    for (const t of times) {
-      const [h, m] = t.split(':').map(Number)
+    for (const ev of evs) {
+      const [h, m] = ev.time.split(':').map(Number)
       const d = new Date(now); d.setDate(d.getDate() + i); d.setHours(h, m, 0, 0)
-      if (d > now && s.days.includes(d.getDay())) return d
+      if (d > now && eventOnDay(s, ev, d.getDay())) return d
     }
   }
   return null
@@ -46,8 +46,8 @@ const rel = (d) => {
 }
 const next = computed(() => list.value.filter((s) => s.enabled).map((s) => ({ s, d: nextRun(s) })).filter((x) => x.d).sort((a, b) => a.d - b.d)[0])
 
-const actionTone = (a) => (a === 'on' ? 'success' : a === 'off' ? 'danger' : 'info')
-const actionText = (s) => (s.action === 'on' ? 'Bật camp' : s.action === 'off' ? 'Tắt camp' : s.mode === 'percent' ? `${s.value > 0 ? '+' : ''}${s.value}% ngân sách` : s.mode === 'add' ? `${s.value > 0 ? '+' : '−'}${fmt(Math.abs(s.value))} ngân sách` : `Ngân sách = ${fmt(s.value)}`)
+const actionTone = (a) => (a === 'on' ? 'success' : a === 'off' ? 'danger' : a === 'window' ? 'accent' : 'info')
+const actionText = (s) => (s.action === 'on' ? 'Bật camp' : s.action === 'off' ? 'Tắt camp' : s.action === 'window' ? 'Bật + tắt theo giờ' : s.mode === 'percent' ? `${s.value > 0 ? '+' : ''}${s.value}% ngân sách` : s.mode === 'add' ? `${s.value > 0 ? '+' : '−'}${fmt(Math.abs(s.value))} ngân sách` : `Ngân sách = ${fmt(s.value)}`)
 // Lịch theo điều kiện: số mục đang khớp lúc này (lúc chạy tool lọc lại)
 // tên tài khoản quảng cáo để mô tả điều kiện dễ đọc
 const accName = (id) => { const a = ((state.objsMeta && state.objsMeta.accounts) || []).find((x) => x.id === id); return a ? a.name : id }
@@ -59,6 +59,13 @@ const matchCount = (s) => {
 }
 
 function open(item) { editing.value = item; editor.value = true }
+// Lịch bật → mở sẵn lịch tắt cho đúng các mục đó (chỉ cần chọn giờ tắt)
+function openOffFor(s) {
+  const { id, name, action, time, times, ...rest } = JSON.parse(JSON.stringify(s))
+  // lịch bật theo điều kiện "đang tắt": lúc tắt cần lấy mọi mục khớp (lúc đó chúng đang chạy)
+  if (rest.filter && rest.filter.status === 'off') { rest.filter.status = 'all'; rest.filter.onlyRunning = false }
+  open({ ...rest, name: `Tắt: ${name}`.slice(0, 80), action: 'off', times: ['23:00'], enabled: true })
+}
 async function refresh() { await loadState() }
 
 async function setEnabled(s, on) {
@@ -67,7 +74,8 @@ async function setEnabled(s, on) {
 }
 async function runNow(s) {
   const dry = state.settings.dryRun && !state.settings.mock
-  if (!await confirm('Chạy lịch ngay?', `“${s.name}” sẽ được thực hiện ngay bây giờ${dry ? ' (chế độ chạy thử: chỉ ghi nhật ký)' : ''}.`, { ok: 'Chạy ngay' })) return
+  const what = s.action === 'window' ? `“${s.name}” sẽ bật hoặc tắt các mục ngay bây giờ, theo khung giờ ${s.window.on}–${s.window.off}` : `“${s.name}” sẽ được thực hiện ngay bây giờ`
+  if (!await confirm('Chạy lịch ngay?', `${what}${dry ? ' (chế độ chạy thử: chỉ ghi nhật ký)' : ''}.`, { ok: 'Chạy ngay' })) return
   await api(`schedules/${s.id}/run`, 'POST')
   toast('Đã chạy — xem kết quả ở Nhật ký')
   loadObjs(true, true)
@@ -100,20 +108,22 @@ async function remove(s) {
       <article v-for="s in list" :key="s.id" class="card it" :class="{ off: !s.enabled }">
         <div class="hd">
           <div class="tm">
-            <span v-if="scheduleTimes(s).length === 1" class="time num">{{ scheduleTimes(s)[0] }}</span>
+            <span v-if="s.action === 'window'" class="time num">{{ s.window.on }}<small>→</small>{{ s.window.off }}</span>
+            <span v-else-if="scheduleTimes(s).length === 1" class="time num">{{ scheduleTimes(s)[0] }}</span>
             <span v-else class="time num">{{ scheduleTimes(s).length }} lần/ngày</span>
             <Badge :tone="actionTone(s.action)">{{ actionText(s) }}</Badge>
           </div>
           <Switch :model-value="s.enabled" :loading="busy[s.id]" :label="'Bật/tắt lịch ' + s.name" @update:model-value="(v) => setEnabled(s, v)" />
         </div>
         <h4>{{ s.name }}</h4>
-        <div v-if="scheduleTimes(s).length > 1" class="tlist num">{{ scheduleTimes(s).join(' · ') }}</div>
+        <div v-if="s.action !== 'window' && scheduleTimes(s).length > 1" class="tlist num">{{ scheduleTimes(s).join(' · ') }}</div>
         <div class="days"><span v-for="d in DAY_ORDER" :key="d" :class="{ on: s.days.includes(d) }">{{ DAY_LABEL[d] }}</span></div>
         <div v-if="s.targetMode === 'filter'" class="tags"><span class="tag flt" :title="describe(s)">Theo điều kiện: {{ describe(s) }}</span><span v-if="s.exclude && s.exclude.length" class="tag">trừ {{ s.exclude.length }} mục</span><span v-if="matchCount(s) != null" class="tag">Đang khớp {{ matchCount(s) }} mục</span></div>
         <div v-else class="tags"><span v-for="id in s.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="s.targets.length > 3" class="tag">+{{ s.targets.length - 3 }}</span></div>
         <div class="acts">
           <Btn size="sm" :icon="Play" :action="() => runNow(s)">Chạy ngay</Btn>
           <Btn size="sm" :icon="Pencil" @click="open(s)">Sửa</Btn>
+          <Btn v-if="s.action === 'on'" size="sm" variant="ghost" :icon="Moon" title="Tạo lịch tắt cho đúng các mục của lịch này" @click="openOffFor(s)">Tạo lịch tắt</Btn>
           <span class="grow" />
           <Btn size="sm" variant="ghost danger" :icon="Trash2" :action="() => remove(s)" aria-label="Xoá" />
         </div>
@@ -143,6 +153,7 @@ async function remove(s) {
 .it.off { opacity: .6; }
 .hd { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .tm { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.time small { font-size: 20px; color: var(--text-3); margin: 0 6px; font-weight: 600; vertical-align: middle; }
 .time { font-size: 34px; font-weight: 750; letter-spacing: -.04em; line-height: 1; }
 h4 { font-size: 15.5px; font-weight: 620; }
 .tlist { font-size: 13.5px; font-weight: 600; color: var(--text-2); margin-top: -6px; }

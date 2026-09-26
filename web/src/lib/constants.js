@@ -16,6 +16,7 @@ export const STATUS = {
 export const SCHEDULE_PRESETS = [
   { name: 'Bật camp 6:00 sáng', d: { name: 'Bật camp buổi sáng', action: 'on', time: '06:00' } },
   { name: 'Tắt camp 23:00', d: { name: 'Tắt camp buổi tối', action: 'off', time: '23:00' } },
+  { name: 'Chạy 6:00 – 23:00', d: { name: 'Chạy ban ngày', action: 'window', window: { on: '06:00', off: '23:00' } } },
   { name: 'Tăng 30% cuối tuần', d: { name: 'Tăng ngân sách cuối tuần', action: 'budget', mode: 'percent', value: 30, time: '07:00', days: [6, 0] } },
   { name: 'Giảm 50% ban đêm', d: { name: 'Giảm ngân sách ban đêm', action: 'budget', mode: 'percent', value: -50, time: '00:00' } },
 ]

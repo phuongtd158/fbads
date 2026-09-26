@@ -20,6 +20,28 @@ export const LIMITS = {
 
 // Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
 export const scheduleTimes = (s) => (Array.isArray(s && s.times) ? s.times.map(String) : s && s.time ? [String(s.time)] : [])
+// Các lần chạy trong ngày của một lịch: [{ time, action, prevDay }].
+// Lịch "Khung giờ" (action 'window') = 1 lần bật lúc window.on + 1 lần tắt lúc window.off. Giờ tắt ≤ giờ bật nghĩa là
+// tắt sau nửa đêm: lần tắt đó thuộc ngày hôm trước (prevDay), vd khung T2 20:00–02:00 thì tắt lúc 02:00 sáng T3.
+export function scheduleEvents(s) {
+    if (s && s.action === 'window') {
+        const w = s.window || {}
+        if (!isTime(w.on) || !isTime(w.off)) return []
+        return [{time: w.on, action: 'on', prevDay: false}, {time: w.off, action: 'off', prevDay: w.off <= w.on}]
+    }
+    return scheduleTimes(s).map((time) => ({time, action: s.action, prevDay: false}))
+}
+// Lịch có chạy lần này vào ngày `day` (0 = CN) không: lần tắt sau nửa đêm xét theo ngày hôm trước
+export const eventOnDay = (s, ev, day) => (s.days || []).map(Number).includes(ev.prevDay ? (day + 6) % 7 : day)
+// Khung giờ đang "bật" lúc này không (dùng cho nút Chạy ngay của lịch khung giờ): minutes = phút trong ngày
+export function windowIsOn(s, day, minutes) {
+    const w = s.window || {}
+    if (!isTime(w.on) || !isTime(w.off)) return false
+    const m = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+    const on = m(w.on), off = m(w.off), days = (s.days || []).map(Number)
+    if (off > on) return days.includes(day) && minutes >= on && minutes < off
+    return (days.includes(day) && minutes >= on) || (days.includes((day + 6) % 7) && minutes < off)
+}
 const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm', 'messages', 'costPerMessage', 'leads', 'costPerLead', 'frequency']
 // Số liệu dạng chi phí (tiền): ngưỡng "lớn hơn" phải > 0, và giao diện nhập được kiểu 150k / 1,5tr
 export const COST_METRICS = ['cpa', 'spend', 'cpc', 'cpm', 'costPerMessage', 'costPerLead']
@@ -67,7 +89,8 @@ const inter = (a, b) => a.filter((x) => b.includes(x))
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
 /* ------------------------------------------------------------------ Lịch */
-// Chọn mục theo điều kiện (lịch "Theo điều kiện"): { level, op, x, y, name, onlyRunning } — cách lọc nằm ở shared/bulk.mjs
+// Chọn mục theo điều kiện (lịch "Theo điều kiện"): { level, op, x, y, name, status, account } — cách lọc nằm ở shared/bulk.mjs
+export const FILTER_STATUSES = ['all', 'running', 'off']
 export const FILTER_OPS = ['any', 'lt', 'lte', 'gt', 'gte', 'between']
 export function checkFilter(f = {}) {
     const e = {}
@@ -79,7 +102,37 @@ export function checkFilter(f = {}) {
     const name = String(f.name ?? '').trim()
     if (name.length > 100) e.name = 'Cụm tên tối đa 100 ký tự'
     const account = String(f.account ?? '').trim().slice(0, 40) // '' = mọi tài khoản quảng cáo
-    return { errors: e, value: { level, op, ...(op !== 'any' ? { x } : {}), ...(op === 'between' ? { y } : {}), name, onlyRunning: !!f.onlyRunning, ...(account ? { account } : {}) } }
+    // status: 'all' | 'running' | 'off'; dữ liệu cũ chỉ có onlyRunning. Vẫn ghi onlyRunning cho bản cũ đọc được.
+    const status = FILTER_STATUSES.includes(f.status) ? f.status : f.onlyRunning ? 'running' : 'all'
+    return { errors: e, value: { level, op, ...(op !== 'any' ? { x } : {}), ...(op === 'between' ? { y } : {}), name, status, onlyRunning: status === 'running', ...(account ? { account } : {}) } }
+}
+
+// Cảnh báo cho danh sách mục đã chọn của lịch:
+//  - bật camp mà mọi nhóm QC bên trong đang tắt / bật nhóm QC thuộc camp đang tắt → bật xong vẫn không phân phối
+//  - chọn cả camp lẫn nhóm QC bên trong nó
+export function targetWarnings(targets, objs, turnsOn) {
+    const w = [], sel = new Set(targets)
+    const byId = new Map(objs.map((o) => [o.id, o]))
+    const live = (o) => !['ARCHIVED', 'DELETED'].includes(o.effective)
+    const list = (ids) => ids.slice(0, 2).map((id) => `“${nameOf(objs, id)}”`).join(', ') + (ids.length > 2 ? ` và ${ids.length - 2} mục khác` : '')
+    if (turnsOn) {
+        const emptyCamps = targets.filter((id) => {
+            const o = byId.get(id)
+            if (!o || o.level !== 'campaign') return false
+            const sets = objs.filter((a) => a.level === 'adset' && a.campaignId === id && live(a))
+            // nhóm QC nằm trong lịch này cũng sẽ được bật cùng lúc
+            return sets.length > 0 && sets.every((a) => a.status === 'PAUSED' && !sel.has(a.id))
+        })
+        if (emptyCamps.length) w.push(`Mọi nhóm QC trong ${list(emptyCamps)} đang tắt, bật chiến dịch xong vẫn không chạy. Hãy chọn thêm nhóm QC cần bật.`)
+        const offParent = targets.filter((id) => {
+            const o = byId.get(id), c = o && o.level === 'adset' ? byId.get(o.campaignId) : null
+            return c && c.status === 'PAUSED' && !sel.has(c.id)
+        })
+        if (offParent.length) w.push(`${list(offParent)} thuộc chiến dịch đang tắt, bật nhóm QC xong vẫn không chạy. Hãy chọn thêm chiến dịch đó.`)
+    }
+    const dup = targets.filter((id) => { const o = byId.get(id); return o && o.level === 'adset' && sel.has(o.campaignId) })
+    if (dup.length && !turnsOn) w.push(`Đã chọn cả chiến dịch lẫn nhóm QC bên trong nó (${list(dup)}). Tắt chiến dịch là đủ; nếu tắt cả nhóm QC thì lịch bật lại cũng phải chọn các nhóm QC đó, nếu không camp bật lên vẫn không chạy.`)
+    return w
 }
 
 export function validateSchedule(input = {}, ctx = {}) {
@@ -89,13 +142,24 @@ export function validateSchedule(input = {}, ctx = {}) {
     if (name.length > LIMITS.nameMax) e.name = `Tên tối đa ${LIMITS.nameMax} ký tự`
 
     const action = input.action
-    if (!['on', 'off', 'budget'].includes(action)) e.action = 'Hành động không hợp lệ'
+    if (!['on', 'off', 'budget', 'window'].includes(action)) e.action = 'Hành động không hợp lệ'
 
-    const rawTimes = scheduleTimes(input)
-    const times = uniq(rawTimes).sort()
-    if (!rawTimes.length) e.time = 'Hãy thêm ít nhất 1 giờ chạy'
-    else if (rawTimes.some((t) => !isTime(t))) e.time = 'Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)'
-    else if (times.length > LIMITS.scheduleTimesMax) e.time = `Tối đa ${LIMITS.scheduleTimesMax} giờ chạy mỗi ngày`
+    // Khung giờ: bật lúc window.on, tắt lúc window.off (cùng danh sách camp)
+    let win = null, times
+    if (action === 'window') {
+        const iw = input.window || {}
+        win = {on: String(iw.on ?? ''), off: String(iw.off ?? '')}
+        if (!isTime(win.on) || !isTime(win.off)) e.time = 'Chọn giờ bật và giờ tắt (dạng HH:MM, ví dụ 06:00)'
+        else if (win.on === win.off) e.time = 'Giờ tắt phải khác giờ bật'
+        times = e.time ? [] : uniq([win.on, win.off]).sort()
+        if (!e.time && win.off < win.on) w.push(`Giờ tắt ${win.off} sớm hơn giờ bật nên camp tắt vào ${win.off} sáng hôm sau.`)
+    } else {
+        const rawTimes = scheduleTimes(input)
+        times = uniq(rawTimes).sort()
+        if (!rawTimes.length) e.time = 'Hãy thêm ít nhất 1 giờ chạy'
+        else if (rawTimes.some((t) => !isTime(t))) e.time = 'Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)'
+        else if (times.length > LIMITS.scheduleTimesMax) e.time = `Tối đa ${LIMITS.scheduleTimesMax} giờ chạy mỗi ngày`
+    }
 
     const days = uniq((Array.isArray(input.days) ? input.days : []).map(Number)).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6).sort()
     if (!days.length) e.days = 'Hãy chọn ít nhất 1 ngày trong tuần'
@@ -109,10 +173,10 @@ export function validateSchedule(input = {}, ctx = {}) {
         if (Object.keys(fr.errors).length) e.filter = Object.values(fr.errors)[0]
         // bỏ tích trong danh sách khớp = loại trừ mục đó (mục mới khớp về sau vẫn được áp dụng)
         exclude = uniq((Array.isArray(input.exclude) ? input.exclude : []).map(String)).slice(0, 2000)
-        if (!e.filter && filter.op === 'any' && !filter.name && !filter.onlyRunning) w.push(`Điều kiện đang khớp ${filter.level === 'adset' ? 'mọi nhóm QC' : 'mọi chiến dịch'} trên tài khoản.`)
+        if (!e.filter && filter.op === 'any' && !filter.name && filter.status === 'all') w.push(`Điều kiện đang khớp ${filter.level === 'adset' ? 'mọi nhóm QC' : 'mọi chiến dịch'} trên tài khoản.`)
     } else {
         targets = uniq((Array.isArray(input.targets) ? input.targets : []).map(String))
-        if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch'
+        if (!targets.length) e.targets = 'Hãy chọn ít nhất 1 chiến dịch hoặc nhóm QC'
         else if (objs) {
             const unknown = targets.filter((id) => !objs.some((o) => o.id === id))
             if (unknown.length) e.targets = `Có mục không còn tồn tại trên tài khoản: ${unknown.slice(0, 3).join(', ')}. Hãy bỏ chọn chúng.`
@@ -149,29 +213,43 @@ export function validateSchedule(input = {}, ctx = {}) {
         }
     }
 
-    // Xung đột với các lịch đang bật
+    // Những lựa chọn khiến lịch chạy xong vẫn không như ý (chỉ cảnh báo)
+    const turnsOn = action === 'on' || action === 'window'
+    if (targetMode === 'filter' && filter && !e.filter) {
+        if (action === 'window' && filter.status !== 'all') e.filter = 'Lịch khung giờ theo điều kiện cần trạng thái “Tất cả”: tool lọc lại lúc bật và lúc tắt, lọc “Đang chạy”/“Đang tắt” sẽ ra 2 danh sách khác nhau.'
+        else if (action === 'on' && filter.status === 'running') w.push('Lịch bật nhưng điều kiện chỉ lấy mục đang chạy nên không có gì để bật. Chọn trạng thái “Đang tắt” hoặc “Tất cả”.')
+        else if (action === 'off' && filter.status === 'off') w.push('Lịch tắt nhưng điều kiện chỉ lấy mục đang tắt nên không có gì để tắt. Chọn trạng thái “Đang chạy” hoặc “Tất cả”.')
+    }
+    if (targetMode === 'list' && objs && !e.targets) w.push(...targetWarnings(targets, objs, turnsOn))
+
+    // Xung đột với các lịch đang bật (so từng lần chạy: lịch khung giờ có 1 lần bật + 1 lần tắt)
     const enabled = input.enabled !== false
     // (lịch theo điều kiện không có danh sách cố định nên không kiểm tra trùng/ngược được trước)
     if (enabled && targetMode === 'list' && !e.time && !e.days && !e.targets && !e.action) {
+        const mine = scheduleEvents({action, times, window: win})
         for (const o of schedules) {
             if (o.id && o.id === input.id) continue
-            const oTimes = scheduleTimes(o), sharedTimes = inter(times, oTimes)
-            if (o.enabled === false || !sharedTimes.length) continue
-            const at = sharedTimes.join(', ')
+            if (o.enabled === false) continue
+            const theirs = scheduleEvents(o)
             const sharedDays = inter(days, (o.days || []).map(Number)), sharedTargets = inter(targets, o.targets || [])
             if (!sharedDays.length || !sharedTargets.length) continue
             const names = sharedTargets.slice(0, 2).map((id) => nameOf(objs, id)).join(', ')
-            const opposite = (action === 'on' && o.action === 'off') || (action === 'off' && o.action === 'on')
-            const identical = action === o.action && (action !== 'budget' || (mode === (['set', 'add'].includes(o.mode) ? o.mode : 'percent') && Number(o.value) === value)) && sameSet(times, oTimes) && sameSet(days, (o.days || []).map(Number)) && sameSet(targets, o.targets || [])
-            if (opposite) {
-                e.conflict = `Xung đột với lịch “${o.name}”: cùng lúc ${at} nhưng làm điều ngược lại (${o.action === 'on' ? 'bật' : 'tắt'}) cho ${names}.`;
+            const clash = mine.flatMap((a) => theirs.filter((b) => b.time === a.time).map((b) => [a, b]))
+            const opp = clash.find(([a, b]) => (a.action === 'on' && b.action === 'off') || (a.action === 'off' && b.action === 'on'))
+            if (opp) {
+                e.conflict = `Xung đột với lịch “${o.name}”: cùng lúc ${opp[0].time} nhưng làm điều ngược lại (${opp[1].action === 'on' ? 'bật' : 'tắt'}) cho ${names}.`;
                 break
             }
+            const sameTargets = sameSet(days, (o.days || []).map(Number)) && sameSet(targets, o.targets || [])
+            const identical = action === o.action && sameTargets && (action === 'window'
+                ? !!o.window && o.window.on === win.on && o.window.off === win.off
+                : (action !== 'budget' || (mode === (['set', 'add'].includes(o.mode) ? o.mode : 'percent') && Number(o.value) === value)) && sameSet(times, scheduleTimes(o)))
             if (identical) {
                 e.conflict = `Đã có lịch giống hệt: “${o.name}”.`;
                 break
             }
-            if (action === 'budget' && o.action === 'budget') w.push(`Lịch “${o.name}” cũng đổi ngân sách của ${names} lúc ${at}, kết quả có thể khó đoán.`)
+            const at = uniq(clash.map(([a]) => a.time)).join(', ')
+            if (action === 'budget' && o.action === 'budget' && clash.length) w.push(`Lịch “${o.name}” cũng đổi ngân sách của ${names} lúc ${at}, kết quả có thể khó đoán.`)
         }
     }
 
@@ -182,6 +260,7 @@ export function validateSchedule(input = {}, ctx = {}) {
         time: times[0], // giữ cho dữ liệu/giao diện cũ: giờ chạy sớm nhất
         times,
         days,
+        ...(win ? {window: win} : {}),
         targetMode,
         targets,
         ...(filter ? {filter} : {}),
