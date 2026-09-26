@@ -120,3 +120,37 @@ test('evaluateRule: camp bật nhưng mọi nhóm QC đã tắt/hết hạn thì
   const picked = engine.evaluateRule({ ...rule, allActive: false, targets: ['c2', 'c3'] }, objs, map, { running })
   assert.deepEqual(picked.map((d) => [d.code, d.reason]), [['inactive', 'Camp không đang chạy (Nhóm quảng cáo đang tắt)'], ['inactive', 'Camp không đang chạy (Hoàn tất)']])
 })
+
+/* ------------------------------------------------ Chuẩn ngành: tần suất, chi tiêu so với CPA mục tiêu, đổi theo số tiền */
+test('tần suất = hiển thị / người xem; chưa có reach thì 0', () => {
+  assert.equal(engine.metricValue({ spend: 1, impressions: 3000, reach: 1000 }, 'frequency'), 3)
+  assert.equal(engine.metricValue({ spend: 1, impressions: 3000 }, 'frequency'), 0)
+  assert.equal(validateRule({ ...okRule, range: 'last_7d', action: 'notify', cooldownHours: 24, conditions: [{ metric: 'frequency', op: '>', value: 3.5 }] }).ok, true)
+})
+
+test('cắt lỗ: chi tiêu so với % CPA mục tiêu của tài khoản', () => {
+  S().settings.accountTargets = { acc1: { cpa: 100000 } }
+  const obj = { id: 'c1', name: 'c', level: 'campaign', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 100000, accountId: 'acc1' }
+  const rule = { id: 'r', name: 'x', action: 'pause', allActive: true, level: 'campaign', range: 'today', minSpend: 0, match: 'all',
+    conditions: [{ metric: 'spend', op: '>', vs: 'target', factor: 200 }, { metric: 'results', op: '<', value: 1 }] }
+  const v = validateRule({ ...rule, minSpend: 100000, cooldownHours: 24 }, { accountTargets: { acc2: {} }, accounts: [{ id: 'acc2', name: 'B' }] })
+  assert.equal(v.ok, true)
+  assert.ok(v.warnings.some((w) => w.includes('chưa đặt mục tiêu CPA')))
+  const run = (spend, results) => engine.evaluateRule(rule, [obj], () => ({ c1: { spend, results } }))[0]
+  assert.equal(run(250000, 0).hit, true)
+  assert.equal(run(150000, 0).hit, false)
+  assert.equal(run(250000, 1).hit, false)
+  assert.equal(run(250000, 0).conds[0].threshold, 200000)
+})
+
+test('tăng/giảm ngân sách theo số tiền cố định', () => {
+  const r = validateRule({ ...okRule, metric: 'roas', op: '>', value: 3, action: 'increase', budgetMode: 'amount', amount: '200000', pct: 20, maxBudget: 2000000, cooldownHours: 24 })
+  assert.equal(r.ok, true)
+  assert.deepEqual([r.value.budgetMode, r.value.amount, r.value.pct], ['amount', 200000, 0])
+  assert.ok(validateRule({ ...okRule, metric: 'roas', op: '>', value: 3, action: 'decrease', budgetMode: 'amount', amount: 0, cooldownHours: 24 }).errors.amount)
+  assert.equal(validateRule({ ...okRule, metric: 'cpa', op: '>', value: 1, budgetMode: 'amount', amount: 5 }).value.budgetMode, 'percent') // rule tắt: bỏ qua
+  const obj = { id: 'c1', name: 'c', level: 'campaign', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 1000000 }
+  const d = engine.evaluateRule({ ...r.value, id: 'r', minSpend: 0 }, [obj], () => ({ c1: { spend: 100, roas: 5 } }))[0]
+  assert.deepEqual([d.action.mode, d.action.value], ['add', 200000])
+  assert.equal(d.plan.next, 1200000)
+})

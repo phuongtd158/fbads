@@ -19,7 +19,7 @@ import MoneyInput from './MoneyInput.vue'
 const props = defineProps({ modelValue: Boolean, item: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const blank = () => ({ name: '', conditions: [{ metric: 'cpa', op: '>', value: 150000 }], match: 'all', range: 'last_3d', minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, resume: '', resumeAt: '06:00', from: '', to: '', allActive: true, accountIds: [], level: 'campaign', targets: [], enabled: true })
+const blank = () => ({ name: '', conditions: [{ metric: 'cpa', op: '>', value: 150000 }], match: 'all', range: 'last_3d', minSpend: 100000, action: 'pause', pct: 20, budgetMode: 'percent', amount: '', maxBudget: '', minBudget: '', cooldownHours: 24, resume: '', resumeAt: '06:00', from: '', to: '', allActive: true, accountIds: [], level: 'campaign', targets: [], enabled: true })
 const f = ref(blank())
 const scope = ref('all')
 const submitted = ref(false)
@@ -39,6 +39,7 @@ watch(() => props.modelValue, (open) => {
   f.value.match = item.match === 'any' ? 'any' : 'all'
   f.value.accountIds = [...(item.accountIds || [])]
   f.value.maxBudget = f.value.maxBudget || ''; f.value.minBudget = f.value.minBudget || ''
+  f.value.amount = f.value.amount || ''; f.value.budgetMode = f.value.budgetMode === 'amount' ? 'amount' : 'percent'; f.value.pct = f.value.pct || 20
   f.value.resumeAt = f.value.resumeAt || '06:00'
   scope.value = f.value.allActive ? 'all' : 'pick'
   submitted.value = false
@@ -67,13 +68,14 @@ function addCond() {
 const removeCond = (i) => { if (f.value.conditions.length > 1) f.value.conditions.splice(i, 1) }
 function onMetric(c) { if (!canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS so được với mục tiêu
 function onMode(c) { if (c.vs === 'target') { c.factor = c.factor || 100 } else { c.vs = ''; delete c.factor } }
-const modes = [{ value: '', label: 'Số cụ thể' }, { value: 'target', label: '% mục tiêu' }]
+const modesFor = (c) => [{ value: '', label: 'Số cụ thể' }, { value: 'target', label: c.metric === 'spend' ? '% CPA mục tiêu' : '% mục tiêu' }]
+const budgetModes = [{ value: 'percent', label: 'Theo %' }, { value: 'amount', label: 'Theo số tiền' }]
 const matchOptions = [{ value: 'all', label: 'Tất cả điều kiện đúng (VÀ)' }, { value: 'any', label: 'Một trong các điều kiện đúng (HOẶC)' }]
 const toggleAcc = (id) => { const s = new Set(f.value.accountIds); s.has(id) ? s.delete(id) : s.add(id); f.value.accountIds = [...s] }
 const showTargets = computed(() => (submitted.value ? check.value.errors.targets : ''))
 const touch = (k) => { touched[k] = true }
 // các ô trần / sàn / % nằm chung một khối: gom lỗi lại
-const adjErrors = computed(() => ['pct', 'maxBudget', 'minBudget'].map(show).filter(Boolean))
+const adjErrors = computed(() => ['pct', 'amount', 'maxBudget', 'minBudget'].map(show).filter(Boolean))
 // Sửa form thì kết quả xem trước cũ không còn đúng → xoá đi
 watch(() => JSON.stringify(check.value.value), () => { pv.value = null; pvError.value = '' })
 
@@ -129,13 +131,13 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
           <div class="inl">
             <select v-model="c.metric" class="input sel" :aria-label="'Số liệu điều kiện ' + (i + 1)" @change="onMetric(c); touch('c' + i)"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
             <Segmented v-model="c.op" :options="ops" size="sm" />
-            <select v-if="canTarget(c)" v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c)"><option v-for="m in modes" :key="m.value" :value="m.value">{{ m.label }}</option></select>
+            <select v-if="canTarget(c)" v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c)"><option v-for="m in modesFor(c)" :key="m.value" :value="m.value">{{ m.label }}</option></select>
             <div v-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
             <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="val" aria-label="Ngưỡng" placeholder="vd 150k" @input="touch('c' + i)" />
             <input v-else v-model="c.value" type="number" step="any" min="0" class="input val" aria-label="Ngưỡng" @input="touch('c' + i)" />
             <button v-if="f.conditions.length > 1" type="button" class="rm" :aria-label="'Bỏ điều kiện ' + (i + 1)" @click="removeCond(i)"><X :size="15" /></button>
           </div>
-          <p v-if="c.vs === 'target'" class="th">Ngưỡng = <b>{{ c.metric === 'roas' ? 'ROAS' : 'CPA' }} mục tiêu</b> của từng tài khoản × {{ c.factor || 100 }}%. Đặt mục tiêu ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>.</p>
+          <p v-if="c.vs === 'target'" class="th">Ngưỡng = <b>{{ c.metric === 'roas' ? 'ROAS' : 'CPA' }} mục tiêu</b> của từng tài khoản × {{ c.factor || 100 }}%<template v-if="c.metric === 'spend'"> (vd 200% = đã chi gấp đôi CPA mục tiêu; thêm điều kiện “Số kết quả nhỏ hơn 1” để cắt lỗ camp chưa ra đơn)</template>. Đặt mục tiêu ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>.</p>
           <p v-for="m in cErrors(i)" :key="m" class="e">{{ m }}</p>
         </div>
         <Btn v-if="f.conditions.length < MAX_CONDITIONS" size="sm" :icon="Plus" class="addc" @click="addCond">Thêm điều kiện</Btn>
@@ -147,7 +149,9 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
     <Field label="Thì" tip="ruleAction">
       <Segmented v-model="f.action" :options="actions" block />
       <div v-if="isBudget" class="adj" :class="{ bad: adjErrors.length }">
-        <label><span>Thay đổi</span><div class="with"><input v-model="f.pct" type="number" min="0" class="input" @input="touch('pct')" /><em>%</em></div></label>
+        <Segmented v-model="f.budgetMode" :options="budgetModes" size="sm" class="bm" />
+        <label v-if="f.budgetMode === 'amount'"><span>Mỗi lần {{ f.action === 'increase' ? 'cộng' : 'trừ' }}</span><MoneyInput v-model="f.amount" placeholder="vd 200k" @input="touch('amount')" /></label>
+        <label v-else><span>Thay đổi</span><div class="with"><input v-model="f.pct" type="number" min="0" class="input" @input="touch('pct')" /><em>%</em></div></label>
         <label><span>Trần ngân sách</span><MoneyInput v-model="f.maxBudget" placeholder="Không giới hạn" @input="touch('maxBudget')" /></label>
         <label><span>Sàn ngân sách</span><MoneyInput v-model="f.minBudget" placeholder="Không giới hạn" @input="touch('minBudget')" /></label>
         <p v-for="m in adjErrors" :key="m" class="e">{{ m }}</p>
@@ -216,7 +220,8 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.adj { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 12px; margin-top: 12px; padding: 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.adj .bm { grid-column: 1 / -1; justify-self: start; }
+.adj { display: grid; grid-template-columns: 140px 1fr 1fr; gap: 12px; margin-top: 12px; padding: 14px; border-radius: var(--r-md); background: var(--surface-2); }
 .adj.bad { box-shadow: inset 0 0 0 1px var(--danger); }
 .adj label { display: block; } .adj span { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-bottom: 5px; }
 .adj .e { grid-column: 1 / -1; margin: 0; color: var(--danger); font-size: 13px; line-height: 1.45; }

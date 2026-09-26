@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3, Eye, Copy, RotateCcw, Activity } from 'lucide-vue-next'
+import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3, Eye, Copy, RotateCcw, Activity, Layers } from 'lucide-vue-next'
 import { state, loadState, ensureObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
@@ -12,10 +12,12 @@ import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import EmptyState from '../components/EmptyState.vue'
 import RuleEditor from '../components/RuleEditor.vue'
+import RulePacks from '../components/RulePacks.vue'
 import RulePreview from '../components/RulePreview.vue'
 import Modal from '../components/Modal.vue'
 
 const editor = ref(false)
+const packs = ref(false)
 const editing = ref(null)
 const busy = ref({})
 onMounted(() => { ensureObjs(); loadActivity() })
@@ -53,7 +55,7 @@ const accNames = (r) => {
 }
 const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
 const unitOf = (r) => (r.level === 'adset' ? 'nhóm QC' : 'camp')
-const actText = (r) => (r.action === 'pause' ? `tắt ${unitOf(r)}` : r.action === 'notify' ? `gửi cảnh báo (không đổi ${unitOf(r)})` : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.pct}% ngân sách ${unitOf(r)}`)
+const actText = (r) => (r.action === 'pause' ? `tắt ${unitOf(r)}` : r.action === 'notify' ? `gửi cảnh báo (không đổi ${unitOf(r)})` : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.budgetMode === 'amount' ? fmt(r.amount) : r.pct + '%'} ngân sách ${unitOf(r)}`)
 
 // Xem trước rule đã lưu: đang khớp camp nào ngay bây giờ
 const pvOpen = ref(false)
@@ -91,6 +93,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
 
     <div class="presets">
       <span class="faint">Tạo nhanh</span>
+      <button class="chip pack" @click="packs = true"><Layers :size="14" />Bộ rule theo mục tiêu</button>
       <button v-for="p in RULE_PRESETS" :key="p.name" class="chip" @click="open({ ...p.d })"><Plus :size="14" />{{ p.name }}</button>
     </div>
 
@@ -112,6 +115,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     </div>
     <section v-else class="card"><EmptyState :icon="Zap" title="Chưa có rule nào" text="Rule giúp tool tự tắt camp lỗ và tăng ngân sách camp tốt khi bạn không online. Chọn một mẫu ở trên để bắt đầu."><Btn variant="primary" :icon="Plus" @click="open(null)">Thêm rule đầu tiên</Btn></EmptyState></section>
 
+    <RulePacks v-model="packs" @saved="loadState(); loadActivity()" />
     <RuleEditor v-model="editor" :item="editing" @saved="loadState(); loadActivity()" />
 
     <Modal v-model="pvOpen" title="Xem trước rule" :subtitle="pvRule && pvRule.name" width="640px">
@@ -129,6 +133,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
 .presets > span { font-size: 13px; font-weight: 600; margin-right: 4px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px dashed var(--border-strong); background: transparent; padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13.5px; color: var(--text-2); transition: .18s var(--ease); }
 .chip:hover { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); transform: translateY(-1px); }
+.chip.pack { border-style: solid; border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 16px; }
 .it { padding: 20px; display: flex; flex-direction: column; gap: 14px; transition: transform .2s var(--ease), box-shadow .2s, opacity .2s; }
 .it:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
