@@ -54,3 +54,8 @@ code { background: var(--surface-3); padding: 1px 6px; border-radius: 6px; font-
 .stagger > *:nth-child(4) { animation-delay: .12s; } .stagger > *:nth-child(5) { animation-delay: .16s; }
 .stagger > *:nth-child(6) { animation-delay: .2s; } .stagger > *:nth-child(n+7) { animation-delay: .24s; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* iOS Safari tự zoom khi chạm vào ô nhập có chữ < 16px: trên màn hình cảm ứng ép 16px (vẫn giữ pinch-zoom) */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
+}
