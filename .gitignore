@@ -18,3 +18,6 @@ ngrok-domain.txt
 
 # Cấu hình chạy thử cục bộ của công cụ (không đưa lên repo)
 .claude/
+
+# Bản Java (backend-java/): thư mục build của Maven
+backend-java/target/

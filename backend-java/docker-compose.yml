@@ -1,0 +1,44 @@
+# Chạy bản Java + MariaDB trên máy:  cd backend-java && docker compose up --build
+# Mở http://localhost:3000. Dữ liệu MariaDB nằm trong volume "db-data" (xoá: docker compose down -v).
+# Nhập dữ liệu cũ của bản Node: bỏ dấu # ở 2 dòng IMPORT_FILE / volumes của app (chỉ nhập khi DB còn trống).
+services:
+  db:
+    image: mariadb:11.8
+    environment:
+      MARIADB_DATABASE: fbads
+      MARIADB_USER: fbads
+      MARIADB_PASSWORD: ${DB_PASSWORD:-fbads}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-fbads-root}
+      TZ: UTC
+    volumes:
+      - db-data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"   # để xem dữ liệu bằng DBeaver/HeidiSQL trên máy; chỉ mở cho máy này
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: ..
+      dockerfile: backend-java/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:mariadb://db:3306/fbads
+      DB_USER: fbads
+      DB_PASSWORD: ${DB_PASSWORD:-fbads}
+      # Trong container tool nghe ở 0.0.0.0 nên bắt buộc có mật khẩu đăng nhập
+      APP_PASSWORD: ${APP_PASSWORD:?Hãy đặt APP_PASSWORD, ví dụ APP_PASSWORD=MatKhau@2026 docker compose up}
+      # IMPORT_FILE: /import/data.json
+    # volumes:
+    #   - ../data.json:/import/data.json:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+
+volumes:
+  db-data:
