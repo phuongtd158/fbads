@@ -7,5 +7,8 @@
     "start": "node server.js",
     "test": "node --test tests/validate.test.mjs tests/engine.test.mjs tests/auth.test.mjs tests/store.test.mjs tests/delivery.test.mjs tests/fb.test.mjs tests/bulkBudget.test.mjs tests/fbAccounts.test.mjs tests/accounts.test.mjs tests/dates.test.mjs tests/metrics.test.mjs tests/fbRange.test.mjs tests/insightsApi.test.mjs tests/notify.test.mjs tests/rulesMulti.test.mjs tests/rulesAdset.test.mjs tests/rulesSmart.test.mjs tests/money.test.mjs tests/scheduleWindow.test.mjs",
     "build:web": "cd web && npm run build"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
   }
 }

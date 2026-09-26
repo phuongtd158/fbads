@@ -8,10 +8,12 @@ COPY web ./web
 COPY shared ./shared
 RUN cd web && npm run build
 
-# Giai đoạn 2: chạy server (không cần cài thư viện nào)
+# Giai đoạn 2: chạy server (chỉ cài thư viện cần khi chạy, không cài devDependencies)
 FROM node:22-slim
 ENV NODE_ENV=production
 WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 COPY server.js ./
 COPY lib ./lib
 COPY shared ./shared
