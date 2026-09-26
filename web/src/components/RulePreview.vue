@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Loader2, CheckCircle2, MinusCircle, SkipForward, CircleAlert, Eye, Bell } from 'lucide-vue-next'
 import { fmt, fmtDec } from '../lib/format'
 import { METRICS, METRIC_SHORT, RANGE_LABEL } from '../lib/constants'
@@ -12,6 +12,11 @@ const props = defineProps({ data: Object, rule: Object, loading: Boolean, error:
 
 const order = { match: 0, error: 1, skip: 2, nochange: 3, nomatch: 4 }
 const items = computed(() => [...((props.data && props.data.items) || [])].sort((a, b) => order[a.status] - order[b.status]))
+// Mục không khớp thường rất nhiều: ẩn đi, chỉ hiện khi bạn bấm xem
+const showMiss = ref(false)
+watch(() => props.data, () => { showMiss.value = false })
+const missCount = computed(() => items.value.filter((i) => i.status === 'nomatch').length)
+const shown = computed(() => (showMiss.value ? items.value : items.value.filter((i) => i.status !== 'nomatch')))
 const val = (i) => (i.inf ? '∞' : i.value == null ? '–' : props.rule && props.rule.metric === 'roas' ? fmtDec(i.value) : fmt(i.value))
 // Từng điều kiện với giá trị thực tế: "CPA 250.000 > 150.000 ✓ VÀ ROAS 2,00 < 1,50 ✗" (? = tài khoản chưa đặt mục tiêu)
 const line = (i) => {
@@ -53,7 +58,7 @@ const modeNote = computed(() => {
       <p v-if="modeNote" class="note faint">{{ modeNote }}</p>
       <Callout v-for="w in data.warnings || []" :key="w" tone="warning">{{ w }}</Callout>
       <ul>
-        <li v-for="i in items" :key="i.id" :class="i.status">
+        <li v-for="i in shown" :key="i.id" :class="i.status">
           <component :is="meta[i.status].icon" :size="17" class="ic" />
           <div class="tx">
             <b>{{ i.name }}<Badge v-if="i.learning" tone="info">Đang học</Badge></b>
@@ -64,6 +69,7 @@ const modeNote = computed(() => {
           <Badge :tone="meta[i.status].tone">{{ meta[i.status].label }}</Badge>
         </li>
       </ul>
+      <button v-if="missCount" type="button" class="more" @click="showMiss = !showMiss">{{ showMiss ? 'Ẩn' : 'Xem' }} {{ missCount }} mục không khớp</button>
     </template>
   </section>
 </template>
@@ -73,6 +79,9 @@ const modeNote = computed(() => {
 header { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 8px; color: var(--accent); } header b { color: var(--text); }
 .ld { display: flex; gap: 10px; align-items: center; color: var(--text-2); font-size: 14px; padding: 6px 0; }
 .sum { margin: 0 0 4px; font-size: 14.5px; } .note { margin: 0 0 10px; font-size: 13px; }
+.more { margin-top: 8px; border: 0; background: none; padding: 4px 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.more:hover { text-decoration: underline; }
+ul:empty { display: none; }
 ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 li { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }
 li.match { border-color: color-mix(in srgb, var(--success) 35%, var(--border)); }

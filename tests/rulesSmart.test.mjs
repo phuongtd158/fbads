@@ -100,3 +100,23 @@ test('ruleActivity: đếm tác động/lỗi 7 ngày, bỏ dòng bỏ qua, lầ
   assert.deepEqual([a.a.acts, a.a.errors, a.a.last.name, a.a.resumePending], [1, 1, 'Camp 1', 0])
   assert.deepEqual([a.b.acts, a.b.last, a.b.resumePending], [0, null, 1])
 })
+
+/* ------------------------------------------------ Chỉ xét mục đang phân phối */
+test('evaluateRule: camp bật nhưng mọi nhóm QC đã tắt/hết hạn thì không tính là đang chạy', async () => {
+  const { deliveryMap, DELIVERY } = await import('../shared/delivery.mjs')
+  const objs = [
+    { id: 'c1', name: 'Chạy', level: 'campaign', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 100000 },
+    { id: 'a1', level: 'adset', campaignId: 'c1', status: 'ACTIVE', effective: 'ACTIVE' },
+    { id: 'c2', name: 'Nhóm tắt', level: 'campaign', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 100000 },
+    { id: 'a2', level: 'adset', campaignId: 'c2', status: 'PAUSED', effective: 'PAUSED' },
+    { id: 'c3', name: 'Hết hạn', level: 'campaign', status: 'ACTIVE', effective: 'ACTIVE', dailyBudget: 100000 },
+    { id: 'a3', level: 'adset', campaignId: 'c3', status: 'ACTIVE', effective: 'ACTIVE', endTime: Date.now() - 86400e3 },
+  ]
+  const dm = deliveryMap(objs)
+  const running = { running: (o) => !!(DELIVERY[dm[o.id]] || {}).running, label: (o) => DELIVERY[dm[o.id]].label }
+  const rule = { id: 'r', name: 'x', action: 'notify', metric: 'spend', op: '>', value: 1, minSpend: 0, allActive: true, level: 'campaign', range: 'today' }
+  const map = () => ({ c1: { spend: 5 }, c2: { spend: 5 }, c3: { spend: 5 } })
+  assert.deepEqual(engine.evaluateRule(rule, objs, map, { running }).map((d) => d.obj.id), ['c1'])
+  const picked = engine.evaluateRule({ ...rule, allActive: false, targets: ['c2', 'c3'] }, objs, map, { running })
+  assert.deepEqual(picked.map((d) => [d.code, d.reason]), [['inactive', 'Camp không đang chạy (Nhóm quảng cáo đang tắt)'], ['inactive', 'Camp không đang chạy (Hoàn tất)']])
+})
