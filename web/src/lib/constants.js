@@ -20,9 +20,9 @@ export const SCHEDULE_PRESETS = [
   { name: 'Giảm 50% ban đêm', d: { name: 'Giảm ngân sách ban đêm', action: 'budget', mode: 'percent', value: -50, time: '00:00' } },
 ]
 
-export const METRICS = { cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR (tỉ lệ nhấp, %)', cpc: 'CPC (chi phí mỗi nhấp)', cpm: 'CPM (chi phí 1000 hiển thị)' }
+export const METRICS = { cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR (tỉ lệ nhấp, %)', cpc: 'CPC (chi phí mỗi nhấp)', cpm: 'CPM (chi phí 1000 hiển thị)', messages: 'Số tin nhắn mới', costPerMessage: 'Chi phí mỗi tin nhắn', leads: 'Số lead', costPerLead: 'Chi phí mỗi lead' }
 // Tên ngắn dùng trong câu mô tả rule
-export const METRIC_SHORT = { cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM' }
+export const METRIC_SHORT = { cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM', messages: 'Tin nhắn', costPerMessage: 'Chi phí/tin nhắn', leads: 'Lead', costPerLead: 'Chi phí/lead' }
 
 export const RANGES = [
   { value: 'today', label: 'Hôm nay' },
@@ -39,6 +39,8 @@ export const RULE_PRESETS = [
   { name: 'Giảm 20% khi ROAS thấp', d: { name: 'Giảm ngân sách khi ROAS thấp', metric: 'roas', op: '<', range: 'last_3d', value: 1.5, minSpend: 300000, action: 'decrease', pct: 20, minBudget: 100000, cooldownHours: 24 } },
   { name: 'Chỉ cảnh báo khi CPA cao', d: { name: 'Cảnh báo CPA cao', metric: 'cpa', op: '>', range: 'today', value: 150000, minSpend: 100000, action: 'notify', cooldownHours: 12 } },
   { name: 'Tắt khi CPA cao VÀ ROAS thấp', d: { name: 'Tắt camp CPA cao và ROAS thấp', conditions: [{ metric: 'cpa', op: '>', value: 150000 }, { metric: 'roas', op: '<', value: 1.5 }], match: 'all', range: 'last_3d', minSpend: 300000, action: 'pause', cooldownHours: 24 } },
+  { name: 'Cắt lỗ hôm nay, mai chạy lại', d: { name: 'Cắt lỗ trong ngày', conditions: [{ metric: 'cpa', op: '>', value: 200000 }], match: 'all', range: 'today', minSpend: 300000, action: 'pause', cooldownHours: 24, resume: 'nextday', resumeAt: '06:00' } },
+  { name: 'Tắt camp tin nhắn đắt', d: { name: 'Tắt camp tin nhắn đắt', conditions: [{ metric: 'costPerMessage', op: '>', value: 80000 }], match: 'all', range: 'last_3d', minSpend: 300000, action: 'pause', cooldownHours: 24 } },
   { name: 'Tắt khi CPA vượt 120% mục tiêu', d: { name: 'Tắt camp CPA vượt mục tiêu', conditions: [{ metric: 'cpa', op: '>', vs: 'target', factor: 120 }], match: 'all', range: 'last_3d', minSpend: 300000, action: 'pause', cooldownHours: 24 } },
 ]
 

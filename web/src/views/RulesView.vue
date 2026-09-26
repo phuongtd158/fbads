@@ -1,10 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3, Eye } from 'lucide-vue-next'
+import { Plus, Play, Pencil, Trash2, Zap, Timer, Clock3, Eye, Copy, RotateCcw, Activity } from 'lucide-vue-next'
 import { state, loadState, ensureObjs } from '../stores/app'
 import { toast, toastError, confirm } from '../stores/ui'
 import { api } from '../lib/api'
-import { fmt } from '../lib/format'
+import { fmt, timeOf } from '../lib/format'
 import { METRIC_SHORT, RULE_PRESETS, RANGE_LABEL } from '../lib/constants'
 import { labelOf } from '../lib/accounts'
 import { opText, rhs, matchWord, conditionsOfRule } from '../lib/ruleText'
@@ -18,7 +18,28 @@ import Modal from '../components/Modal.vue'
 const editor = ref(false)
 const editing = ref(null)
 const busy = ref({})
-onMounted(() => ensureObjs())
+onMounted(() => { ensureObjs(); loadActivity() })
+
+// Hoạt động 7 ngày của từng rule (từ nhật ký). Lỗi tải thì thôi, thẻ rule vẫn hiện bình thường.
+const activity = ref({})
+async function loadActivity() { try { activity.value = await api('rules/activity', 'GET', undefined, { bg: true }) } catch { /* bỏ qua */ } }
+const ago = (iso) => {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60e3)
+  if (m < 1) return 'vừa xong'
+  if (m < 60) return `${m} phút trước`
+  if (m < 48 * 60) return `${Math.round(m / 60)} giờ trước`
+  return `${Math.round(m / 1440)} ngày trước`
+}
+function actLine(r) {
+  const a = activity.value[r.id]
+  if (!a || (!a.acts && !a.errors && !a.last)) return { text: 'Chưa tác động lần nào', quiet: true }
+  const parts = [`${a.acts} lần trong 7 ngày`]
+  if (a.errors) parts.push(`${a.errors} lỗi`)
+  if (a.last) parts.push(`gần nhất ${ago(a.last.ts)}: ${a.last.name}${a.last.dry ? ' (chạy thử)' : ''}`)
+  return { text: parts.join(' · '), title: a.last ? `${timeOf(a.last.ts)} · ${a.last.detail}` : '', bad: !!a.errors }
+}
+// Nhân bản: mở trình soạn với bản sao (chưa có id → lưu thành rule mới, mặc định tắt để bạn sửa xong mới bật)
+function duplicate(r) { const { id, ...rest } = JSON.parse(JSON.stringify(r)); open({ ...rest, name: `${r.name} (bản sao)`.slice(0, 80), enabled: false }) }
 
 const multiAcc = computed(() => ((state.objsMeta && state.objsMeta.accounts) || []).length > 1)
 // tên đích + tên tài khoản (chỉ khi có nhiều tài khoản)
@@ -54,7 +75,7 @@ async function remove(r) {
   if (!await confirm('Xoá rule này?', `“${r.name}” sẽ bị xoá vĩnh viễn.`, { ok: 'Xoá', danger: true })) return
   await api(`rules/${r.id}`, 'DELETE'); toast('Đã xoá rule'); await loadState()
 }
-const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm tra rule — xem Nhật ký') }
+const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm tra rule — xem Nhật ký'); loadActivity() }
 </script>
 
 <template>
@@ -83,13 +104,15 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
           <template v-else><span v-if="r.level === 'adset'" class="tag">Nhóm QC</span><span v-for="id in r.targets.slice(0, 3)" :key="id" class="tag" :title="tagOf(id).full">{{ tagOf(id).name }}<i v-if="tagOf(id).account" class="tac"> · {{ tagOf(id).account }}</i></span><span v-if="r.targets.length > 3" class="tag">+{{ r.targets.length - 3 }}</span></template>
           <span v-if="r.from && r.to" class="tag"><Clock3 :size="12" /> {{ r.from }}–{{ r.to }}</span>
           <span v-if="r.cooldownHours" class="tag">Nghỉ {{ r.cooldownHours }}h</span>
+          <span v-if="r.action === 'pause' && r.resume === 'nextday'" class="tag"><RotateCcw :size="12" /> Bật lại {{ r.resumeAt || '06:00' }} hôm sau<template v-if="activity[r.id] && activity[r.id].resumePending"> · chờ {{ activity[r.id].resumePending }}</template></span>
         </div>
-        <div class="acts"><Btn size="sm" :icon="Eye" @click="openPreview(r)">Xem trước</Btn><Btn size="sm" :icon="Pencil" @click="open(r)">Sửa</Btn><span class="grow" /><Btn size="sm" variant="ghost danger" :icon="Trash2" :action="() => remove(r)" aria-label="Xoá" /></div>
+        <p class="act" :class="{ quiet: actLine(r).quiet, bad: actLine(r).bad }" :title="actLine(r).title"><Activity :size="13" />{{ actLine(r).text }}</p>
+        <div class="acts"><Btn size="sm" :icon="Eye" @click="openPreview(r)">Xem trước</Btn><Btn size="sm" :icon="Pencil" @click="open(r)">Sửa</Btn><Btn size="sm" variant="ghost" :icon="Copy" aria-label="Nhân bản" title="Nhân bản" @click="duplicate(r)" /><span class="grow" /><Btn size="sm" variant="ghost danger" :icon="Trash2" :action="() => remove(r)" aria-label="Xoá" /></div>
       </article>
     </div>
     <section v-else class="card"><EmptyState :icon="Zap" title="Chưa có rule nào" text="Rule giúp tool tự tắt camp lỗ và tăng ngân sách camp tốt khi bạn không online. Chọn một mẫu ở trên để bắt đầu."><Btn variant="primary" :icon="Plus" @click="open(null)">Thêm rule đầu tiên</Btn></EmptyState></section>
 
-    <RuleEditor v-model="editor" :item="editing" @saved="loadState" />
+    <RuleEditor v-model="editor" :item="editing" @saved="loadState(); loadActivity()" />
 
     <Modal v-model="pvOpen" title="Xem trước rule" :subtitle="pvRule && pvRule.name" width="640px">
       <RulePreview :data="pvData" :rule="pvRule" :loading="pvLoading" :error="pvError" />
@@ -123,6 +146,10 @@ h4 { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .tac { font-style: normal; color: var(--text-3); }
 .tag { display: inline-flex; align-items: center; gap: 5px; background: var(--surface-3); color: var(--text-2); padding: 2px 10px; border-radius: 8px; font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--text-2); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act svg { flex: none; color: var(--accent); }
+.act.quiet { color: var(--text-3); } .act.quiet svg { color: var(--text-3); }
+.act.bad svg { color: var(--danger); }
 .acts { display: flex; gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); }
 .grow { flex: 1; }
 </style>

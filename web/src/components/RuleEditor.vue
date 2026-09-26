@@ -1,9 +1,10 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { Check, Eye, Plus, X } from 'lucide-vue-next'
+import { Check, Eye, Plus, X, Sparkles } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { METRICS, RANGES } from '../lib/constants'
-import { validateRule, MAX_CONDITIONS, TARGET_METRICS } from '../lib/validate'
+import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS } from '../lib/validate'
+import { describeRule } from '../lib/ruleText'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
 import Modal from './Modal.vue'
@@ -13,11 +14,12 @@ import Callout from './Callout.vue'
 import Segmented from './Segmented.vue'
 import TargetPicker from './TargetPicker.vue'
 import RulePreview from './RulePreview.vue'
+import MoneyInput from './MoneyInput.vue'
 
 const props = defineProps({ modelValue: Boolean, item: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-const blank = () => ({ name: '', conditions: [{ metric: 'cpa', op: '>', value: 150000 }], match: 'all', range: 'last_3d', minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, from: '', to: '', allActive: true, accountIds: [], level: 'campaign', targets: [], enabled: true })
+const blank = () => ({ name: '', conditions: [{ metric: 'cpa', op: '>', value: 150000 }], match: 'all', range: 'last_3d', minSpend: 100000, action: 'pause', pct: 20, maxBudget: '', minBudget: '', cooldownHours: 24, resume: '', resumeAt: '06:00', from: '', to: '', allActive: true, accountIds: [], level: 'campaign', targets: [], enabled: true })
 const f = ref(blank())
 const scope = ref('all')
 const submitted = ref(false)
@@ -37,6 +39,7 @@ watch(() => props.modelValue, (open) => {
   f.value.match = item.match === 'any' ? 'any' : 'all'
   f.value.accountIds = [...(item.accountIds || [])]
   f.value.maxBudget = f.value.maxBudget || ''; f.value.minBudget = f.value.minBudget || ''
+  f.value.resumeAt = f.value.resumeAt || '06:00'
   scope.value = f.value.allActive ? 'all' : 'pick'
   submitted.value = false
   for (const k of Object.keys(touched)) delete touched[k]
@@ -47,6 +50,10 @@ const objs = computed(() => (state.objsLoaded && state.objs.length ? state.objs 
 const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
 const multiAcc = computed(() => accounts.value.length > 1)
 const check = computed(() => validateRule({ ...f.value, allActive: scope.value === 'all' }, { objs: objs.value, rules: state.rules, accountTargets: state.settings.accountTargets || {}, accounts: accounts.value.length ? accounts.value : null }))
+// Câu tóm tắt: đọc thẳng từ form nên đổi ngay khi bạn sửa
+const summary = computed(() => describeRule({ ...f.value, allActive: scope.value === 'all' }, { accounts: accounts.value }))
+const isCost = (c) => COST_METRICS.includes(c.metric)
+const resumeOn = computed({ get: () => f.value.resume === 'nextday', set: (v) => { f.value.resume = v ? 'nextday' : '' } })
 const show = (k) => (submitted.value || touched[k] ? check.value.errors[k] : '')
 
 // ----- Điều kiện -----
@@ -108,6 +115,8 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
   <Modal :model-value="modelValue" :title="item && item.id ? 'Sửa rule' : 'Thêm rule'" subtitle="Tool kiểm tra rule định kỳ theo khoảng thời gian bạn chọn." @update:model-value="emit('update:modelValue', $event)">
     <Field label="Tên rule" :error="show('name')"><input v-model="f.name" class="input" maxlength="120" placeholder="Vd: Tắt camp CPA cao" @input="touch('name')" /></Field>
 
+    <div class="sum" aria-live="polite"><Sparkles :size="16" /><div><p v-for="(l, i) in summary" :key="i" :class="{ sub: i }">{{ l }}</p></div></div>
+
     <Field label="Số liệu tính trong khoảng" tip="range" :error="show('range')">
       <Segmented v-model="f.range" :options="RANGES" block />
     </Field>
@@ -122,6 +131,7 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
             <Segmented v-model="c.op" :options="ops" size="sm" />
             <select v-if="canTarget(c)" v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c)"><option v-for="m in modes" :key="m.value" :value="m.value">{{ m.label }}</option></select>
             <div v-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
+            <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="val" aria-label="Ngưỡng" placeholder="vd 150k" @input="touch('c' + i)" />
             <input v-else v-model="c.value" type="number" step="any" min="0" class="input val" aria-label="Ngưỡng" @input="touch('c' + i)" />
             <button v-if="f.conditions.length > 1" type="button" class="rm" :aria-label="'Bỏ điều kiện ' + (i + 1)" @click="removeCond(i)"><X :size="15" /></button>
           </div>
@@ -132,15 +142,21 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
       </div>
     </Field>
 
-    <Field label="Chỉ xét khi đã chi tiêu tối thiểu" tip="minSpend" :error="show('minSpend')" hint="Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu."><input v-model="f.minSpend" type="number" min="0" class="input" style="max-width: 220px" @input="touch('minSpend')" /></Field>
+    <Field label="Chỉ xét khi đã chi tiêu tối thiểu" tip="minSpend" :error="show('minSpend')" hint="Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu."><MoneyInput v-model="f.minSpend" style="max-width: 220px" placeholder="vd 300k" @input="touch('minSpend')" /></Field>
 
     <Field label="Thì" tip="ruleAction">
       <Segmented v-model="f.action" :options="actions" block />
-      <div v-if="f.action !== 'pause'" class="adj" :class="{ bad: adjErrors.length }">
+      <div v-if="isBudget" class="adj" :class="{ bad: adjErrors.length }">
         <label><span>Thay đổi</span><div class="with"><input v-model="f.pct" type="number" min="0" class="input" @input="touch('pct')" /><em>%</em></div></label>
-        <label><span>Trần ngân sách</span><input v-model="f.maxBudget" type="number" min="0" class="input" placeholder="Không giới hạn" @input="touch('maxBudget')" /></label>
-        <label><span>Sàn ngân sách</span><input v-model="f.minBudget" type="number" min="0" class="input" placeholder="Không giới hạn" @input="touch('minBudget')" /></label>
+        <label><span>Trần ngân sách</span><MoneyInput v-model="f.maxBudget" placeholder="Không giới hạn" @input="touch('maxBudget')" /></label>
+        <label><span>Sàn ngân sách</span><MoneyInput v-model="f.minBudget" placeholder="Không giới hạn" @input="touch('minBudget')" /></label>
         <p v-for="m in adjErrors" :key="m" class="e">{{ m }}</p>
+      </div>
+      <div v-if="f.action === 'pause'" class="resume" :class="{ bad: show('resumeAt') }">
+        <label class="ck"><input v-model="resumeOn" type="checkbox" /> Tự bật lại vào ngày hôm sau lúc</label>
+        <input v-model="f.resumeAt" type="time" class="input" :disabled="!resumeOn" aria-label="Giờ bật lại" @input="touch('resumeAt')" />
+        <p class="th">Hợp để cắt lỗ theo ngày: {{ unit }} tốn quá nhiều hôm nay thì tắt, sáng mai chạy lại với số liệu mới. {{ unit === 'camp' ? 'Camp' : 'Nhóm QC' }} bạn đã tự bật lại hoặc đã hoàn tác thì tool để yên.</p>
+        <p v-if="show('resumeAt')" class="e">{{ show('resumeAt') }}</p>
       </div>
     </Field>
 
@@ -186,6 +202,14 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
 .crow .e { margin: 8px 0 0; color: var(--danger); font-size: 13px; line-height: 1.45; }
 .th { margin: 8px 0 0; font-size: 13px; color: var(--text-3); line-height: 1.5; } .th b { color: var(--text-2); }
 .addc { justify-self: start; }
+.sum { display: flex; gap: 10px; align-items: flex-start; margin: -4px 0 18px; padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--text); font-size: 14px; line-height: 1.5; }
+.sum svg { flex: none; margin-top: 3px; color: var(--accent); }
+.sum p { margin: 0; } .sum p.sub { margin-top: 4px; font-size: 13px; color: var(--text-2); }
+.resume { display: grid; grid-template-columns: auto 130px; gap: 8px 12px; align-items: center; margin-top: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.resume.bad { box-shadow: inset 0 0 0 1px var(--danger); }
+.resume .ck { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.resume .th, .resume .e { grid-column: 1 / -1; margin: 0; }
+.resume .e { color: var(--danger); font-size: 13px; }
 .accs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
 .accs .lb { font-size: 13px; font-weight: 600; color: var(--text-2); margin-right: 2px; }
 .chip { border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); padding: 6px 13px; border-radius: 99px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: .15s; }

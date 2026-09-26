@@ -215,6 +215,7 @@ async function api(req, res, url) {
     if (await engine.runSchedule(s) === 'blocked') return send(res, 429, { error: 'Facebook đang giới hạn số lần gọi nên lịch chưa chạy. Thử lại sau vài phút.', rateLimited: true });
     return send(res, 200, { ok: true });
   }
+  if (m === 'GET' && p === '/api/rules/activity') return send(res, 200, engine.ruleActivity());
   if (m === 'POST' && p === '/api/rules/run') { await engine.runRules(); return send(res, 200, { ok: true }); }
   // Xem trước: rule (chưa lưu) đang khớp camp nào ngay bây giờ — không thay đổi gì
   if (m === 'POST' && p === '/api/rules/preview') {

@@ -20,7 +20,9 @@ export const LIMITS = {
 
 // Các giờ chạy của một lịch. Lịch cũ chỉ có `time`, lịch mới có `times` (nhiều mốc trong ngày).
 export const scheduleTimes = (s) => (Array.isArray(s && s.times) ? s.times.map(String) : s && s.time ? [String(s.time)] : [])
-const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm']
+const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm', 'messages', 'costPerMessage', 'leads', 'costPerLead']
+// Số liệu dạng chi phí (tiền): ngưỡng "lớn hơn" phải > 0, và giao diện nhập được kiểu 150k / 1,5tr
+export const COST_METRICS = ['cpa', 'spend', 'cpc', 'cpm', 'costPerMessage', 'costPerLead']
 export const MAX_CONDITIONS = 5 // một rule tối đa 5 điều kiện
 export const TARGET_METRICS = ['cpa', 'roas'] // số liệu so được với "mục tiêu" đặt theo tài khoản (Cài đặt → Mục tiêu)
 // Các điều kiện của rule. Rule cũ chỉ có metric/op/value ở ngoài cùng → coi như 1 điều kiện. Điều kiện đầu luôn được chép ra 3 trường cũ.
@@ -28,7 +30,7 @@ export const conditionsOf = (r) => (r && Array.isArray(r.conditions) && r.condit
 // Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
 export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
 export const RANGE_LABEL = {today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất'}
-const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM'}
+const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM', messages: 'Số tin nhắn', costPerMessage: 'Chi phí/tin nhắn', leads: 'Số lead', costPerLead: 'Chi phí/lead'}
 const isBlank = (v) => v === '' || v === null || v === undefined
 const num = (v) => (isBlank(v) ? NaN : Number(v))
 const uniq = (a) => [...new Set(a)]
@@ -225,7 +227,7 @@ export function validateRule(input = {}, ctx = {}) {
         const value = num(c.value)
         if (!Number.isFinite(value)) put(i, 'value', 'Nhập ngưỡng so sánh')
         else if (value < 0) put(i, 'value', 'Ngưỡng không được âm')
-        else if (['cpa', 'spend', 'cpc', 'cpm'].includes(metric) && op === '>' && value <= 0) put(i, 'value', `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`)
+        else if (COST_METRICS.includes(metric) && op === '>' && value <= 0) put(i, 'value', `Ngưỡng ${METRIC_LABEL[metric]} phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.`)
         else if (metric === 'roas' && value > 100) put(i, 'value', 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại')
         else if (metric === 'ctr' && value > 100) put(i, 'value', 'CTR là phần trăm, tối đa 100')
         return {metric, op, value: Number.isFinite(value) ? value : 0}
@@ -274,6 +276,12 @@ export function validateRule(input = {}, ctx = {}) {
     if (!Number.isFinite(cooldown) || cooldown < 0 || cooldown > LIMITS.cooldownMax) e.cooldownHours = `Thời gian nghỉ từ 0 đến ${LIMITS.cooldownMax} giờ`
     else if ((action === 'increase' || action === 'decrease') && cooldown < 1) e.cooldownHours = 'Rule đổi ngân sách cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không ngân sách sẽ thay đổi liên tục mỗi lần kiểm tra.'
     else if (action === 'notify' && cooldown < 1) e.cooldownHours = 'Rule chỉ thông báo cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không bạn sẽ nhận thông báo lặp lại mỗi lần kiểm tra.'
+
+    // Tự bật lại (chỉ với rule tắt): '' = không, 'nextday' = bật lại lúc resumeAt của ngày hôm sau
+    const resume = action === 'pause' && input.resume === 'nextday' ? 'nextday' : ''
+    const resumeAt = isBlank(input.resumeAt) ? '06:00' : String(input.resumeAt)
+    if (resume && !isTime(resumeAt)) e.resumeAt = 'Giờ bật lại không hợp lệ (dạng HH:MM, ví dụ 06:00)'
+    if (resume && range && range !== 'today' && hasDataMetric) w.push(`Rule tự bật lại nhưng số liệu tính theo “${RANGE_LABEL[range]}” vẫn gồm những ngày xấu, nên ${input.level === 'adset' ? 'nhóm QC' : 'camp'} có thể bị tắt lại ngay sau khi bật. Kiểu “tắt hôm nay, mai chạy lại” nên dùng số liệu “hôm nay”.`)
 
     const from = input.from || '', to = input.to || ''
     if (from || to) {
@@ -364,6 +372,8 @@ export function validateRule(input = {}, ctx = {}) {
         maxBudget: Number.isFinite(maxBudget) ? maxBudget : 0,
         minBudget: Number.isFinite(minBudget) ? minBudget : 0,
         cooldownHours: Number.isFinite(cooldown) ? cooldown : 0,
+        resume,
+        resumeAt: resume ? resumeAt : '',
         from: from && to ? from : '',
         to: from && to ? to : '',
         allActive,
