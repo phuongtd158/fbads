@@ -70,10 +70,12 @@ export const TOPICS = [
       { t: 'p', text: 'Rule cho tool tự quyết định dựa trên **số liệu của khoảng thời gian bạn chọn** (hôm nay, hôm qua, 3 hoặc 7 ngày gần nhất) của từng camp. Cứ mỗi vài phút (mặc định 15 phút, đổi được ở Cài đặt → Chung), tool kiểm tra từng camp đang chạy và làm theo rule nếu điều kiện đúng.' },
       { t: 'table', head: ['Ô trong form', 'Ý nghĩa'], rows: [
         ['Khoảng thời gian', 'Số liệu tính trong khoảng nào. Chuyển đổi thường về trễ nên khi **tắt hoặc giảm** camp nên dùng “3 ngày”, tránh chỉ dựa vào hôm nay.'],
-        ['Nếu (số liệu)', 'Chọn CPA, ROAS, Chi tiêu, Số kết quả, CTR, CPC hoặc CPM, rồi “lớn hơn” hoặc “nhỏ hơn” một giá trị. Bấm **Thêm điều kiện** (tối đa 5) rồi chọn **VÀ** (tất cả đều đúng) hoặc **HOẶC** (một trong số đó đúng). Ví dụ: CPA cao **VÀ** ROAS thấp mới tắt.'],
+        ['Nếu (số liệu)', 'Chọn CPA, ROAS, Chi tiêu, Số kết quả, CTR, CPC, CPM, **Số tin nhắn / Chi phí mỗi tin nhắn** hoặc **Số lead / Chi phí mỗi lead**, rồi “lớn hơn” hoặc “nhỏ hơn” một giá trị. Bấm **Thêm điều kiện** (tối đa 5) rồi chọn **VÀ** (tất cả đều đúng) hoặc **HOẶC** (một trong số đó đúng). Ví dụ: CPA cao **VÀ** ROAS thấp mới tắt.'],
         ['% mục tiêu', 'Với CPA và ROAS, thay vì số cụ thể bạn chọn **% mục tiêu** (ví dụ CPA lớn hơn 120% mục tiêu). Mục tiêu đặt riêng cho từng tài khoản ở **Cài đặt → Mục tiêu**, nên một rule dùng chung được cho nhiều tài khoản có mức hoà vốn khác nhau. Tài khoản chưa đặt mục tiêu sẽ bị rule bỏ qua (Nhật ký ghi rõ).'],
+        ['Ô nhập tiền', 'Gõ nhanh được **150k**, **1,5tr**, **2 triệu** hoặc 150.000; ô hiện ngay số đầy đủ để bạn kiểm tra.'],
         ['Chi tiêu tối thiểu', 'Chỉ xét camp đã tiêu ít nhất số tiền này. **Rất quan trọng** để không tắt nhầm camp mới chạy, chưa đủ dữ liệu.'],
         ['Thì', 'Tắt camp, Tăng/Giảm ngân sách theo %, hoặc **Chỉ thông báo** (không đổi camp, chỉ ghi Nhật ký và gửi Telegram).'],
+        ['Tự bật lại ngày hôm sau', 'Chỉ có ở rule **Tắt**. Tool bật lại camp đã bị rule tắt vào giờ bạn chọn của ngày hôm sau (mặc định 06:00), để cắt lỗ theo ngày mà không phải bật tay. Camp bạn đã tự bật lại hoặc đã hoàn tác thì tool để yên. Nên dùng số liệu **hôm nay**, vì số liệu nhiều ngày vẫn chứa ngày xấu nên camp dễ bị tắt lại ngay.'],
         ['Trần / Sàn ngân sách', 'Giới hạn để ngân sách không tăng quá cao hoặc giảm quá thấp sau nhiều lần áp dụng.'],
         ['Không lặp lại trong (giờ)', 'Sau khi rule đã áp dụng cho một camp, chờ số giờ này mới áp dụng lại cho chính camp đó. Tránh tăng/giảm liên tục.'],
         ['Khung giờ', 'Chỉ chạy rule trong khoảng giờ này (để trống là chạy cả ngày).'],
@@ -85,6 +87,8 @@ export const TOPICS = [
         '**Tăng khi ROAS tốt:** nếu ROAS lớn hơn 3 và đã chi ≥ 200.000 thì tăng 20% ngân sách, trần 2.000.000, nghỉ 24 giờ.',
         '**Giảm khi ROAS thấp:** nếu ROAS nhỏ hơn 1,5 thì giảm 20% ngân sách, nghỉ 24 giờ.',
         '**Tắt khi CPA cao VÀ ROAS thấp:** nếu CPA lớn hơn 150.000 **và** ROAS nhỏ hơn 1,5 thì tắt camp (tránh tắt camp CPA cao nhưng vẫn lãi).',
+        '**Cắt lỗ trong ngày, mai chạy lại:** nếu CPA hôm nay lớn hơn 200.000 và đã chi ≥ 300.000 thì tắt camp, tự bật lại 06:00 sáng mai.',
+        '**Camp tin nhắn đắt:** nếu chi phí mỗi tin nhắn trong 3 ngày lớn hơn 80.000 và đã chi ≥ 300.000 thì tắt camp.',
         '**Theo mục tiêu từng tài khoản:** nếu CPA lớn hơn 120% mục tiêu thì tắt camp, dùng chung cho mọi tài khoản.',
       ] },
       { t: 'tips', items: [
@@ -94,8 +98,9 @@ export const TOPICS = [
         'Bấm **Xem trước** (trong form hoặc trên thẻ rule) để biết rule **đang khớp camp nào ngay bây giờ** mà chưa thay đổi gì.',
         'Muốn thử một rule mới an toàn: chọn hành động **Chỉ thông báo** vài ngày, thấy đúng ý rồi mới đổi sang tắt/đổi ngân sách.',
         'Bấm **Kiểm tra ngay** để tool chạy toàn bộ rule tức thì, rồi xem Nhật ký.',
+        'Thẻ rule cho biết rule đã **tác động bao nhiêu lần trong 7 ngày** và lần gần nhất. Bấm **Nhân bản** để tạo rule tương tự mà không phải nhập lại.',
       ] },
-      { t: 'note', tone: 'warning', text: 'Rule chỉ xét camp **đang chạy**. Camp bị rule tắt sẽ không tự bật lại — bạn cần bật lại thủ công hoặc bằng lịch.' },
+      { t: 'note', tone: 'warning', text: 'Rule chỉ xét camp **đang chạy**. Camp bị rule tắt chỉ tự bật lại khi bạn bật **Tự bật lại ngày hôm sau** trong rule; nếu không, hãy bật tay hoặc bằng lịch.' },
     ],
   },
   {
