@@ -1,0 +1,7 @@
+{
+  "password": "MatKhau@2026",
+  "passwordHash": "78ba5cf0ce4c04a7bacb7b7c619f948d:545e3ddbe4d9884252ef649c2a9558e1b1b863ad980eb17e474694afc3e9b81112d3c7cdf58e399c499911f9e5b7ce1b76bdc678734704179db94fef36c85950",
+  "dataKey": "khoa-bi-mat-cho-test-123",
+  "plain": "{\"hello\":\"xin chào\",\"n\":[1,2,3]}",
+  "encoded": "v1:F74IihAO+OO1M4YsQYwmBRKUa3+OChylnYra+T/4U+C0GVOWYDrs2Q+IxIHz+J9yRNkyXPnBIWKhlPHSUevBHAJwYn2ZUBo1z/h27WIl9Ifq"
+}

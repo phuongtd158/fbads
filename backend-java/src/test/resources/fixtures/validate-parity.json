@@ -1,0 +1,952 @@
+[
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Tắt đêm",
+   "action": "off",
+   "times": [
+    "23:00",
+    "07:00",
+    "23:00"
+   ],
+   "days": [
+    0,
+    1,
+    2
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Tắt đêm",
+    "action": "off",
+    "time": "07:00",
+    "times": [
+     "07:00",
+     "23:00"
+    ],
+    "days": [
+     0,
+     1,
+     2
+    ],
+    "targetMode": "list",
+    "targets": [
+     "mock_1"
+    ],
+    "mode": "percent",
+    "value": 0,
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Bật sáng",
+   "action": "on",
+   "time": "06:00",
+   "days": [
+    1
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1",
+    "mock_2"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Bật sáng",
+    "action": "on",
+    "time": "06:00",
+    "times": [
+     "06:00"
+    ],
+    "days": [
+     1
+    ],
+    "targetMode": "list",
+    "targets": [
+     "mock_1",
+     "mock_2"
+    ],
+    "mode": "percent",
+    "value": 0,
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Tăng NS",
+   "action": "budget",
+   "times": [
+    "09:00"
+   ],
+   "days": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1"
+   ],
+   "mode": "percent",
+   "value": "20",
+   "max": "900000",
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Tăng NS",
+    "action": "budget",
+    "time": "09:00",
+    "times": [
+     "09:00"
+    ],
+    "days": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "targetMode": "list",
+    "targets": [
+     "mock_1"
+    ],
+    "mode": "percent",
+    "value": 20,
+    "enabled": true,
+    "max": 900000
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Đặt NS",
+   "action": "budget",
+   "times": [
+    "09:00"
+   ],
+   "days": [
+    1
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1"
+   ],
+   "mode": "set",
+   "value": 400000,
+   "enabled": false
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Đặt NS",
+    "action": "budget",
+    "time": "09:00",
+    "times": [
+     "09:00"
+    ],
+    "days": [
+     1
+    ],
+    "targetMode": "list",
+    "targets": [
+     "mock_1"
+    ],
+    "mode": "set",
+    "value": 400000,
+    "enabled": false
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Khung",
+   "action": "window",
+   "window": {
+    "on": "22:00",
+    "off": "06:00"
+   },
+   "days": [
+    1,
+    2
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giờ tắt 06:00 sớm hơn giờ bật nên camp tắt vào 06:00 sáng hôm sau."
+   ],
+   "value": {
+    "name": "Khung",
+    "action": "window",
+    "time": "06:00",
+    "times": [
+     "06:00",
+     "22:00"
+    ],
+    "days": [
+     1,
+     2
+    ],
+    "window": {
+     "on": "22:00",
+     "off": "06:00"
+    },
+    "targetMode": "list",
+    "targets": [
+     "mock_1"
+    ],
+    "mode": "percent",
+    "value": 0,
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Lọc",
+   "action": "off",
+   "times": [
+    "10:00"
+   ],
+   "days": [
+    1
+   ],
+   "targetMode": "filter",
+   "filter": {
+    "status": "running",
+    "nameIncludes": "Sale",
+    "spendOp": "gt",
+    "spend": 1000
+   },
+   "exclude": [
+    "mock_2"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Lọc",
+    "action": "off",
+    "time": "10:00",
+    "times": [
+     "10:00"
+    ],
+    "days": [
+     1
+    ],
+    "targetMode": "filter",
+    "targets": [],
+    "filter": {
+     "level": "campaign",
+     "op": "any",
+     "name": "",
+     "status": "running",
+     "onlyRunning": true
+    },
+    "exclude": [
+     "mock_2"
+    ],
+    "mode": "percent",
+    "value": 0,
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "",
+   "action": "xx",
+   "times": [
+    "25:00"
+   ],
+   "days": [],
+   "targetMode": "list",
+   "targets": []
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "action": "Hành động không hợp lệ",
+    "time": "Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)",
+    "days": "Hãy chọn ít nhất 1 ngày trong tuần",
+    "targets": "Hãy chọn ít nhất 1 chiến dịch hoặc nhóm QC"
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "NS âm",
+   "action": "budget",
+   "times": [
+    "09:00"
+   ],
+   "days": [
+    1
+   ],
+   "targetMode": "list",
+   "targets": [
+    "mock_1"
+   ],
+   "mode": "percent",
+   "value": -500
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "value": "Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -90%."
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "schedule",
+  "input": {
+   "name": "Camp lạ",
+   "action": "on",
+   "times": [
+    "09:00"
+   ],
+   "days": [
+    1
+   ],
+   "targetMode": "list",
+   "targets": [
+    "zzz"
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "targets": "Có mục không còn tồn tại trên tài khoản: zzz. Hãy bỏ chọn chúng."
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "CPA cao",
+   "metric": "cpa",
+   "op": ">",
+   "value": 100000,
+   "range": "today",
+   "minSpend": 50000,
+   "action": "pause",
+   "cooldownHours": 6,
+   "targets": [
+    "mock_1"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn."
+   ],
+   "value": {
+    "name": "CPA cao",
+    "metric": "cpa",
+    "op": ">",
+    "value": 100000,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "value": 100000
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 50000,
+    "action": "pause",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 6,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "ROAS tốt",
+   "conditions": [
+    {
+     "metric": "roas",
+     "op": ">",
+     "value": "2.5"
+    },
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 100000
+    }
+   ],
+   "match": "all",
+   "range": "last_3d",
+   "minSpend": 100000,
+   "action": "increase",
+   "pct": 20,
+   "max": 2000000,
+   "cooldownHours": 24,
+   "allActive": true,
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Chưa đặt trần ngân sách: ngân sách có thể tăng mãi qua nhiều ngày. Nên đặt trần."
+   ],
+   "value": {
+    "name": "ROAS tốt",
+    "metric": "roas",
+    "op": ">",
+    "value": 2.5,
+    "conditions": [
+     {
+      "metric": "roas",
+      "op": ">",
+      "value": 2.5
+     },
+     {
+      "metric": "spend",
+      "op": ">",
+      "value": 100000
+     }
+    ],
+    "match": "all",
+    "range": "last_3d",
+    "minSpend": 100000,
+    "action": "increase",
+    "pct": 20,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Giảm",
+   "metric": "cpc",
+   "op": ">",
+   "value": 5000,
+   "range": "yesterday",
+   "minSpend": 10000,
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 2,
+   "min": 100000,
+   "targets": [
+    "mock_1"
+   ],
+   "from": "08:00",
+   "to": "20:00"
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giảm 50% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.",
+    "Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn."
+   ],
+   "value": {
+    "name": "Giảm",
+    "metric": "cpc",
+    "op": ">",
+    "value": 5000,
+    "conditions": [
+     {
+      "metric": "cpc",
+      "op": ">",
+      "value": 5000
+     }
+    ],
+    "match": "all",
+    "range": "yesterday",
+    "minSpend": 10000,
+    "action": "decrease",
+    "pct": 50,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 2,
+    "resume": "",
+    "resumeAt": "",
+    "from": "08:00",
+    "to": "20:00",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Mục tiêu",
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "target",
+     "factor": 120
+    }
+   ],
+   "minSpend": 10000,
+   "action": "pause",
+   "resume": "nextday",
+   "allActive": true,
+   "accountIds": [
+    "mock_a"
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.",
+    "Tài khoản “Tài khoản mẫu A” chưa đặt mục tiêu CPA: rule sẽ bỏ qua camp của tài khoản này (đặt ở Cài đặt → Mục tiêu)."
+   ],
+   "value": {
+    "name": "Mục tiêu",
+    "metric": "cpa",
+    "op": ">",
+    "value": 0,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "vs": "target",
+      "factor": 120,
+      "value": 0
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 10000,
+    "action": "pause",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 0,
+    "resume": "nextday",
+    "resumeAt": "06:00",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [
+     "mock_a"
+    ],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Mâu thuẫn",
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "value": 100
+    },
+    {
+     "metric": "cpa",
+     "op": "<",
+     "value": 50
+    }
+   ],
+   "minSpend": 1,
+   "action": "notify",
+   "cooldownHours": 3,
+   "targets": [
+    "mock_1"
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Các điều kiện về CPA mâu thuẫn nhau (vừa lớn hơn 100, vừa nhỏ hơn 50) nên rule sẽ không bao giờ khớp."
+   ],
+   "value": {
+    "name": "Mâu thuẫn",
+    "metric": "cpa",
+    "op": ">",
+    "value": 100,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "value": 100
+     },
+     {
+      "metric": "cpa",
+      "op": "<",
+      "value": 50
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 1,
+    "action": "notify",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 3,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Set NS",
+   "metric": "roas",
+   "op": ">",
+   "value": 3,
+   "minSpend": 1,
+   "action": "budget",
+   "budgetMode": "set",
+   "amount": 700000,
+   "cooldownHours": 4,
+   "targets": [
+    "mock_1"
+   ],
+   "adLevel": true
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "action": "Hành động không hợp lệ"
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Lỗi",
+   "metric": "bad",
+   "op": "=",
+   "value": "x",
+   "action": "zzz"
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.metric": "Số liệu không hợp lệ",
+    "metric": "Số liệu không hợp lệ",
+    "c0.op": "Phép so sánh không hợp lệ",
+    "op": "Phép so sánh không hợp lệ",
+    "c0.value": "Nhập ngưỡng so sánh",
+    "value": "Nhập ngưỡng so sánh",
+    "minSpend": "Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.",
+    "action": "Hành động không hợp lệ"
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "CPA cao",
+   "metric": "cpa",
+   "op": ">",
+   "value": 100000,
+   "range": "today",
+   "minSpend": 0,
+   "action": "pause",
+   "targets": []
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "minSpend": "Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu."
+   },
+   "warnings": [],
+   "value": null
+  }
+ },
+ {
+  "kind": "preview",
+  "input": {
+   "name": "CPA cao",
+   "metric": "cpa",
+   "op": ">",
+   "value": 100000,
+   "range": "today",
+   "minSpend": 50000,
+   "action": "pause",
+   "cooldownHours": 6,
+   "targets": [
+    "mock_1"
+   ],
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn."
+   ],
+   "value": {
+    "name": "CPA cao",
+    "metric": "cpa",
+    "op": ">",
+    "value": 100000,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "value": 100000
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 50000,
+    "action": "pause",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 6,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "preview",
+  "input": {
+   "name": "ROAS tốt",
+   "conditions": [
+    {
+     "metric": "roas",
+     "op": ">",
+     "value": "2.5"
+    },
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 100000
+    }
+   ],
+   "match": "all",
+   "range": "last_3d",
+   "minSpend": 100000,
+   "action": "increase",
+   "pct": 20,
+   "max": 2000000,
+   "cooldownHours": 24,
+   "allActive": true,
+   "enabled": true
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Chưa đặt trần ngân sách: ngân sách có thể tăng mãi qua nhiều ngày. Nên đặt trần."
+   ],
+   "value": {
+    "name": "ROAS tốt",
+    "metric": "roas",
+    "op": ">",
+    "value": 2.5,
+    "conditions": [
+     {
+      "metric": "roas",
+      "op": ">",
+      "value": 2.5
+     },
+     {
+      "metric": "spend",
+      "op": ">",
+      "value": 100000
+     }
+    ],
+    "match": "all",
+    "range": "last_3d",
+    "minSpend": 100000,
+    "action": "increase",
+    "pct": 20,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "preview",
+  "input": {
+   "name": "Giảm",
+   "metric": "cpc",
+   "op": ">",
+   "value": 5000,
+   "range": "yesterday",
+   "minSpend": 10000,
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 2,
+   "min": 100000,
+   "targets": [
+    "mock_1"
+   ],
+   "from": "08:00",
+   "to": "20:00"
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giảm 50% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.",
+    "Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn."
+   ],
+   "value": {
+    "name": "Giảm",
+    "metric": "cpc",
+    "op": ">",
+    "value": 5000,
+    "conditions": [
+     {
+      "metric": "cpc",
+      "op": ">",
+      "value": 5000
+     }
+    ],
+    "match": "all",
+    "range": "yesterday",
+    "minSpend": 10000,
+    "action": "decrease",
+    "pct": 50,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 2,
+    "resume": "",
+    "resumeAt": "",
+    "from": "08:00",
+    "to": "20:00",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ }
+]
