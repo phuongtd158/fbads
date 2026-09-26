@@ -15,3 +15,4 @@ scripts
 Dockerfile
 .dockerignore
 render.yaml
+backend-java/target
