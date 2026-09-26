@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url)
 const auth = require('../lib/auth')
 
 const req = (headers = {}, ip = '10.1.1.1') => ({ headers, socket: { remoteAddress: ip } })
-const ENV = ['TRUST_PROXY', 'CLIENT_IP_HEADER', 'FLY_APP_NAME', 'RENDER']
+const ENV = ['TRUST_PROXY', 'CLIENT_IP_HEADER', 'RENDER']
 const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]))
 beforeEach(() => { for (const k of ENV) delete process.env[k] })
 after(() => { for (const k of ENV) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k] } })
@@ -27,21 +27,19 @@ test('sau proxy chung (ngrok): lấy phần tử CUỐI của X-Forwarded-For, t
   assert.equal(auth.ipOf(req({})), '10.1.1.1') // không có gì → IP kết nối
 })
 
-test('Fly.io: dùng fly-client-ip', () => {
-  process.env.TRUST_PROXY = '1'; process.env.FLY_APP_NAME = 'bongbi'
-  assert.equal(auth.ipOf(req({ 'fly-client-ip': '4.4.4.4', 'x-forwarded-for': 'gia-mao, 9.9.9.9', 'cf-connecting-ip': 'gia-mao' })), '4.4.4.4')
-})
-
 test('Render: dùng cf-connecting-ip', () => {
   process.env.TRUST_PROXY = '1'; process.env.RENDER = 'true'
   assert.equal(auth.ipOf(req({ 'cf-connecting-ip': '5.5.5.5', 'x-forwarded-for': 'gia-mao, 172.70.1.1', 'fly-client-ip': 'gia-mao' })), '5.5.5.5')
 })
 
-test('Render/Fly tự coi là sau proxy dù không đặt TRUST_PROXY', () => {
+test('Render tự coi là sau proxy dù không đặt TRUST_PROXY', () => {
   process.env.RENDER = 'true'
   assert.equal(auth.ipOf(req({ 'cf-connecting-ip': '5.5.5.5' })), '5.5.5.5')
-  delete process.env.RENDER; process.env.FLY_APP_NAME = 'bongbi'
-  assert.equal(auth.ipOf(req({ 'fly-client-ip': '4.4.4.4' })), '4.4.4.4')
+})
+
+test('tiêu đề fly-client-ip không còn được tin', () => {
+  process.env.TRUST_PROXY = '1'
+  assert.equal(auth.ipOf(req({ 'fly-client-ip': 'gia-mao', 'x-forwarded-for': '9.9.9.9' })), '9.9.9.9')
 })
 
 test('CLIENT_IP_HEADER tự chọn tiêu đề', () => {

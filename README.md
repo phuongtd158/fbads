@@ -46,23 +46,6 @@ Dùng **Facebook Login for Business** thì tạo một cấu hình có 2 quyền
 
 An toàn: file .bat từ chối mở đường hầm nếu đang có một bản tool chạy sẵn mà **không có mật khẩu**. Máy phải bật thì link mới dùng được; dùng lâu dài nên chuyển sang VPS.
 
-## Deploy lên Fly.io (chạy 24/7)
-Cần tài khoản Fly.io (có thẻ) và `flyctl`. Không cần cài Docker trên máy (Fly tự build).
-```powershell
-iwr https://fly.io/install.ps1 -useb | iex
-fly auth login
-# 1) app trong fly.toml là 'bongbi'; nếu tên đó chưa có thì tạo: fly apps create bongbi (hoặc đổi tên trong fly.toml)
-# 2) nếu Fly đã tự deploy cấu hình cũ (ams, cổng 8080): xoá máy cũ trước
-#    fly machine list -a bongbi  →  fly machine destroy ID --force -a bongbi
-fly volumes create fbads_data --region sin --size 1 -a bongbi
-fly secrets set APP_PASSWORD="mat-khau-manh-cua-ban" -a bongbi
-fly deploy --ha=false -a bongbi
-```
-Mở `https://bongbi.fly.dev`, đăng nhập bằng `APP_PASSWORD`, rồi vào Cài đặt → Kết nối Facebook.
-- **Chỉ chạy 1 máy** (`--ha=false`, kiểm tra bằng `fly status`): lịch và rule chạy trong tiến trình này, 2 máy sẽ làm trùng việc.
-- Dữ liệu (`data.json`) nằm trên volume `fbads_data` (`DATA_DIR=/data`), giữ nguyên khi deploy lại. Sao lưu: `fly ssh sftp get /data/data.json`.
-- Cập nhật code: `fly deploy --ha=false`. Xem log: `fly logs`.
-
 ## Nơi lưu dữ liệu
 Tool có 2 chế độ lưu, chọn bằng biến môi trường:
 - **File `data.json`** (mặc định) trong `DATA_DIR`. Mỗi ngày tự giữ 1 bản sao `data.json.bak-<ngày>` (7 bản gần nhất). Nếu file bị hỏng, tool **không ghi đè**: đổi tên file hỏng thành `data.json.corrupt-<giờ>`, khôi phục từ bản sao gần nhất và ghi một dòng cảnh báo vào Nhật ký.
@@ -88,7 +71,7 @@ Lưu ý gói Free: mỗi lần Render khởi động lại tool mất khoảng 1
 Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) gắn vào `/data`. Trong `render.yaml`, bỏ đoạn "Cách A" và bỏ dấu `#` ở đoạn "Cách B" (gói trả phí + `disk` + `DATA_DIR=/data`), rồi Blueprint như trên (chỉ cần nhập `APP_PASSWORD`). Không có Disk thì `data.json` mất mỗi lần deploy.
 
 ### Chung cho cả hai cách
-- Chỉ chạy **1 instance**. Đừng chạy song song bản Fly/ngrok/máy bạn với cùng token Facebook vì việc sẽ bị làm hai lần.
+- Chỉ chạy **1 instance**. Đừng chạy song song bản ngrok/máy bạn với cùng token Facebook vì việc sẽ bị làm hai lần.
 - Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn).
 - IP người dùng lấy từ tiêu đề `CF-Connecting-IP` (tự nhận biết qua biến `RENDER`); có thể ép bằng biến `CLIENT_IP_HEADER`.
 

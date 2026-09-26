@@ -12,7 +12,6 @@ ngrok-domain.txt
 tests
 scripts
 *.bat
-fly.toml
 Dockerfile
 .dockerignore
 render.yaml

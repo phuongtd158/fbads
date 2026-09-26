@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 // Biến môi trường đặt trong file .env cạnh server.js (vd UPSTASH_…, DATA_KEY, APP_PASSWORD) — tiện khi chạy trên máy bằng start.bat.
-// Biến đã đặt sẵn trong môi trường (Render, Fly, cửa sổ lệnh) được ưu tiên hơn file. Cần Node 20.12+; bản cũ hơn thì bỏ qua file.
+// Biến đã đặt sẵn trong môi trường (Render, cửa sổ lệnh) được ưu tiên hơn file. Cần Node 20.12+; bản cũ hơn thì bỏ qua file.
 const ENV_FILE = path.join(__dirname, '.env');
 if (fs.existsSync(ENV_FILE)) {
   if (typeof process.loadEnvFile === 'function') {
@@ -24,9 +24,9 @@ let D = null; // shared/dates.mjs: khoảng ngày cho số liệu ở Tổng qua
 const bad = (res, r) => send(res, 400, { error: r.first || r.error, errors: r.errors || {} });
 
 const PORT = process.env.PORT || 3000;
-// Mặc định chỉ nghe trên máy này. Trên Render/Fly (nền tảng bắt buộc nghe 0.0.0.0) tự mở ra; nơi khác đặt HOST=0.0.0.0
+// Mặc định chỉ nghe trên máy này. Trên Render (nền tảng bắt buộc nghe 0.0.0.0) tự mở ra; nơi khác đặt HOST=0.0.0.0
 // (bắt buộc phải có mật khẩu, nếu không server không khởi động).
-const HOST = process.env.HOST || (process.env.RENDER || process.env.FLY_APP_NAME ? '0.0.0.0' : '127.0.0.1');
+const HOST = process.env.HOST || (process.env.RENDER ? '0.0.0.0' : '127.0.0.1');
 const PUBLIC = path.join(__dirname, 'public');
 const SECRETS = ['accessToken', 'telegramToken', 'passwordHash', 'fbAppSecret'];
 const MIME = {
