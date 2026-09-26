@@ -3,8 +3,8 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { Check, Plus, X, CircleAlert } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { DAY_LABEL, DAY_ORDER } from '../lib/constants'
-import { validateSchedule, scheduleTimes, isTime } from '../lib/validate'
-import { parseMoney, budgetChange } from '../lib/bulkBudget'
+import { validateSchedule, scheduleTimes, scheduleEvents, isTime } from '../lib/validate'
+import { parseMoney, budgetChange, matchFilter } from '../lib/bulkBudget'
 import { fmt } from '../lib/format'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
@@ -19,8 +19,9 @@ const props = defineProps({ modelValue: Boolean, item: { type: Object, default: 
 const emit = defineEmits(['update:modelValue', 'saved'])
 
 // filter.x / filter.y giữ nguyên chữ người gõ (vd "100k"), đổi sang số khi kiểm tra và lưu
-const blankFilter = () => ({ level: 'campaign', op: 'any', x: '', y: '', name: '', onlyRunning: false, account: '' })
-const blank = () => ({ name: '', action: 'on', times: ['06:00'], days: [0, 1, 2, 3, 4, 5, 6], targetMode: 'list', targets: [], filter: blankFilter(), exclude: [], mode: 'percent', value: 20, enabled: true })
+const blankFilter = () => ({ level: 'campaign', op: 'any', x: '', y: '', name: '', status: 'all', onlyRunning: false, account: '' })
+const blankWindow = () => ({ on: '06:00', off: '23:00' })
+const blank = () => ({ name: '', action: 'on', times: ['06:00'], window: blankWindow(), days: [0, 1, 2, 3, 4, 5, 6], targetMode: 'list', targets: [], filter: blankFilter(), exclude: [], mode: 'percent', value: 20, enabled: true })
 const f = ref(blank())
 const submitted = ref(false)
 const touched = reactive({})
@@ -31,8 +32,8 @@ watch(() => props.modelValue, (open) => {
   const it = JSON.parse(JSON.stringify(props.item || {}))
   const times = scheduleTimes(it) // lịch cũ/mẫu tạo nhanh chỉ có `time`
   const fl = it.filter || {}
-  f.value = { ...blank(), ...it, times: times.length ? times : blank().times,
-    filter: { ...blankFilter(), ...fl, x: fl.x != null ? String(fl.x) : '', y: fl.y != null ? String(fl.y) : '' } }
+  f.value = { ...blank(), ...it, times: times.length ? times : blank().times, window: { ...blankWindow(), ...(it.window || {}) },
+    filter: { ...blankFilter(), ...fl, status: fl.status || (fl.onlyRunning ? 'running' : 'all'), x: fl.x != null ? String(fl.x) : '', y: fl.y != null ? String(fl.y) : '' } }
   delete f.value.time
   startOnlySel.value = !!(it.id && it.targetMode !== 'filter' && (it.targets || []).length)
   newTime.value = ''
@@ -46,6 +47,7 @@ const payload = computed(() => {
   const v = { ...f.value }
   if (v.targetMode === 'filter') v.filter = { ...v.filter, x: parseMoney(v.filter.x), y: parseMoney(v.filter.y) }
   else { delete v.filter; delete v.exclude }
+  if (v.action !== 'window') delete v.window
   return v
 })
 const check = computed(() => validateSchedule(payload.value, { objs: objs.value, schedules: state.schedules }))
@@ -66,6 +68,37 @@ const budgetPreview = computed(() => {
   const action = { mode: v.mode, value: Number(v.value) }
   return (o) => budgetChange(o, action)
 })
+
+// Lọc theo ngân sách chỉ dùng khi đổi ngân sách: đổi sang bật/tắt thì bỏ điều kiện ngân sách (đang bị ẩn)
+watch(() => f.value.action, (a, prev) => {
+  if (a !== 'budget' && f.value.filter.op !== 'any') f.value.filter.op = 'any'
+  // khung giờ theo điều kiện: lúc bật và lúc tắt phải lọc ra cùng danh sách → không lọc theo trạng thái
+  if (a === 'window' && prev && f.value.filter.status !== 'all') { f.value.filter.status = 'all'; f.value.filter.onlyRunning = false }
+})
+
+// Nhãn các lịch KHÁC đang tác động lên từng mục (hiện trên dòng trong danh sách chọn) để tránh tạo trùng / ngược nhau
+const shortTimes = (ts) => (ts.length > 2 ? `${ts.slice(0, 2).join(', ')}…` : ts.join(', '))
+function scheduleTag(s) {
+  if (s.action === 'window') return { text: `Bật ${s.window.on} · Tắt ${s.window.off}`, tone: 'success' }
+  const at = shortTimes(scheduleTimes(s))
+  if (s.action === 'on') return { text: `Bật ${at}`, tone: 'success' }
+  if (s.action === 'off') return { text: `Tắt ${at}`, tone: 'danger' }
+  return { text: `Ngân sách ${at}`, tone: 'info' }
+}
+const otherTags = computed(() => {
+  const m = {}
+  if (!props.modelValue) return m
+  for (const s of state.schedules) {
+    if (!s.enabled || (props.item && s.id === props.item.id) || !scheduleEvents(s).length) continue
+    const tag = scheduleTag(s)
+    const ex = new Set(s.exclude || [])
+    const ids = s.targetMode === 'filter' ? matchFilter(state.objs, s.filter || {}).filter((o) => !ex.has(o.id)).map((o) => o.id) : s.targets || []
+    for (const id of ids) (m[id] ||= []).push({ ...tag, text: s.targetMode === 'filter' ? `${tag.text} (điều kiện)` : tag.text })
+  }
+  return m
+})
+const NO_TAGS = []
+const tagsOf = (id) => otherTags.value[id] || NO_TAGS
 
 const toggleDay = (d) => { const s = new Set(f.value.days); s.has(d) ? s.delete(d) : s.add(d); f.value.days = [...s]; touched.days = true }
 const setDays = (arr) => { f.value.days = arr; touched.days = true }
@@ -97,7 +130,8 @@ async function save() {
   toast('Đã lưu lịch')
   emit('saved'); emit('update:modelValue', false)
 }
-const actions = [{ value: 'on', label: 'Bật camp' }, { value: 'off', label: 'Tắt camp' }, { value: 'budget', label: 'Đổi ngân sách' }]
+const actions = [{ value: 'on', label: 'Bật camp' }, { value: 'off', label: 'Tắt camp' }, { value: 'window', label: 'Bật + tắt theo giờ' }, { value: 'budget', label: 'Đổi ngân sách' }]
+const overnight = computed(() => isTime(f.value.window.on) && isTime(f.value.window.off) && f.value.window.off < f.value.window.on)
 const modes = [{ value: 'percent', label: 'Theo %' }, { value: 'set', label: 'Số tiền cố định' }, { value: 'add', label: 'Cộng/trừ số tiền' }]
 const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm để giảm (vd -30).' : f.value.mode === 'add' ? 'Số âm để trừ (vd -50000). ' + (moneyHint(f.value.value) ? `= ${moneyHint(f.value.value)}` : '') : `Đặt ngân sách ngày đúng bằng số này. ${moneyHint(f.value.value) ? `= ${moneyHint(f.value.value)}` : ''}`))
 </script>
@@ -106,9 +140,16 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
   <Modal :model-value="modelValue" :title="item && item.id ? 'Sửa lịch' : 'Thêm lịch'" subtitle="Tool sẽ chạy đúng giờ, kể cả khi bạn không mở trang này." @update:model-value="emit('update:modelValue', $event)">
     <Field label="Tên lịch" :error="show('name')"><input v-model="f.name" class="input" maxlength="120" placeholder="Vd: Bật camp buổi sáng" @input="touched.name = true" /></Field>
 
-    <Field label="Hành động"><Segmented v-model="f.action" :options="actions" block /></Field>
+    <Field label="Hành động"><div class="acts4"><Segmented v-model="f.action" :options="actions" block /></div></Field>
 
-    <Field label="Giờ chạy" tip="scheduleTime" :error="show('time')" hint="Thêm nhiều giờ trong ngày (tối đa 24), mỗi giờ chạy 1 lần. Giờ nào hôm nay chưa tới thì chạy luôn trong hôm nay.">
+    <Field v-if="f.action === 'window'" label="Khung giờ chạy" tip="scheduleWindow" :error="show('time')" :hint="overnight ? `Tắt sau nửa đêm: camp bật lúc ${f.window.on} và tắt lúc ${f.window.off} sáng hôm sau.` : 'Camp được bật lúc giờ bật và tắt lúc giờ tắt, cùng một danh sách. Ngày chạy tính theo ngày bật.'">
+      <div class="win">
+        <label><span>Bật lúc</span><input v-model="f.window.on" type="time" class="input tin" @input="touched.time = true" /></label>
+        <span class="faint arrow">→</span>
+        <label><span>Tắt lúc</span><input v-model="f.window.off" type="time" class="input tin" @input="touched.time = true" /></label>
+      </div>
+    </Field>
+    <Field v-else label="Giờ chạy" tip="scheduleTime" :error="show('time')" hint="Thêm nhiều giờ trong ngày (tối đa 24), mỗi giờ chạy 1 lần. Giờ nào hôm nay chưa tới thì chạy luôn trong hôm nay.">
       <div class="times">
         <span v-for="t in sortedTimes" :key="t" class="tchip num">{{ t }}<button type="button" :aria-label="'Bỏ giờ ' + t" @click="removeTime(t)"><X :size="13" /></button></span>
         <span class="add"><input v-model="newTime" type="time" class="input tin" aria-label="Giờ cần thêm" @keydown.enter.prevent="addTime" /><Btn size="sm" :icon="Plus" @click="addTime">Thêm giờ</Btn></span>
@@ -136,7 +177,7 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
           <span class="rd" /><span class="mt"><b>{{ m.label }}</b><small>{{ m.desc }}</small></span>
         </button>
       </div>
-      <FilterPicker v-model="f.targets" v-model:filter="f.filter" v-model:exclude="f.exclude" :auto="f.targetMode === 'filter'" keep-hidden :need-budget="f.action === 'budget'" :change="budgetPreview" :start-only-selected="startOnlySel" />
+      <FilterPicker v-model="f.targets" v-model:filter="f.filter" v-model:exclude="f.exclude" :auto="f.targetMode === 'filter'" keep-hidden :need-budget="f.action === 'budget'" :hide-budget="f.action !== 'budget'" :change="budgetPreview" :start-only-selected="startOnlySel" :tags-of="tagsOf" />
       <p v-if="targetErr" class="terr" role="alert"><CircleAlert :size="14" /><span>{{ targetErr }}</span></p>
     </Field>
 
@@ -155,6 +196,9 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
 .tchip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 14px; }
 .tchip button { border: 0; background: none; color: inherit; display: grid; place-items: center; padding: 3px; border-radius: 6px; }
 .tchip button:hover { background: var(--accent); color: #fff; }
+.win { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.win label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); font-weight: 600; }
+.arrow { padding-bottom: 10px; }
 .add { display: inline-flex; gap: 6px; align-items: center; }
 .tin { width: 120px; }
 .inl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -180,4 +224,6 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
 .quick button { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 8px; border-radius: 7px; }
 .quick button:hover { background: var(--accent-soft); }
 @media (max-width: 560px) { .day { width: 42px; } .modes { grid-template-columns: 1fr; } }
+/* 4 hành động: điện thoại xếp 2 x 2 thay vì cuộn ngang */
+@media (max-width: 640px) { .acts4 :deep(.seg) { display: grid; grid-template-columns: 1fr 1fr; } }
 </style>

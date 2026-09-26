@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
-import { scheduleTimes } from '../lib/validate'
+import { scheduleEvents, eventOnDay } from '../lib/validate'
 
 const props = defineProps({ schedules: { type: Array, default: () => [] } })
 const now = ref(new Date())
@@ -11,9 +11,16 @@ onBeforeUnmount(() => clearInterval(t))
 const today = computed(() => now.value.getDay())
 const pct = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return ((h * 60 + m) / 1440) * 100 }
 const nowPct = computed(() => ((now.value.getHours() * 60 + now.value.getMinutes()) / 1440) * 100)
-// Mỗi giờ chạy của lịch là 1 chấm trên dòng thời gian
-const events = computed(() => props.schedules.filter((s) => s.enabled && s.days.includes(today.value))
-  .flatMap((s) => scheduleTimes(s).map((time) => ({ ...s, time, key: `${s.id}:${time}`, left: pct(time), past: pct(time) < nowPct.value }))))
+// Mỗi lần chạy của lịch là 1 chấm trên dòng thời gian (lịch khung giờ: 1 chấm bật + 1 chấm tắt)
+const events = computed(() => props.schedules.filter((s) => s.enabled)
+  .flatMap((s) => scheduleEvents(s).filter((ev) => eventOnDay(s, ev, today.value))
+    .map((ev) => ({ ...s, action: ev.action, time: ev.time, key: `${s.id}:${ev.time}`, left: pct(ev.time), past: pct(ev.time) < nowPct.value }))))
+// Khoảng thời gian camp được bật của lịch khung giờ hôm nay (qua nửa đêm thì thành 2 đoạn)
+const bands = computed(() => props.schedules.filter((s) => s.enabled && s.action === 'window' && s.window).flatMap((s) => {
+  const on = pct(s.window.on), off = pct(s.window.off), days = s.days || [], d = today.value
+  if (off > on) return days.includes(d) ? [{ key: s.id, left: on, width: off - on }] : []
+  return [...(days.includes((d + 6) % 7) ? [{ key: s.id + ':a', left: 0, width: off }] : []), ...(days.includes(d) ? [{ key: s.id + ':b', left: on, width: 100 - on }] : [])]
+}))
 const tone = (a) => (a === 'on' ? 'success' : a === 'off' ? 'danger' : 'info')
 const label = (s) => `${s.time} · ${s.name}`
 </script>
@@ -22,6 +29,7 @@ const label = (s) => `${s.time} · ${s.name}`
   <div class="tl">
     <div class="track">
       <i class="fill" :style="{ width: nowPct + '%' }" />
+      <i v-for="b in bands" :key="b.key" class="band" :style="{ left: b.left + '%', width: b.width + '%' }" />
       <span v-for="e in events" :key="e.key"class="ev" :class="[tone(e.action), { past: e.past }]" :style="{ left: e.left + '%' }" :title="label(e)"><i /></span>
       <span class="now" :style="{ left: nowPct + '%' }"><em>Bây giờ</em></span>
     </div>
@@ -34,6 +42,7 @@ const label = (s) => `${s.time} · ${s.name}`
 .tl { padding: 8px 4px 0; }
 .track { position: relative; height: 10px; border-radius: 99px; background: var(--surface-3); margin: 26px 8px 6px; }
 .fill { position: absolute; inset: 0 auto 0 0; border-radius: 99px; background: var(--accent-grad); opacity: .35; }
+.band { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: var(--success); opacity: .28; }
 .ev { position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; display: grid; place-items: center; cursor: default; background: var(--surface); box-shadow: 0 2px 8px rgba(0, 0, 0, .18); transition: transform .2s var(--ease); z-index: 1; }
 .ev:hover { transform: scale(1.35); z-index: 3; }
 .ev i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
