@@ -1,6 +1,7 @@
 package com.fbads.entity;
 
 import com.fbads.common.JsonConverters;
+import com.fbads.common.SecretConverter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -32,17 +33,20 @@ public class AppSettings {
 
     private boolean mock = true;             // true = dữ liệu giả để dùng thử, không chạm vào Facebook
     private boolean dryRun = true;           // true = tự động hoá chỉ ghi log, không thực thi thật
+    @Convert(converter = SecretConverter.class)   // mã hoá trong DB khi có SECRET_KEY
     private String accessToken = "";
     private String adAccountId = "";         // tài khoản đầu tiên trong adAccountIds (giữ cho phần cũ)
     @Convert(converter = JsonConverters.StringList.class)
     private List<String> adAccountIds = new ArrayList<>();
     private String fbAppId = "";
+    @Convert(converter = SecretConverter.class)   // mã hoá trong DB khi có SECRET_KEY
     private String fbAppSecret = "";
     private String fbConfigId = "";
     private String apiVersion = "v21.0";
     private String timezone = "Asia/Ho_Chi_Minh";
     private String resultAction = "purchase";
     private int ruleIntervalMin = 15;
+    @Convert(converter = SecretConverter.class)   // mã hoá trong DB khi có SECRET_KEY
     private String telegramToken = "";
     @Column(name = "telegram_chat_id")
     private String telegramChatId = "";

@@ -26,6 +26,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -60,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Gọi API y như giao diện Vue gọi.
  */
 @Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "fbads.engine.enabled=false")
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"fbads.engine.enabled=false", "fbads.secret-key=khoa-test"})
 class ApiIntegrationTest {
     @Container
     @ServiceConnection
@@ -102,6 +103,8 @@ class ApiIntegrationTest {
     WorkspaceRepository workspaces;
     @Autowired
     ScheduleRepository scheduleRepo;
+    @Autowired
+    JdbcTemplate jdbc;
     Api api;
     /** Gọi service trực tiếp trong test = thao tác trên workspace 1 (như chế độ mở) */
     WorkspaceContext.Scope ws;
@@ -339,6 +342,22 @@ class ApiIntegrationTest {
         assertThat(ws2List.values()).extracting(x -> x.get("id").asString()).containsExactly(ws2Schedule);
         assertThat(ws2List.get(0).get("name").asString()).isEqualTo("Lịch WS2 [test-ws]");
         assertThat(api.get("/api/state").body().get("settings").get("ruleIntervalMin").asInt()).isEqualTo(45);
+    }
+
+    /** Có SECRET_KEY: token lưu trong DB đã mã hoá, API và engine vẫn đọc ra đúng token */
+    @Test
+    void secretsAreEncryptedInDb() {
+        settings.update(s -> { s.setTelegramToken("123:bi-mat"); s.setAccessToken("EAAB-token-that"); });
+        try {
+            Map<String, Object> row = jdbc.queryForMap("SELECT access_token, telegram_token FROM app_settings WHERE id = 1");
+            assertThat((String) row.get("access_token")).startsWith("enc:v1:").doesNotContain("EAAB");
+            assertThat((String) row.get("telegram_token")).startsWith("enc:v1:").doesNotContain("bi-mat");
+            settings.reload();
+            assertThat(settings.get().getAccessToken()).isEqualTo("EAAB-token-that");
+            assertThat(api.get("/api/state").body().get("settings").get("has_accessToken").asBoolean()).isTrue();
+        } finally {
+            settings.update(s -> { s.setTelegramToken(""); s.setAccessToken(""); });
+        }
     }
 
     /** Số camp tải từ Facebook được lưu ở Redis; đổi ngân sách thì bản ở Redis bị xoá */
