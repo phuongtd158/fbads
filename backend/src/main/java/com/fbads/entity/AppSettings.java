@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Cài đặt của tool: bảng app_settings chỉ có 1 dòng (id = 1). Tên trường khớp tên khoá JSON của giao diện
+ * Cài đặt của một workspace: bảng app_settings, mỗi workspace 1 dòng, id = id của workspace. Tên trường khớp tên khoá JSON của giao diện
  * (settings.mock, settings.dryRun, …) nên Jackson đọc/ghi thẳng được.
  */
 @Entity
@@ -23,7 +23,7 @@ import java.util.Map;
 public class AppSettings {
     @Id
     @JsonIgnore
-    private Integer id = 1;
+    private Long id;
 
     /** Khoá lạc quan: 2 nơi cùng sửa thì nơi lưu sau bị từ chối thay vì âm thầm ghi đè. */
     @Version
@@ -47,7 +47,6 @@ public class AppSettings {
     @Column(name = "telegram_chat_id")
     private String telegramChatId = "";
     private String reportTime = "08:00";
-    private String passwordHash = "";
     private boolean skipLearning = true;
     private int dailyChangeCapPct = 30;
     private boolean killSwitchEnabled = false;
@@ -80,7 +79,12 @@ public class AppSettings {
     }
 
     // ----- getter / setter (Jackson + JPA) -----
-    public Integer getId() { return id; }
+    protected AppSettings() {}
+
+    /** Cài đặt mặc định cho workspace mới (dữ liệu giả, chạy thử) */
+    public AppSettings(long workspaceId) { this.id = workspaceId; }
+
+    public Long getId() { return id; }
     public Integer getVersion() { return version; }
     public boolean isMock() { return mock; }
     public void setMock(boolean mock) { this.mock = mock; }
@@ -112,8 +116,6 @@ public class AppSettings {
     public void setTelegramChatId(String telegramChatId) { this.telegramChatId = telegramChatId; }
     public String getReportTime() { return reportTime; }
     public void setReportTime(String reportTime) { this.reportTime = reportTime; }
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public boolean isSkipLearning() { return skipLearning; }
     public void setSkipLearning(boolean skipLearning) { this.skipLearning = skipLearning; }
     public int getDailyChangeCapPct() { return dailyChangeCapPct; }

@@ -9,6 +9,7 @@ import com.fbads.repository.DailyMarkRepository;
 import com.fbads.repository.RuleMarkRepository;
 import com.fbads.repository.RuleResumeRepository;
 import com.fbads.repository.ScheduleRunRepository;
+import com.fbads.security.WorkspaceContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
@@ -71,16 +72,18 @@ public class EngineState {
 
     public void removeResume(RuleObjKey key) { resumes.deleteById(key); }
 
-    // ----- Đánh dấu theo ngày -----
-    public Optional<DailyMark> daily(String day, String mark) { return daily.findById(new DailyMark.Key(day, mark)); }
+    // ----- Đánh dấu theo ngày (của workspace hiện tại) -----
+    private static DailyMark.Key key(String day, String mark) { return new DailyMark.Key(WorkspaceContext.require(), day, mark); }
 
-    public boolean hasDaily(String day, String mark) { return daily.existsById(new DailyMark.Key(day, mark)); }
+    public Optional<DailyMark> daily(String day, String mark) { return daily.findById(key(day, mark)); }
 
-    public void putDaily(String day, String mark, Double value) { daily.save(new DailyMark(day, mark, value)); }
+    public boolean hasDaily(String day, String mark) { return daily.existsById(key(day, mark)); }
 
-    public void cleanupDaily(String before) { daily.deleteBefore(before); }
+    public void putDaily(String day, String mark, Double value) { daily.save(new DailyMark(WorkspaceContext.require(), day, mark, value)); }
 
-    /** Xoá toàn bộ trạng thái (dùng cho kiểm thử) */
+    public void cleanupDaily(String before) { daily.deleteBefore(WorkspaceContext.require(), before); }
+
+    /** Xoá toàn bộ trạng thái của mọi workspace (dùng cho kiểm thử) */
     public void clearAll() {
         runs.deleteAllInBatch();
         marks.deleteAllInBatch();

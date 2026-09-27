@@ -1,5 +1,6 @@
 package com.fbads.entity;
 
+import org.hibernate.annotations.TenantId;
 import com.fbads.common.JsonConverters;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -22,6 +23,11 @@ import java.util.Map;
 public class LogEntry {
     @Id
     private String id;
+    /** Workspace chủ của dòng này: Hibernate tự ghi khi tạo và tự lọc khi đọc (config/TenantConfig) */
+    @TenantId
+    @Column(name = "workspace_id", updatable = false)
+    @JsonIgnore
+    private Long workspaceId;
     @Column(insertable = false, updatable = false)
     @JsonIgnore
     private Long seq;

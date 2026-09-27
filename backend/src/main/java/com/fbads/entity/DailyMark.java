@@ -12,12 +12,13 @@ import jakarta.persistence.Table;
  *   skip:{ref}:{obj}:{code} lý do bỏ qua đã ghi nhật ký
  *   kill:total, kill:acc:{id} dừng khẩn đã chạy
  *   report                 báo cáo hằng ngày đã gửi
+ * Khoá có workspace: mỗi workspace một bộ dấu riêng (không dùng @TenantId vì workspace nằm trong khoá chính).
  */
 @Entity
 @Table(name = "daily_marks")
 public class DailyMark {
     @Embeddable
-    public record Key(@Column(name = "day") String day, @Column(name = "mark") String mark) {}
+    public record Key(@Column(name = "workspace_id") Long workspaceId, @Column(name = "day") String day, @Column(name = "mark") String mark) {}
 
     @EmbeddedId
     private Key key;
@@ -25,8 +26,8 @@ public class DailyMark {
 
     protected DailyMark() {}
 
-    public DailyMark(String day, String mark, Double value) {
-        this.key = new Key(day, mark);
+    public DailyMark(long workspaceId, String day, String mark, Double value) {
+        this.key = new Key(workspaceId, day, mark);
         this.numValue = value;
     }
 

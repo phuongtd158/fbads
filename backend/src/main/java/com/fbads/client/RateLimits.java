@@ -1,5 +1,6 @@
 package com.fbads.client;
 
+import com.fbads.security.WorkspaceContext;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -7,22 +8,32 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Giới hạn số lần gọi của Facebook. Mỗi phản hồi có tiêu đề báo mức đã dùng (%); khi bị chặn Facebook báo số phút phải chờ
  * (estimated_time_to_regain_access) → tool ngưng đọc số liệu đến lúc đó (blockedUntil).
+ * Mỗi workspace dùng token/tài khoản quảng cáo riêng nên có mức dùng riêng: workspace này bị chặn không làm workspace khác ngưng.
  */
 @Component
 public class RateLimits {
+    private static final class Usage {
+        volatile double pct;
+        volatile String tier = "";
+        volatile long at;
+        volatile long blockedUntil;
+    }
+
     private final JsonMapper mapper;
-    private volatile double pct;
-    private volatile String tier = "";
-    private volatile long at;
-    private volatile long blockedUntil;
+    private final Map<Long, Usage> byWorkspace = new ConcurrentHashMap<>();
 
     public RateLimits(JsonMapper mapper) { this.mapper = mapper; }
 
+    private Usage u() { return byWorkspace.computeIfAbsent(WorkspaceContext.require(), k -> new Usage()); }
+
     public void readUsage(HttpHeaders headers) {
+        Usage u = u();
         Double p = null;
         double regainMin = 0;
         for (String h : List.of("x-business-use-case-usage", "x-ad-account-usage", "x-app-usage")) {
@@ -40,26 +51,30 @@ public class RateLimits {
                     p = m;
                     regainMin = Math.max(regainMin, r.path("estimated_time_to_regain_access").asDouble(0));
                     String t = r.path("ads_api_access_tier").asString("");
-                    if (!t.isEmpty()) tier = t;
+                    if (!t.isEmpty()) u.tier = t;
                 }
             } catch (RuntimeException ignored) { /* tiêu đề lạ: bỏ qua */ }
         }
-        if (p != null) { pct = p; at = System.currentTimeMillis(); }
+        if (p != null) { u.pct = p; u.at = System.currentTimeMillis(); }
         if (regainMin > 0) block((long) (regainMin * 60_000));
     }
 
     /** Bị chặn thêm ms mili giây kể từ bây giờ (không rút ngắn thời gian chặn đang có) */
-    public synchronized void block(long ms) { blockedUntil = Math.max(blockedUntil, System.currentTimeMillis() + ms); }
+    public void block(long ms) {
+        Usage u = u();
+        synchronized (u) { u.blockedUntil = Math.max(u.blockedUntil, System.currentTimeMillis() + ms); }
+    }
 
-    public boolean blocked() { return System.currentTimeMillis() < blockedUntil; }
+    public boolean blocked() { return System.currentTimeMillis() < u().blockedUntil; }
 
-    public long blockedUntil() { return blockedUntil; }
+    public long blockedUntil() { return u().blockedUntil; }
 
-    public double pct() { return pct; }
+    public double pct() { return u().pct; }
 
-    public String tier() { return tier; }
+    public String tier() { return u().tier; }
 
-    public long at() { return at; }
+    public long at() { return u().at; }
 
-    public void reset() { pct = 0; tier = ""; at = 0; blockedUntil = 0; }
+    /** Xoá mức dùng của workspace hiện tại */
+    public void reset() { byWorkspace.remove(WorkspaceContext.require()); }
 }

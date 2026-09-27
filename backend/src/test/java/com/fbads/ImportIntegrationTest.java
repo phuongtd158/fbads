@@ -1,5 +1,6 @@
 package com.fbads;
 
+import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,13 +38,14 @@ class ImportIntegrationTest {
     @Test
     void importsNodeData() {
         Api api = new Api(port);
-        assertThat(api.get("/api/state").status()).isEqualTo(401); // mật khẩu đã nhập theo
-        assertThat(api.post("/api/login", Map.of("password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(api.get("/api/state").status()).isEqualTo(401); // mật khẩu đã nhập theo, thành tài khoản "admin"
+        assertThat(api.post("/api/login", Map.of("username", "admin", "password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(api.get("/api/auth").body().get("workspace").get("role").asString()).isEqualTo("OWNER");
 
         JsonNode st = api.get("/api/state").body();
         assertThat(st.get("settings").get("adAccountIds").get(0).asString()).isEqualTo("123456789");
         assertThat(st.get("settings").get("ruleIntervalMin").asInt()).isEqualTo(20);
-        assertThat(st.get("settings").get("passwordHash").asString()).isEmpty();
+        assertThat(st.get("settings").has("passwordHash")).isFalse();
         assertThat(st.get("settings").get("accountTargets").get("123456789").get("cpa").asLong()).isEqualTo(150000);
         assertThat(st.get("schedules").size()).isEqualTo(2);
         assertThat(st.get("schedules").get(1).get("window").get("off").asString()).isEqualTo("22:00");
@@ -53,6 +55,6 @@ class ImportIntegrationTest {
         assertThat(logs.get(0).get("id").asString()).isEqualTo("log00002"); // mới nhất trước, như bản Node
         assertThat(logs.get(1).get("ok").asBoolean()).isFalse();
         assertThat(logs.get(1).get("error").get("code").asInt()).isEqualTo(190);
-        assertThat(state.resumes()).hasSize(1);
+        assertThat(WorkspaceContext.call(WorkspaceContext.DEFAULT, () -> state.resumes())).hasSize(1);
     }
 }

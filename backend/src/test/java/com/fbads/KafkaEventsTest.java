@@ -4,6 +4,7 @@ import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventTopics;
+import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
@@ -114,8 +115,11 @@ class KafkaEventsTest {
     @AfterAll
     static void stopStub() { tg.close(); }
 
+    WorkspaceContext.Scope scope;
+
     @BeforeEach
     void setUp() {
+        scope = WorkspaceContext.enter(WorkspaceContext.DEFAULT); // gọi service trực tiếp = workspace 1
         telegram.setApiBase(tg.base());
         settings.update(s -> { s.setTelegramToken("123:abc"); s.setTelegramChatId("111"); });
         tg.status = 200;
@@ -125,7 +129,10 @@ class KafkaEventsTest {
     }
 
     @AfterEach
-    void tearDown() { settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); }); }
+    void tearDown() {
+        settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
+        scope.close();
+    }
 
     @Test
     void oneEventManyConsumers() throws Exception {
@@ -134,7 +141,7 @@ class KafkaEventsTest {
         StompSession ws = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
         try {
             BlockingQueue<String> live = new LinkedBlockingQueue<>();
-            ws.subscribe("/topic/logs", collect(live));
+            ws.subscribe("/topic/ws.1.logs", collect(live));
             Thread.sleep(300);
             String today = clock.now().date();
             int before = actions(today, "rule");
@@ -144,7 +151,7 @@ class KafkaEventsTest {
 
             // sự kiện nằm trên topic fbads.events, có cờ gửi Telegram
             ConsumerRecord<String, String> rec = find(EventTopics.EVENTS, r -> r.value().contains(logId));
-            assertThat(rec.key()).isEqualTo("logs"); // mọi sự kiện nhật ký chung một khoá → đúng thứ tự
+            assertThat(rec.key()).isEqualTo("1:logs"); // mọi sự kiện nhật ký của một workspace chung một khoá → đúng thứ tự
             JsonNode ev = json.readTree(rec.value());
             assertThat(ev.get("type").asString()).isEqualTo(AppEvent.LOG_CREATED);
             assertThat(ev.get("telegram").asBoolean()).isTrue();
@@ -201,8 +208,8 @@ class KafkaEventsTest {
         try {
             BlockingQueue<String> objects = new LinkedBlockingQueue<>();
             BlockingQueue<String> logs = new LinkedBlockingQueue<>();
-            ws.subscribe("/topic/objects", collect(objects));
-            ws.subscribe("/topic/logs", collect(logs));
+            ws.subscribe("/topic/ws.1.objects", collect(objects));
+            ws.subscribe("/topic/ws.1.logs", collect(logs));
             Thread.sleep(300);
             String today = clock.now().date();
             int before = actions(today, "manual");

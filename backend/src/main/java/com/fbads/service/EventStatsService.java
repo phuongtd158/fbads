@@ -4,6 +4,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.entity.EventStat;
 import com.fbads.event.AppEvent;
 import com.fbads.repository.EventStatRepository;
+import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -31,7 +32,7 @@ public class EventStatsService {
         this.tx.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    /** Chỉ log.created mới mở transaction; sự kiện khác (camp đổi, xong một lượt…) bỏ qua ngay */
+    /** Chỉ log.created mới mở transaction; sự kiện khác (camp đổi, xong một lượt…) bỏ qua ngay. Gọi trong workspace của sự kiện. */
     public void handle(AppEvent e) {
         if (!AppEvent.LOG_CREATED.equals(e.type()) || e.data() == null) return;
         String kind = e.data().path("kind").asString("");
@@ -39,11 +40,11 @@ public class EventStatsService {
         String day = Instant.ofEpochMilli(e.at()).atZone(clock.zone()).toLocalDate().toString();
         tx.executeWithoutResult(status -> {
             if (repo.markSeen(e.id(), day) == 0) return; // đã đếm sự kiện này
-            repo.increment(day, source);
+            repo.increment(WorkspaceContext.require(), day, source);
         });
     }
 
-    public List<EventStat> ofDay(String day) { return repo.findByKeyDay(day); }
+    public List<EventStat> ofDay(String day) { return repo.findByKeyWorkspaceIdAndKeyDay(WorkspaceContext.require(), day); }
 
     /** Mã sự kiện đã đếm chỉ cần giữ vài ngày (Kafka không giao lại sự kiện cũ như vậy) */
     public void cleanup(String before) { repo.forgetSeenBefore(before); }

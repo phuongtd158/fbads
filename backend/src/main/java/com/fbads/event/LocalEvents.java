@@ -49,7 +49,7 @@ public class LocalEvents {
     @Order(2)
     public void stats(AppEvent e) {
         try {
-            stats.handle(e);
+            e.runInWorkspace(() -> stats.handle(e));
         } catch (RuntimeException ex) {
             log.warn("Không ghi được thống kê cho sự kiện {}: {}", e.id(), ex.getMessage());
         }
@@ -60,7 +60,7 @@ public class LocalEvents {
     @Order(3)
     public void telegram(AppEvent e) {
         try {
-            telegram.handle(e);
+            e.runInWorkspace(() -> telegram.handle(e));
         } catch (TelegramNotifier.RetryableFailure | TelegramNotifier.PermanentFailure ex) {
             // TelegramService đã ghi log lý do
         } catch (RuntimeException ex) {

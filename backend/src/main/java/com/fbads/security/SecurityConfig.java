@@ -14,8 +14,9 @@ import org.springframework.security.web.context.SecurityContextRepository;
 
 /**
  * Spring Security:
- *  - /api/auth, /api/login, /api/logout, /api/fb/callback: không cần đăng nhập;
- *  - /api/**: cần đăng nhập NẾU đã đặt mật khẩu (AuthorizationManager tự viết, đọc cài đặt mỗi lần nên đặt mật khẩu là có hiệu lực ngay);
+ *  - /api/auth, /api/login, /api/logout, /api/setup, /api/register, /api/fb/callback: không cần đăng nhập;
+ *  - /api/**: cần đăng nhập NẾU đã có tài khoản (AuthorizationManager tự viết: tạo tài khoản đầu tiên là có hiệu lực ngay);
+ *    quyền theo từng workspace (OWNER / EDITOR / VIEWER) do WorkspaceFilter kiểm tra sau bước này;
  *  - /ws (WebSocket realtime): như /api;
  *  - còn lại (giao diện, /actuator/health): mở.
  * Phiên đăng nhập lưu ở Redis (Spring Session Data Redis) nên khởi động lại server không bị đăng xuất, chạy nhiều bản vẫn dùng chung phiên.
@@ -40,7 +41,7 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(repo))
                 .headers(h -> h.cacheControl(cc -> cc.disable())) // cache do từng phần tự đặt (API: no-store, file build: 1 năm)
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/api/auth", "/api/login", "/api/logout", "/api/fb/callback").permitAll()
+                        .requestMatchers("/api/auth", "/api/login", "/api/logout", "/api/setup", "/api/register", "/api/fb/callback").permitAll()
                         .requestMatchers("/api/**", "/ws", "/ws/**").access((authentication, ctx) -> new AuthorizationDecision(auth.allowed(authentication.get())))
                         .anyRequest().permitAll())
                 .exceptionHandling(ex -> ex

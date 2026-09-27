@@ -40,9 +40,10 @@ public class ScheduleService {
         Result<Schedule> r = ScheduleValidator.validate(input, fb.objectsForValidation(), all);
         if (!r.ok()) throw new ValidationException(r);
         Schedule item = r.value();
-        boolean hasId = item.getId() != null && !item.getId().isEmpty();
-        if ((!hasId || !repo.existsById(item.getId())) && all.size() >= MAX_ITEMS) throw tooMany();
-        if (!hasId) item.setId(Ids.uid());
+        // id chưa có trong workspace này (mục mới, hoặc id của workspace khác) → luôn cấp id mới, không bao giờ ghi đè mục của người khác
+        boolean exists = item.getId() != null && !item.getId().isEmpty() && repo.existsById(item.getId());
+        if (!exists && all.size() >= MAX_ITEMS) throw tooMany();
+        if (!exists) item.setId(Ids.uid());
         return new Saved<>(repo.save(item), r.warnings());
     }
 

@@ -2,26 +2,31 @@ package com.fbads.service;
 
 import com.fbads.entity.AppSettings;
 import com.fbads.repository.SettingsRepository;
+import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 /**
- * Đọc/ghi cài đặt. Engine đọc cài đặt rất nhiều lần mỗi lượt nên giữ một bản trong bộ nhớ,
- * mỗi lần lưu thì ghi DB rồi thay bản trong bộ nhớ (1 bản app; chạy nhiều bản thì giai đoạn 2 dùng Redis).
+ * Đọc/ghi cài đặt của workspace hiện tại (WorkspaceContext). Engine đọc cài đặt rất nhiều lần mỗi lượt nên giữ
+ * một bản trong bộ nhớ cho mỗi workspace; mỗi lần lưu thì ghi DB rồi thay bản trong bộ nhớ.
  */
 @Service
 public class SettingsService {
     /** Bí mật: không bao giờ gửi về giao diện, chỉ cho biết đã có hay chưa (has_…) */
-    public static final List<String> SECRETS = List.of("accessToken", "telegramToken", "passwordHash", "fbAppSecret");
+    public static final List<String> SECRETS = List.of("accessToken", "telegramToken", "fbAppSecret");
 
     private final SettingsRepository repo;
     private final JsonMapper mapper;
-    private volatile AppSettings current;
+    private final Map<Long, AppSettings> current = new ConcurrentHashMap<>();
+    /** Khoá theo workspace: 2 lần lưu cùng lúc của một workspace đi lần lượt, workspace khác không phải chờ */
+    private final Map<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
 
     public SettingsService(SettingsRepository repo, JsonMapper mapper) {
         this.repo = repo;
@@ -29,35 +34,43 @@ public class SettingsService {
     }
 
     public AppSettings get() {
-        AppSettings s = current;
-        if (s == null) {
-            synchronized (this) {
-                if (current == null) current = repo.findById(1).orElseGet(() -> repo.save(new AppSettings()));
-                s = current;
-            }
+        long ws = WorkspaceContext.require();
+        AppSettings s = current.get(ws);
+        if (s != null) return s;
+        ReentrantLock lock = lockOf(ws);
+        lock.lock();
+        try {
+            return current.computeIfAbsent(ws, id -> repo.findById(id).orElseGet(() -> repo.save(new AppSettings(id))));
+        } finally {
+            lock.unlock();
         }
-        return s;
     }
+
+    private ReentrantLock lockOf(long ws) { return locks.computeIfAbsent(ws, k -> new ReentrantLock()); }
 
     /** Sửa rồi lưu ngay. Trả về bản đã lưu. */
-    public synchronized AppSettings update(Consumer<AppSettings> change) {
-        AppSettings s = get();
-        change.accept(s);
-        current = repo.save(s);
-        return current;
+    public AppSettings update(Consumer<AppSettings> change) {
+        long ws = WorkspaceContext.require();
+        ReentrantLock lock = lockOf(ws);
+        lock.lock();
+        try {
+            AppSettings s = get();
+            change.accept(s);
+            AppSettings saved = repo.save(s);
+            current.put(ws, saved);
+            return saved;
+        } finally {
+            lock.unlock();
+        }
     }
 
-    /** Ghi các khoá đã qua kiểm tra (map khoá JSON → giá trị) vào cài đặt. Không bao giờ ghi passwordHash từ đây. */
+    /** Ghi các khoá đã qua kiểm tra (map khoá JSON → giá trị) vào cài đặt. */
     public AppSettings apply(Map<String, Object> values) {
-        return update(s -> {
-            Map<String, Object> safe = new java.util.LinkedHashMap<>(values);
-            safe.remove("passwordHash");
-            mapper.updateValue(s, safe);
-        });
+        return update(s -> mapper.updateValue(s, values));
     }
 
     /** Đọc lại từ DB (vd sau khi nhập dữ liệu cũ, hoặc khi test đổi DB) */
-    public synchronized void reload() { current = null; }
+    public void reload() { current.clear(); }
 
     /** Cài đặt gửi về giao diện: bí mật để trống + cờ has_… */
     public ObjectNode publicSettings() {

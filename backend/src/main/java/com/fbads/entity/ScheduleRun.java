@@ -1,5 +1,8 @@
 package com.fbads.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.TenantId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -13,6 +16,11 @@ import java.time.Instant;
 public class ScheduleRun implements Persistable<String> {
     @Id
     private String runKey;
+    /** Workspace chủ của dòng này: Hibernate tự ghi khi tạo và tự lọc khi đọc (config/TenantConfig) */
+    @TenantId
+    @Column(name = "workspace_id", updatable = false)
+    @JsonIgnore
+    private Long workspaceId;
     private String runDate;
     private Instant createdAt;
 

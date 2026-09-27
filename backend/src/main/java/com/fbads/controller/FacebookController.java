@@ -2,6 +2,7 @@ package com.fbads.controller;
 
 import com.fbads.config.AppProperties;
 import com.fbads.entity.AppSettings;
+import com.fbads.security.WorkspaceContext;
 import com.fbads.service.FacebookService;
 import com.fbads.service.SettingsService;
 import com.fbads.validation.Checks;
@@ -33,11 +34,13 @@ public class FacebookController {
 
     /**
      * Cookie phiên là SameSite=Strict nên khi Facebook chuyển về /api/fb/callback trình duyệt KHÔNG gửi cookie.
-     * Callback vì vậy không đòi đăng nhập mà dựa vào `state`: mã ngẫu nhiên dùng 1 lần, chỉ người đã đăng nhập mới tạo được, sống 10 phút.
+     * Callback vì vậy không đòi đăng nhập mà dựa vào `state`: mã ngẫu nhiên dùng 1 lần, chỉ chủ workspace mới tạo được, sống 10 phút.
+     * `state` nhớ luôn workspace đã bắt đầu đăng nhập: token nhận về được lưu vào đúng workspace đó.
      */
-    private record Pending(String appId, String redirectUri, long exp) {}
+    private record Pending(long workspaceId, String appId, String redirectUri, long exp) {}
     private final Map<String, Pending> oauthStates = new ConcurrentHashMap<>();
-    private volatile String oauthError = "";
+    /** Lỗi của lần đăng nhập Facebook gần nhất, theo workspace */
+    private final Map<Long, String> oauthErrors = new ConcurrentHashMap<>();
 
     private final FacebookService fb;
     private final SettingsService settings;
@@ -71,11 +74,11 @@ public class FacebookController {
     private String newOauthState(String appId, String uri) {
         long now = System.currentTimeMillis();
         oauthStates.values().removeIf(p -> p.exp() < now);
-        if (oauthStates.size() > 50) oauthStates.clear();
+        if (oauthStates.size() > 500) oauthStates.clear();
         byte[] b = new byte[24];
         RANDOM.nextBytes(b);
         String st = HexFormat.of().formatHex(b);
-        oauthStates.put(st, new Pending(appId, uri, now + 10 * 60_000));
+        oauthStates.put(st, new Pending(WorkspaceContext.require(), appId, uri, now + 10 * 60_000));
         return st;
     }
 
@@ -86,16 +89,18 @@ public class FacebookController {
         Pending pending = oauthStates.remove(state == null ? "" : state);
         if (pending == null || pending.exp() < System.currentTimeMillis()) return back("expired");
         if (error != null || code == null || code.isEmpty()) return back("cancel"); // người dùng bấm Huỷ trên Facebook
-        try {
-            String token = fb.exchangeCode(pending.appId(), settings.get().getFbAppSecret(), pending.redirectUri(), code);
-            settings.update(s -> s.setAccessToken(token));
-            fb.resetCache();
-            oauthError = "";
-            return back("ok");
-        } catch (RuntimeException e) {
-            oauthError = e.getMessage();
-            return back("fail");
-        }
+        return WorkspaceContext.call(pending.workspaceId(), () -> {
+            try {
+                String token = fb.exchangeCode(pending.appId(), settings.get().getFbAppSecret(), pending.redirectUri(), code);
+                settings.update(s -> s.setAccessToken(token));
+                fb.resetCache();
+                oauthErrors.remove(pending.workspaceId());
+                return back("ok");
+            } catch (RuntimeException e) {
+                oauthErrors.put(pending.workspaceId(), String.valueOf(e.getMessage()));
+                return back("fail");
+            }
+        });
     }
 
     /** Chỉ đưa mã kết quả lên URL; nội dung lỗi lấy qua /api/fb/oauth (tránh người ngoài chèn chữ tuỳ ý vào giao diện) */
@@ -146,7 +151,7 @@ public class FacebookController {
     Map<String, Object> oauth(HttpServletRequest req) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("redirectUri", redirectUri(req));
-        m.put("error", oauthError);
+        m.put("error", oauthErrors.getOrDefault(WorkspaceContext.require(), ""));
         return m;
     }
 
@@ -164,7 +169,7 @@ public class FacebookController {
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
         String fAppId = appId, fSecret = appSecret, fConfig = configId;
         settings.update(x -> { x.setFbAppId(fAppId); x.setFbAppSecret(fSecret); x.setFbConfigId(fConfig); });
-        oauthError = "";
+        oauthErrors.remove(WorkspaceContext.require());
         String uri = redirectUri(req);
         return ResponseEntity.ok(Map.of("url", fb.oauthUrl(appId, configId, uri, newOauthState(appId, uri))));
     }

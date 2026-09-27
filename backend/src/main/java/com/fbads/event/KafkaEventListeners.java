@@ -74,7 +74,8 @@ public class KafkaEventListeners {
     // RECORD: báo đã đọc sau từng tin, tool chết giữa chừng thì ít tin phải đọc lại (tin đã gửi vẫn không gửi lại, xem handleOnce)
     @KafkaListener(id = "fbads-telegram", groupId = "fbads-telegram", topics = EventTopics.EVENTS, ackMode = "RECORD")
     public void telegram(String payload) {
-        telegram.handleOnce(parse(payload));
+        AppEvent e = parse(payload);
+        e.runInWorkspace(() -> telegram.handleOnce(e));
     }
 
     /** Tin Telegram đã hết lượt thử (hoặc lỗi cố định): nằm lại ở topic DLT để xem sau, ở đây chỉ ghi log (không kèm nội dung tin) */
@@ -92,7 +93,8 @@ public class KafkaEventListeners {
 
     @KafkaListener(id = "fbads-stats", groupId = "fbads-stats", topics = EventTopics.EVENTS)
     public void stats(String payload) {
-        stats.handle(parse(payload));
+        AppEvent e = parse(payload);
+        e.runInWorkspace(() -> stats.handle(e));
     }
 
     /**

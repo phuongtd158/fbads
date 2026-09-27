@@ -1,6 +1,7 @@
 package com.fbads.event;
 
 import com.fbads.engine.EngineClock;
+import com.fbads.security.WorkspaceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 /**
  * Nơi duy nhất phát sự kiện. Nơi phát (nhật ký, FacebookService, engine) không biết ai nhận và nhận bằng cách nào.
+ * Sự kiện mang workspace của luồng đang phát (WorkspaceContext).
  * Đang trong transaction thì chờ commit xong mới phát, để consumer không thấy dữ liệu có thể còn bị huỷ.
  */
 @Service
@@ -30,12 +32,13 @@ public class EventBus {
 
     /**
      * @param type   loại sự kiện (AppEvent.LOG_CREATED…)
-     * @param key    khoá phân vùng: sự kiện cùng khoá được nhận theo đúng thứ tự phát
+     * @param key    khoá phân vùng: sự kiện cùng khoá được nhận theo đúng thứ tự phát (tự thêm tiền tố workspace: "{id}:key")
      * @param telegram gửi Telegram cho sự kiện này
      * @param data   nội dung, chuyển sang JSON ngay lúc phát (đối tượng gốc có thể bị sửa sau đó)
      */
     public void publish(String type, String key, boolean telegram, Object data) {
-        AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, key, clock.millis(), telegram, json.valueToTree(data));
+        Long ws = WorkspaceContext.current();
+        AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, ws == null ? key : ws + ":" + key, clock.millis(), telegram, json.valueToTree(data), ws);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

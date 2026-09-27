@@ -49,9 +49,10 @@ public class RuleService {
         List<Rule> all = findAll();
         Result<Rule> r = validate(input, all);
         Rule item = r.value();
-        boolean hasId = item.getId() != null && !item.getId().isEmpty();
-        if ((!hasId || !repo.existsById(item.getId())) && all.size() >= ScheduleService.MAX_ITEMS) throw ScheduleService.tooMany();
-        if (!hasId) item.setId(Ids.uid());
+        // id chưa có trong workspace này (mục mới, hoặc id của workspace khác) → luôn cấp id mới, không bao giờ ghi đè mục của người khác
+        boolean exists = item.getId() != null && !item.getId().isEmpty() && repo.existsById(item.getId());
+        if (!exists && all.size() >= ScheduleService.MAX_ITEMS) throw ScheduleService.tooMany();
+        if (!exists) item.setId(Ids.uid());
         return new Saved<>(repo.save(item), r.warnings());
     }
 

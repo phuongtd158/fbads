@@ -8,6 +8,7 @@ import com.fbads.entity.Schedule;
 import com.fbads.repository.LogRepository;
 import com.fbads.repository.RuleRepository;
 import com.fbads.repository.ScheduleRepository;
+import com.fbads.security.WorkspaceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -30,7 +31,7 @@ import java.util.Map;
 /**
  * Nhập dữ liệu của bản Node (data.json, hoặc bản mã hoá trên Upstash) vào MariaDB — chỉ chạy khi DB còn trống,
  * nên đặt IMPORT_FILE rồi khởi động lại nhiều lần cũng không nhập trùng.
- * Nhập: cài đặt (kể cả mật khẩu đã băm), lịch, rule, nhật ký, các camp đang chờ bật lại hôm sau.
+ * Nhập vào workspace 1: cài đặt, mật khẩu đã băm (thành tài khoản "admin"), lịch, rule, nhật ký, các camp đang chờ bật lại hôm sau.
  * Không nhập các dấu "đã chạy hôm nay" (fired, lastRule…): engine tự làm lại từ đầu, lịch đã qua giờ quá 10 phút không chạy lại.
  */
 @Component
@@ -47,10 +48,12 @@ public class DataImporter implements ApplicationRunner {
     private final TransactionTemplate tx;
     private final JsonMapper mapper;
     private final RestClient.Builder http;
+    private final AuthService auth;
 
-    public DataImporter(AppProperties props, SettingsService settings, ScheduleRepository schedules, RuleRepository rules, LogRepository logs,
+    public DataImporter(AppProperties props, AuthService auth, SettingsService settings, ScheduleRepository schedules, RuleRepository rules, LogRepository logs,
                         EngineState state, TransactionTemplate tx, JsonMapper mapper, RestClient.Builder http) {
         this.props = props;
+        this.auth = auth;
         this.settings = settings;
         this.schedules = schedules;
         this.rules = rules;
@@ -66,7 +69,7 @@ public class DataImporter implements ApplicationRunner {
         AppProperties.Import cfg = props.importer();
         boolean fromFile = cfg.file() != null && !cfg.file().isBlank();
         if (!fromFile && !cfg.upstash()) return;
-        if (schedules.count() > 0 || rules.count() > 0 || logs.count() > 0) {
+        if (WorkspaceContext.call(WorkspaceContext.DEFAULT, () -> schedules.count() > 0 || rules.count() > 0 || logs.count() > 0)) {
             log.info("DB đã có dữ liệu, bỏ qua bước nhập dữ liệu cũ.");
             return;
         }
@@ -88,8 +91,13 @@ public class DataImporter implements ApplicationRunner {
 
     /** Nhập toàn bộ trong 1 giao dịch: lỗi giữa chừng thì DB vẫn trống như trước */
     public void importJson(JsonNode d) {
+        WorkspaceContext.run(WorkspaceContext.DEFAULT, () -> importInto(d)); // dữ liệu của bản 1 người dùng → workspace 1
+    }
+
+    private void importInto(JsonNode d) {
         tx.executeWithoutResult(t -> {
             JsonNode s = d.path("settings");
+            auth.importLegacyPassword(s.path("passwordHash").asString("")); // mật khẩu cũ → tài khoản "admin"
             if (s.isObject()) {
                 settings.update(x -> {
                     mapper.updateValue(x, s);
@@ -110,6 +118,6 @@ public class DataImporter implements ApplicationRunner {
             }
         });
         settings.reload();
-        log.info("Đã nhập dữ liệu cũ: {} lịch, {} rule, {} dòng nhật ký.", schedules.count(), rules.count(), logs.count());
+        log.info("Đã nhập dữ liệu cũ vào workspace 1: {} lịch, {} rule, {} dòng nhật ký.", schedules.count(), rules.count(), logs.count());
     }
 }

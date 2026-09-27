@@ -5,6 +5,11 @@ import com.fbads.dto.FbSnapshots;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineLock;
+import com.fbads.repository.ScheduleRepository;
+import com.fbads.repository.UserRepository;
+import com.fbads.repository.WorkspaceRepository;
+import com.fbads.security.WorkspaceContext;
+import com.fbads.service.AuthService;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
@@ -12,6 +17,7 @@ import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,10 +94,44 @@ class ApiIntegrationTest {
     EngineClock clock;
     @Autowired
     ReportService reports;
+    @Autowired
+    AuthService auth;
+    @Autowired
+    UserRepository users;
+    @Autowired
+    WorkspaceRepository workspaces;
+    @Autowired
+    ScheduleRepository scheduleRepo;
     Api api;
+    /** Gọi service trực tiếp trong test = thao tác trên workspace 1 (như chế độ mở) */
+    WorkspaceContext.Scope ws;
 
     @BeforeEach
-    void setUp() { api = new Api(port); }
+    void setUp() {
+        api = new Api(port);
+        ws = WorkspaceContext.enter(WorkspaceContext.DEFAULT);
+    }
+
+    @AfterEach
+    void tearDown() {
+        ws.close();
+        resetAccounts();
+    }
+
+    /** Về lại chế độ mở (chưa có tài khoản, chỉ workspace 1) cho test sau */
+    void resetAccounts() {
+        WorkspaceContext.run(WorkspaceContext.DEFAULT, () -> scheduleRepo.findAll().stream().filter(x -> x.getName().contains("[test-ws]")).forEach(scheduleRepo::delete));
+        users.deleteAll();
+        workspaces.findAll().stream().filter(w -> w.getId() != WorkspaceContext.DEFAULT).forEach(workspaces::delete);
+        auth.recheckUsers();
+        redis.delete(redis.keys("fbads:login:*"));
+    }
+
+    /** Tạo tài khoản đầu tiên (chủ workspace 1) bằng api, api đăng nhập luôn */
+    void setupOwner() {
+        Api.Res r = api.post("/api/setup", Map.of("username", "chu", "name", "Chủ", "password", "MatKhau@2026"));
+        assertThat(r.status()).as(String.valueOf(r.body())).isEqualTo(200);
+    }
 
     /** Luật kiểm tra lịch/rule cho kết quả giống hệt shared/validate.mjs (kỳ vọng do bản Node sinh ra) */
     @Test
@@ -172,23 +212,133 @@ class ApiIntegrationTest {
     }
 
     @Test
-    void passwordLoginAndGuards() {
-        assertThat(api.post("/api/password", Map.of("newPassword", "12345678")).status()).isEqualTo(400);
-        assertThat(api.post("/api/password", Map.of("newPassword", "MatKhau@2026")).status()).isEqualTo(200);
-        try {
-            Api stranger = new Api(port);
-            assertThat(stranger.get("/api/state").status()).isEqualTo(401);
-            assertThat(stranger.get("/api/auth").body().get("required").asBoolean()).isTrue();
-            assertThat(stranger.post("/api/login", Map.of("password", "sai")).status()).isEqualTo(401);
-            assertThat(stranger.post("/api/login", Map.of("password", "MatKhau@2026")).status()).isEqualTo(200);
-            assertThat(stranger.get("/api/state").status()).isEqualTo(200);
-            assertThat(stranger.post("/api/logout", Map.of()).status()).isEqualTo(200);
-            assertThat(stranger.get("/api/state").status()).isEqualTo(401);
-            // phiên cũ vẫn dùng được sau khi đổi mật khẩu (đã đăng nhập lại tự động)
-            assertThat(api.get("/api/state").status()).isEqualTo(200);
-        } finally {
-            settings.update(s -> s.setPasswordHash("")); // các test khác chạy không cần đăng nhập
-        }
+    void accountsLoginAndGuards() {
+        assertThat(api.get("/api/auth").body().get("setup").asBoolean()).isTrue(); // chưa có tài khoản: chế độ mở
+        assertThat(api.post("/api/setup", Map.of("username", "chu", "password", "12345678")).body().get("errors").has("password")).isTrue();
+        setupOwner();
+        assertThat(api.post("/api/setup", Map.of("username", "khac", "password", "MatKhau@2026")).status()).isEqualTo(409); // chỉ 1 lần
+
+        JsonNode me = api.get("/api/auth").body();
+        assertThat(me.get("user").get("username").asString()).isEqualTo("chu");
+        assertThat(me.get("workspace").get("id").asLong()).isEqualTo(1);
+        assertThat(me.get("workspace").get("role").asString()).isEqualTo("OWNER");
+
+        Api stranger = new Api(port);
+        assertThat(stranger.get("/api/state").status()).isEqualTo(401);
+        assertThat(stranger.get("/api/auth").body().get("required").asBoolean()).isTrue();
+        assertThat(stranger.post("/api/login", Map.of("username", "chu", "password", "sai")).status()).isEqualTo(401);
+        assertThat(stranger.post("/api/login", Map.of("username", "CHU ", "password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(stranger.get("/api/state").status()).isEqualTo(200);
+        assertThat(stranger.post("/api/logout", Map.of()).status()).isEqualTo(200);
+        assertThat(stranger.get("/api/state").status()).isEqualTo(401);
+
+        // đổi mật khẩu: phải đúng mật khẩu cũ; phiên đang dùng vẫn chạy (đăng nhập lại tự động), phiên khác bị đăng xuất
+        Api other = new Api(port);
+        assertThat(other.post("/api/login", Map.of("username", "chu", "password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(api.post("/api/password", Map.of("currentPassword", "sai", "newPassword", "MatKhau@2027")).status()).isEqualTo(400);
+        assertThat(api.post("/api/password", Map.of("currentPassword", "MatKhau@2026", "newPassword", "12345678")).status()).isEqualTo(400);
+        assertThat(api.post("/api/password", Map.of("currentPassword", "MatKhau@2026", "newPassword", "MatKhau@2027")).status()).isEqualTo(200);
+        assertThat(api.get("/api/state").status()).isEqualTo(200);
+        assertThat(other.get("/api/state").status()).isEqualTo(401);
+    }
+
+    /**
+     * Nhiều người dùng: mỗi workspace một bộ dữ liệu riêng, quyền theo vai trò.
+     * Chủ workspace 1 thêm nhân viên (EDITOR) và người xem (VIEWER), rồi tạo workspace thứ hai cho khách hàng khác.
+     */
+    @Test
+    void workspacesAreIsolatedAndRolesEnforced() {
+        setupOwner();
+        Map<String, Object> sch = Map.of("name", "Tắt [test-ws]", "action", "off", "times", List.of("04:17"),
+                "days", List.of(0, 1, 2, 3, 4, 5, 6), "targetMode", "list", "targets", List.of("mock_1"), "enabled", true);
+        String ws1Schedule = api.post("/api/schedules", sch).body().get("id").asString();
+        Map<String, Object> renamed = new java.util.HashMap<>(sch);
+        renamed.put("id", ws1Schedule);
+        renamed.put("name", "Tắt sửa [test-ws]");
+        Api.Res edited = api.post("/api/schedules", renamed); // sửa mục đã có: giữ id, workspace không đổi
+        assertThat(edited.status()).as(String.valueOf(edited.body())).isEqualTo(200);
+        assertThat(edited.body().get("id").asString()).isEqualTo(ws1Schedule);
+        assertThat(api.post("/api/objects/mock_1/budget", Map.of("amount", 111000, "name", "Camp 1")).status()).isEqualTo(200);
+
+        // thành viên: tạo tài khoản mới cần mật khẩu ban đầu; người đã là thành viên thì báo lỗi
+        assertThat(api.post("/api/members", Map.of("username", "nhanvien", "role", "EDITOR")).body().get("errors").has("password")).isTrue();
+        Api.Res added = api.post("/api/members", Map.of("username", "nhanvien", "name", "Nhân viên", "password", "NhanVien@2026", "role", "EDITOR"));
+        assertThat(added.status()).as(String.valueOf(added.body())).isEqualTo(200);
+        assertThat(api.post("/api/members", Map.of("username", "xem", "password", "NguoiXem@2026", "role", "VIEWER")).status()).isEqualTo(200);
+        assertThat(api.post("/api/members", Map.of("username", "nhanvien", "role", "VIEWER")).status()).isEqualTo(400);
+        assertThat(api.get("/api/members").body().size()).isEqualTo(3);
+        long ownerId = api.get("/api/auth").body().get("user").get("id").asLong();
+        assertThat(api.delete("/api/members/" + ownerId).status()).isEqualTo(400); // chủ cuối cùng
+        assertThat(api.post("/api/register", Map.of("username", "la", "password", "NguoiLa@2026")).status()).isEqualTo(403); // chưa bật ALLOW_SIGNUP
+
+        // workspace thứ hai: trống, cài đặt mặc định, dữ liệu riêng
+        Api.Res created = api.post("/api/workspaces", Map.of("name", "Khách B"));
+        assertThat(created.status()).isEqualTo(200);
+        long ws2 = created.body().get("id").asLong();
+        JsonNode st2 = api.get("/api/state").body();
+        assertThat(st2.get("schedules").size()).isZero();
+        assertThat(st2.get("settings").get("mock").asBoolean()).isTrue();
+        assertThat(api.get("/api/logs").body().size()).isZero();
+        assertThat(api.post("/api/settings", Map.of("ruleIntervalMin", 45)).status()).isEqualTo(200);
+        String ws2Schedule = api.post("/api/schedules", Map.of("name", "Lịch WS2 [test-ws]", "action", "on", "times", List.of("07:00"),
+                "days", List.of(1), "targetMode", "list", "targets", List.of("mock_2"), "enabled", true)).body().get("id").asString();
+        // dữ liệu giả của mỗi workspace riêng: đổi ngân sách ở workspace 1 không thấy ở đây
+        JsonNode camp1 = api.get("/api/objects").body().get("items").values().stream().filter(o -> o.get("id").asString().equals("mock_1")).findFirst().orElseThrow();
+        assertThat(camp1.get("dailyBudget").asLong()).isNotEqualTo(111000);
+
+        assertThat(api.post("/api/workspaces/switch", Map.of("id", 1)).status()).isEqualTo(200);
+        JsonNode st1 = api.get("/api/state").body();
+        assertThat(st1.get("schedules").values()).extracting(x -> x.get("id").asString()).containsExactly(ws1Schedule);
+        assertThat(st1.get("settings").get("ruleIntervalMin").asInt()).isEqualTo(15);
+        assertThat(api.get("/api/auth").body().get("workspaces").size()).isEqualTo(2);
+
+        // nhân viên (EDITOR): sửa lịch được, cài đặt và thành viên thì không; không vào được workspace B
+        Api nv = new Api(port);
+        assertThat(nv.post("/api/login", Map.of("username", "nhanvien", "password", "NhanVien@2026")).status()).isEqualTo(200);
+        assertThat(nv.get("/api/auth").body().get("workspace").get("role").asString()).isEqualTo("EDITOR");
+        Map<String, Object> nvSch = new java.util.HashMap<>(sch);
+        nvSch.put("name", "Nhân viên [test-ws]");
+        nvSch.put("times", List.of("04:18"));
+        assertThat(nv.post("/api/schedules", nvSch).status()).isEqualTo(200);
+        assertThat(nv.post("/api/settings", Map.of("ruleIntervalMin", 30)).status()).isEqualTo(403);
+        assertThat(nv.post("/api/members", Map.of("username", "x", "password", "MatKhau@2026", "role", "OWNER")).status()).isEqualTo(403);
+        assertThat(nv.get("/api/members").status()).isEqualTo(200);
+        assertThat(nv.post("/api/workspaces/switch", Map.of("id", ws2)).status()).isEqualTo(403);
+        // id của workspace khác: như không tồn tại (xoá không được, lưu thì thành mục mới với id khác)
+        nv.delete("/api/schedules/" + ws2Schedule);
+        Map<String, Object> hijack = new java.util.HashMap<>(nvSch);
+        hijack.put("id", ws2Schedule);
+        hijack.put("name", "Chiếm [test-ws]");
+        hijack.put("times", List.of("04:19"));
+        Api.Res hij = nv.post("/api/schedules", hijack);
+        assertThat(hij.status()).isEqualTo(200);
+        assertThat(hij.body().get("id").asString()).isNotEqualTo(ws2Schedule);
+        assertThat(nv.post("/api/schedules/" + ws2Schedule + "/run", Map.of()).status()).isEqualTo(404);
+        assertThat(nv.get("/api/logs").body().values()).noneMatch(l -> l.path("name").asString("").contains("WS2"));
+
+        // người xem (VIEWER): chỉ đọc
+        Api xem = new Api(port);
+        assertThat(xem.post("/api/login", Map.of("username", "xem", "password", "NguoiXem@2026")).status()).isEqualTo(200);
+        assertThat(xem.get("/api/state").status()).isEqualTo(200);
+        Api.Res denied = xem.post("/api/schedules", sch);
+        assertThat(denied.status()).isEqualTo(403);
+        assertThat(denied.body().get("error").asString()).contains("chỉ có quyền xem");
+        assertThat(xem.post("/api/objects/mock_1/status", Map.of("on", false)).status()).isEqualTo(403);
+
+        // chủ hạ quyền nhân viên xuống VIEWER: có hiệu lực ngay ở request sau
+        long nvId = api.get("/api/members").body().values().stream().filter(m -> m.get("username").asString().equals("nhanvien")).findFirst().orElseThrow().get("userId").asLong();
+        assertThat(api.post("/api/members/" + nvId + "/role", Map.of("role", "VIEWER")).status()).isEqualTo(200);
+        assertThat(nv.post("/api/schedules", sch).status()).isEqualTo(403);
+        // gỡ khỏi workspace: không còn workspace nào → không đọc được dữ liệu
+        assertThat(api.delete("/api/members/" + nvId).status()).isEqualTo(200);
+        assertThat(nv.get("/api/state").status()).isEqualTo(403);
+
+        // workspace B vẫn còn nguyên lịch của nó
+        assertThat(api.post("/api/workspaces/switch", Map.of("id", ws2)).status()).isEqualTo(200);
+        JsonNode ws2List = api.get("/api/state").body().get("schedules");
+        assertThat(ws2List.values()).extracting(x -> x.get("id").asString()).containsExactly(ws2Schedule);
+        assertThat(ws2List.get(0).get("name").asString()).isEqualTo("Lịch WS2 [test-ws]");
+        assertThat(api.get("/api/state").body().get("settings").get("ruleIntervalMin").asInt()).isEqualTo(45);
     }
 
     /** Số camp tải từ Facebook được lưu ở Redis; đổi ngân sách thì bản ở Redis bị xoá */
@@ -196,21 +346,24 @@ class ApiIntegrationTest {
     void objectsAreCachedInRedis() {
         assertThat(api.get("/api/objects?refresh=1").status()).isEqualTo(200);
         var objects = caches.getCache(CacheConfig.OBJECTS);
-        FbSnapshots.Objects saved = objects.get("mock", FbSnapshots.Objects.class);
+        FbSnapshots.Objects saved = objects.get("ws1|mock", FbSnapshots.Objects.class);
         assertThat(saved).isNotNull();
         assertThat(saved.items()).anyMatch(o -> o.id.equals("mock_1"));
         assertThat(redis.keys("fbads:cache:fb-objects::*")).isNotEmpty();
 
         assertThat(api.post("/api/objects/mock_2/budget", Map.of("amount", 222000, "name", "Camp 2")).status()).isEqualTo(200);
-        assertThat(objects.get("mock")).isNull();
+        assertThat(objects.get("ws1|mock")).isNull();
     }
 
-    /** Vòng tự động (@SchedulerLock) và nút "Chạy ngay" (EngineLock) dùng chung một khoá trên Redis */
+    /** Vòng tự động và nút "Chạy ngay" (EngineLock) dùng chung khoá của workspace trên Redis; workspace khác không bị chặn */
     @Test
     void engineLockIsSharedThroughRedis() {
-        LockConfiguration other = new LockConfiguration(Instant.now(), EngineLock.NAME, Duration.ofMinutes(1), Duration.ZERO);
+        LockConfiguration other = new LockConfiguration(Instant.now(), EngineLock.nameOf(1), Duration.ofMinutes(1), Duration.ZERO);
+        LockConfiguration otherWs = new LockConfiguration(Instant.now(), EngineLock.nameOf(2), Duration.ofMinutes(1), Duration.ZERO);
         boolean blocked = engineLock.run(() -> locks.lock(other).isEmpty());
         assertThat(blocked).isTrue();
+        boolean otherBlocked = engineLock.run(() -> locks.lock(otherWs).map(l -> { l.unlock(); return false; }).orElse(true));
+        assertThat(otherBlocked).isFalse();
         var after = locks.lock(other); // chạy xong thì khoá được nhả
         assertThat(after).isPresent();
         after.get().unlock();
@@ -219,24 +372,19 @@ class ApiIntegrationTest {
     /** Phiên đăng nhập nằm ở Redis; nhập sai 5 lần thì khoá 15 phút (đếm ở Redis) */
     @Test
     void sessionsAndLoginLockoutInRedis() {
-        assertThat(api.post("/api/password", Map.of("newPassword", "MatKhau@2026")).status()).isEqualTo(200);
-        try {
-            Api stranger = new Api(port);
-            assertThat(stranger.post("/api/login", Map.of("password", "MatKhau@2026")).status()).isEqualTo(200);
-            assertThat(redis.keys("fbads:session:sessions:*")).isNotEmpty();
+        setupOwner();
+        Api stranger = new Api(port);
+        assertThat(stranger.post("/api/login", Map.of("username", "chu", "password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(redis.keys("fbads:session:sessions:*")).isNotEmpty();
 
-            redis.delete(redis.keys("fbads:login:*")); // test khác có thể đã nhập sai
-            Api attacker = new Api(port);
-            for (int i = 0; i < 5; i++) assertThat(attacker.post("/api/login", Map.of("password", "sai")).status()).isEqualTo(401);
-            Api.Res locked = attacker.post("/api/login", Map.of("password", "MatKhau@2026"));
-            assertThat(locked.status()).isEqualTo(429);
-            assertThat(locked.body().get("error").asString()).contains("15 phút");
-            String lockKey = redis.keys("fbads:login:lock:*").iterator().next();
-            assertThat(redis.getExpire(lockKey)).isBetween(1L, 900L);
-        } finally {
-            redis.delete(redis.keys("fbads:login:*"));
-            settings.update(s -> s.setPasswordHash(""));
-        }
+        redis.delete(redis.keys("fbads:login:*")); // test khác có thể đã nhập sai
+        Api attacker = new Api(port);
+        for (int i = 0; i < 5; i++) assertThat(attacker.post("/api/login", Map.of("username", "chu", "password", "sai")).status()).isEqualTo(401);
+        Api.Res locked = attacker.post("/api/login", Map.of("username", "chu", "password", "MatKhau@2026"));
+        assertThat(locked.status()).isEqualTo(429);
+        assertThat(locked.body().get("error").asString()).contains("15 phút");
+        String lockKey = redis.keys("fbads:login:lock:*").iterator().next();
+        assertThat(redis.getExpire(lockKey)).isBetween(1L, 900L);
     }
 
     /** Đổi ngân sách → trình duyệt đang nghe WebSocket nhận ngay dòng nhật ký mới và sự kiện camp đổi */
@@ -244,11 +392,11 @@ class ApiIntegrationTest {
     void liveEventsOverWebSocket() throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         client.setMessageConverter(new StringMessageConverter());
-        StompSession ws = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+        StompSession stomp = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
         try {
             BlockingQueue<String> logs = new LinkedBlockingQueue<>(), objects = new LinkedBlockingQueue<>();
-            ws.subscribe("/topic/logs", collect(logs));
-            ws.subscribe("/topic/objects", collect(objects));
+            stomp.subscribe("/topic/ws.1.logs", collect(logs));
+            stomp.subscribe("/topic/ws.1.objects", collect(objects));
             Thread.sleep(300); // chờ SUBSCRIBE tới server
 
             assertThat(api.post("/api/objects/mock_3/budget", Map.of("amount", 333000, "name", "Camp 3")).status()).isEqualTo(200);
@@ -258,17 +406,13 @@ class ApiIntegrationTest {
             assertThat(log.get("after").get("dailyBudget").asLong()).isEqualTo(333000);
             assertThat(log.get("id").asString()).isEqualTo(api.get("/api/logs").body().get(0).get("id").asString());
         } finally {
-            ws.disconnect();
+            stomp.disconnect();
         }
 
-        // Đã đặt mật khẩu mà chưa đăng nhập thì không mở được WebSocket
-        assertThat(api.post("/api/password", Map.of("newPassword", "MatKhau@2026")).status()).isEqualTo(200);
-        try {
-            var stranger = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {});
-            org.assertj.core.api.Assertions.assertThatThrownBy(() -> stranger.get(10, TimeUnit.SECONDS)).hasMessageContaining("401");
-        } finally {
-            settings.update(s -> s.setPasswordHash(""));
-        }
+        // Đã có tài khoản mà chưa đăng nhập thì không mở được WebSocket
+        setupOwner();
+        var stranger = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {});
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> stranger.get(10, TimeUnit.SECONDS)).hasMessageContaining("401");
     }
 
     private static StompFrameHandler collect(BlockingQueue<String> into) {

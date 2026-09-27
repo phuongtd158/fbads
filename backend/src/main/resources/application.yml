@@ -78,7 +78,9 @@ resilience4j:
 
 fbads:
   public-dir: ${PUBLIC_DIR:../frontend/dist}   # bản build giao diện Vue (cd frontend && npm run build)
-  app-password: ${APP_PASSWORD:}
+  app-password: ${APP_PASSWORD:}                # đặt thì luôn có tài khoản "admin" với mật khẩu này (chủ workspace 1)
+  allow-signup: ${ALLOW_SIGNUP:false}            # true = ai cũng tự đăng ký được, mỗi người một workspace riêng
+  secret-key: ${SECRET_KEY:}                     # khoá mã hoá token Facebook/Telegram trong DB (xem README "Mã hoá token")
   public-url: ${PUBLIC_URL:}
   trust-proxy: ${TRUST_PROXY:false}
   render: ${RENDER:false}

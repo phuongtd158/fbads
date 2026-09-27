@@ -8,6 +8,8 @@ import org.springframework.boot.context.properties.bind.Name;
 public record AppProperties(
         String publicDir,
         String appPassword,
+        boolean allowSignup,
+        String secretKey,
         String publicUrl,
         boolean trustProxy,
         boolean render,
@@ -22,6 +24,7 @@ public record AppProperties(
 
     public AppProperties {
         if (appPassword == null) appPassword = "";
+        if (secretKey == null) secretKey = "";
         if (publicUrl == null) publicUrl = "";
         if (clientIpHeader == null) clientIpHeader = "";
         if (engine == null) engine = new Engine(true, 30000);

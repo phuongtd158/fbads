@@ -5,17 +5,20 @@ import com.fbads.entity.LogEntry;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import com.fbads.repository.LogRepository;
+import com.fbads.security.WorkspaceContext;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
-/** Ghi nhật ký và giữ lại 1000 dòng mới nhất (như bản Node). */
+/** Ghi nhật ký và giữ lại 1000 dòng mới nhất của mỗi workspace (như bản Node). */
 @Service
 public class LogService {
     public static final int KEEP = 1000;
@@ -24,7 +27,8 @@ public class LogService {
 
     private final LogRepository repo;
     private final EventBus events;
-    private final AtomicInteger sinceTrim = new AtomicInteger();
+    /** Số dòng mới của từng workspace kể từ lần dọn gần nhất */
+    private final Map<Long, AtomicInteger> sinceTrim = new ConcurrentHashMap<>();
 
     public LogService(LogRepository repo, EventBus events) {
         this.repo = repo;
@@ -45,14 +49,16 @@ public class LogService {
         e.setTs(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         LogEntry saved = repo.save(e);
         events.publish(AppEvent.LOG_CREATED, EVENT_KEY, notify, saved);
-        if (sinceTrim.incrementAndGet() >= 50) trim();
+        if (sinceTrim.computeIfAbsent(WorkspaceContext.require(), k -> new AtomicInteger()).incrementAndGet() >= 50) trim();
         return saved;
     }
 
+    /** Giữ {@value #KEEP} dòng mới nhất của workspace hiện tại */
     public void trim() {
-        sinceTrim.set(0);
-        Long cut = repo.seqAtOffset(KEEP);
-        if (cut != null) repo.deleteUpTo(cut);
+        long ws = WorkspaceContext.require();
+        sinceTrim.remove(ws);
+        Long cut = repo.seqAtOffset(ws, KEEP);
+        if (cut != null) repo.deleteUpTo(ws, cut);
     }
 
     public List<LogEntry> recent(int n) { return repo.findAllByOrderBySeqDesc(Limit.of(n)); }

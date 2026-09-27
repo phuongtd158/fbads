@@ -2,6 +2,7 @@ package com.fbads;
 
 import com.fbads.engine.EngineClock;
 import com.fbads.event.AppEvent;
+import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EventStatsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,12 +73,19 @@ class MySqlCompatTest {
         assertThat(actions(today, "schedule")).isGreaterThanOrEqualTo(1);
         AppEvent e = new AppEvent(UUID.randomUUID().toString(), AppEvent.LOG_CREATED, "logs", clock.millis(), false,
                 Api.JSON.valueToTree(Map.of("kind", "mysql")));
-        stats.handle(e);
-        stats.handle(e);
+        e.runInWorkspace(() -> stats.handle(e));
+        e.runInWorkspace(() -> stats.handle(e));
         assertThat(actions(today, "mysql")).isEqualTo(1);
+
+        // nhiều người dùng: tài khoản đầu tiên, workspace thứ hai, thành viên (bảng users/workspaces/workspace_members trên MySQL 8)
+        assertThat(api.post("/api/setup", Map.of("username", "chu", "password", "MatKhau@2026")).status()).isEqualTo(200);
+        assertThat(api.post("/api/members", Map.of("username", "nhanvien", "password", "NhanVien@2026", "role", "EDITOR")).status()).isEqualTo(200);
+        assertThat(api.post("/api/workspaces", Map.of("name", "Khách B")).status()).isEqualTo(200);
+        assertThat(api.get("/api/state").body().get("schedules").size()).isZero();
+        assertThat(api.post("/api/settings", Map.of("ruleIntervalMin", 30)).status()).isEqualTo(200);
     }
 
     private int actions(String day, String source) {
-        return stats.ofDay(day).stream().filter(s -> s.getKey().source().equals(source)).mapToInt(s -> s.getActions()).sum();
+        return WorkspaceContext.call(WorkspaceContext.DEFAULT, () -> stats.ofDay(day)).stream().filter(s -> s.getKey().source().equals(source)).mapToInt(s -> s.getActions()).sum();
     }
 }

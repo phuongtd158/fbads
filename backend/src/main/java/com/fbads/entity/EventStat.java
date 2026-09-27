@@ -11,7 +11,7 @@ import jakarta.persistence.Table;
 @Table(name = "event_stats")
 public class EventStat {
     @Embeddable
-    public record Key(@Column(name = "day") String day, @Column(name = "source") String source) {}
+    public record Key(@Column(name = "workspace_id") Long workspaceId, @Column(name = "day") String day, @Column(name = "source") String source) {}
 
     @EmbeddedId
     private Key key;

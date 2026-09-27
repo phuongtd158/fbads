@@ -1,6 +1,8 @@
 package com.fbads.engine;
 
 import com.fbads.client.FbException;
+import com.fbads.repository.WorkspaceRepository;
+import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
@@ -22,6 +24,7 @@ import java.util.Map;
 
 /**
  * Vòng lặp của engine: 30 giây một lần (@Scheduled, fixedDelay = đợi lượt trước xong rồi mới tính giờ lượt sau).
+ * Mỗi lượt chạy lần lượt từng workspace, trong WorkspaceContext của workspace đó: cài đặt, lịch, rule, token Facebook đều là của workspace ấy.
  * Mỗi phần chạy trong try/catch riêng: lịch lỗi không làm mất lượt kiểm tra rule và báo cáo (bản Node thì mất cả lượt).
  * @SchedulerLock (ShedLock, khoá ở Redis): chạy nhiều bản tool thì mỗi lượt chỉ 1 bản chạy; lượt nào không lấy được khoá thì bỏ qua.
  * Tắt bằng ENGINE_ENABLED=false (vd khi kiểm thử).
@@ -30,6 +33,8 @@ import java.util.Map;
 @ConditionalOnProperty(name = "fbads.engine.enabled", havingValue = "true", matchIfMissing = true)
 public class EngineTicker {
     private static final Logger log = LoggerFactory.getLogger(EngineTicker.class);
+    /** Khoá Redis "đã kiểm tra rule trong chu kỳ này" của từng workspace: fbads:engine:rules-ran:{id} */
+    static final String RULES_RAN = "fbads:engine:rules-ran:";
 
     private final ScheduleRunner schedules;
     private final RuleRunner rules;
@@ -41,10 +46,14 @@ public class EngineTicker {
     private final StringRedisTemplate redis;
     private final EventBus events;
     private final EventStatsService stats;
+    private final WorkspaceRepository workspaces;
+    private final EngineLock lock;
 
-    public EngineTicker(StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
+    public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
                         LogService logs, EngineState state, EngineClock clock, EventBus events,
                         EventStatsService stats) {
+        this.workspaces = workspaces;
+        this.lock = lock;
         this.events = events;
         this.stats = stats;
         this.redis = redis;
@@ -63,20 +72,38 @@ public class EngineTicker {
         runOnce();
     }
 
+    /** Một lượt: lần lượt từng workspace, mỗi workspace chạy riêng (workspace này lỗi token không làm hỏng workspace khác) */
     void runOnce() {
+        for (long ws : workspaces.allIds()) {
+            try {
+                WorkspaceContext.run(ws, () -> lock.run(() -> { runWorkspace(); return null; }));
+            } catch (RuntimeException e) {
+                log.error("Lỗi tick (workspace {}): {}", ws, e.getMessage(), e);
+            }
+        }
+    }
+
+    private void runWorkspace() {
         step("lịch", schedules::tick);
         step("bật lại theo hẹn", rules::tickResumes);
         long every = Math.max(1, settings.get().getRuleIntervalMin()) * 60_000L;
         // "Đến giờ kiểm tra rule chưa" lưu ở Redis (SET NX + hết hạn) để nhiều bản tool không cùng chạy rule trong một chu kỳ
-        if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent("fbads:engine:rules-ran", "1", Duration.ofMillis(every))))
+        if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(RULES_RAN + WorkspaceContext.require(), "1", Duration.ofMillis(every))))
             step("rule", rules::runRules);
         step("báo cáo", report::tick);
-        step("dọn dẹp", () -> {
-            String weekAgo = LocalDate.parse(clock.now().date()).minusDays(7).toString();
-            state.cleanupDaily(weekAgo);
-            stats.cleanup(weekAgo);
-        });
+        step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
         events.publish(AppEvent.ENGINE_TICK, "engine", false, Map.of("at", clock.millis()));
+    }
+
+    /** Dọn các dấu "sự kiện đã đếm" (chung mọi workspace), mỗi giờ một lần là đủ */
+    @Scheduled(initialDelay = 60_000, fixedDelay = 3_600_000)
+    @SchedulerLock(name = "fbads-stats-cleanup", lockAtMostFor = "10m")
+    public void cleanupStats() {
+        try {
+            stats.cleanup(LocalDate.now(java.time.ZoneOffset.UTC).minusDays(7).toString());
+        } catch (RuntimeException e) {
+            log.warn("Không dọn được event_stats_seen: {}", e.getMessage());
+        }
     }
 
     private void step(String name, Runnable r) {

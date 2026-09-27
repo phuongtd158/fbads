@@ -50,7 +50,7 @@ class CallLoggingTest {
                 .containsPattern("← ObjectService\\.setBudget \\d+ ms")
                 .contains("→ LogRepository.save(entity=")
                 .contains("org.hibernate.SQL", "insert", "binding parameter")
-                .contains("AuthService.verify(pw=***)")
+                .contains("AuthService.authenticate(username=\"admin\", password=***)")
                 .doesNotContain("MatKhau@2026")
                 .doesNotContain("fbads.calls.engine");
     }

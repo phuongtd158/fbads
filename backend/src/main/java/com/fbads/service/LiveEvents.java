@@ -13,10 +13,11 @@ import tools.jackson.databind.json.JsonMapper;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Consumer "WebSocket": đẩy sự kiện xuống trình duyệt (STOMP) ở các kênh
- *   /topic/logs    (log.created, log.updated: dòng nhật ký, giao diện thay theo id)
- *   /topic/objects (objects.changed: {id} camp/nhóm vừa đổi)
- *   /topic/engine  (engine.tick: {at} xong một lượt tự động).
+ * Consumer "WebSocket": đẩy sự kiện xuống trình duyệt (STOMP) ở các kênh của từng workspace ({id} = id workspace):
+ *   /topic/ws.{id}.logs    (log.created, log.updated: dòng nhật ký, giao diện thay theo id)
+ *   /topic/ws.{id}.objects (objects.changed: {id} camp/nhóm vừa đổi)
+ *   /topic/ws.{id}.engine  (engine.tick: {at} xong một lượt tự động).
+ * Chỉ thành viên của workspace mới được nghe kênh của workspace đó (config/WebSocketConfig).
  * Trình duyệt có thể nối vào bất kỳ bản tool nào, nên mỗi bản đều phải nhận đủ sự kiện:
  *  - bật Kafka: mỗi bản đọc topic bằng một consumer group riêng (xem KafkaEventListeners) rồi gọi deliver();
  *  - tắt Kafka: broadcast() phát qua Redis pub/sub kênh "fbads:live", mọi bản nghe kênh đó rồi gọi deliver().
@@ -47,11 +48,14 @@ public class LiveEvents {
         };
     }
 
+    /** Kênh STOMP của một workspace */
+    public static String destination(long workspaceId, String topic) { return "/topic/ws." + workspaceId + "." + topic; }
+
     /** Đẩy xuống trình duyệt đang nối vào bản tool này */
     public void deliver(AppEvent e) {
         String topic = topicOf(e.type());
         if (topic == null) return;
-        ws.convertAndSend("/topic/" + topic, json.writeValueAsString(e.data()));
+        ws.convertAndSend(destination(e.workspaceId(), topic), json.writeValueAsString(e.data()));
     }
 
     /** Chế độ không Kafka: phát qua Redis để mọi bản tool cùng nhận. Redis lỗi thì bỏ qua (giao diện vẫn tự làm mới định kỳ). */
