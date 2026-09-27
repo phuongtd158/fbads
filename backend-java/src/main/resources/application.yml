@@ -1,0 +1,79 @@
+# Cấu hình chính. Giá trị dạng ${TEN_BIEN:mặc định} đọc từ biến môi trường (Render, docker-compose, file .env).
+spring:
+  application:
+    name: fbads
+  threads:
+    virtual:
+      enabled: true            # Java 21: mỗi request / tác vụ chạy trên virtual thread (nhẹ, chờ mạng không tốn luồng thật)
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/fbads}
+    username: ${DB_USER:fbads}
+    password: ${DB_PASSWORD:fbads}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none           # lược đồ do Flyway quản lý (src/main/resources/db/migration)
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+  session:
+    timeout: 30d
+    jdbc:
+      initialize-schema: never # bảng SPRING_SESSION tạo bằng Flyway (V2)
+
+server:
+  port: ${PORT:3000}
+  forward-headers-strategy: native      # sau proxy (Render): Tomcat đọc X-Forwarded-* (chỉ tin proxy nội bộ) để cookie có cờ Secure
+  servlet:
+    session:
+      timeout: 30d
+      cookie:
+        name: sid
+        http-only: true
+        same-site: strict
+        max-age: 30d
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+resilience4j:
+  retry:
+    instances:
+      graph:                   # gọi Facebook Graph API: thử lại khi lỗi mạng (không thử lại khi Facebook trả lỗi)
+        max-attempts: 3
+        wait-duration: 1s
+        exponential-backoff-multiplier: 2
+        enable-exponential-backoff: true
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+
+fbads:
+  public-dir: ${PUBLIC_DIR:../public}          # bản build giao diện Vue
+  app-password: ${APP_PASSWORD:}
+  public-url: ${PUBLIC_URL:}
+  trust-proxy: ${TRUST_PROXY:false}
+  render: ${RENDER:false}
+  client-ip-header: ${CLIENT_IP_HEADER:}
+  engine:
+    enabled: ${ENGINE_ENABLED:true}
+    tick-ms: 30000
+  import:
+    file: ${IMPORT_FILE:}                        # đường dẫn data.json của bản Node → nhập 1 lần vào DB
+    upstash: ${IMPORT_UPSTASH:false}             # true = nhập từ Upstash (cần UPSTASH_REDIS_REST_URL/TOKEN + DATA_KEY)
+    upstash-url: ${UPSTASH_REDIS_REST_URL:}
+    upstash-token: ${UPSTASH_REDIS_REST_TOKEN:}
+    data-key: ${DATA_KEY:}
+
+logging:
+  level:
+    root: INFO
+    org.hibernate.orm.deprecation: WARN
