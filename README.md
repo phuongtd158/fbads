@@ -6,22 +6,23 @@ Nhánh này là bản học **Spring Boot**. Bản Node.js đang chạy thật n
 
 | Thư mục | Nội dung |
 |---|---|
-| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MariaDB. Chi tiết trong [backend/README.md](backend/README.md) |
-| `frontend/` | Vue 3 + Vite |
+| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MariaDB, cache/phiên/realtime qua Redis. Chi tiết trong [backend/README.md](backend/README.md) |
+| `frontend/` | Vue 3 + Vite, nhận cập nhật realtime qua WebSocket |
 
 ## Chạy nhanh bằng Docker
 ```bash
 APP_PASSWORD='MatKhau@2026' docker compose up --build
 ```
-Mở http://localhost:3000 và đăng nhập bằng mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm một MariaDB.
+Mở http://localhost:3000 và đăng nhập bằng mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB và Redis.
 
 ## Chạy khi đang code
-Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB).
+Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
 
-1. Bật MariaDB (một lần):
+1. Bật MariaDB và Redis (một lần):
    ```bash
    docker run -d --name fbads-db -p 127.0.0.1:3306:3306 \
      -e MARIADB_DATABASE=fbads -e MARIADB_USER=fbads -e MARIADB_PASSWORD=fbads -e MARIADB_ROOT_PASSWORD=root mariadb:11.8
+   docker run -d --name fbads-redis -p 127.0.0.1:6379:6379 redis:7
    ```
 2. Backend (cửa sổ 1):
    ```bash
@@ -32,13 +33,13 @@ Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB).
    ```bash
    cd frontend
    npm install
-   npm run dev                # mở http://localhost:5173, tự chuyển /api sang cổng 3000
+   npm run dev                # mở http://localhost:5173, tự chuyển /api và /ws sang cổng 3000
    ```
 
 Sửa giao diện là thấy ngay, không cần build. Muốn backend tự phục vụ giao diện ở cổng 3000 thì chạy `npm run build` trong `frontend/` (ra `frontend/dist`).
 
 ## Test
-- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MariaDB thật.
+- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MariaDB và Redis thật.
 - Frontend: `cd frontend && npm test`. Kiểm tra các luật dùng chung ở `frontend/src/shared/` (kiểm tra dữ liệu, tiền, ngày…).
 
 ## Tính năng

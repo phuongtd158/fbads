@@ -174,7 +174,7 @@ class ApiIntegrationTest {
     /** Số camp tải từ Facebook được lưu ở Redis; đổi ngân sách thì bản ở Redis bị xoá */
     @Test
     void objectsAreCachedInRedis() {
-        assertThat(api.get("/api/objects?force=1").status()).isEqualTo(200);
+        assertThat(api.get("/api/objects?refresh=1").status()).isEqualTo(200);
         var objects = caches.getCache(CacheConfig.OBJECTS);
         FbSnapshots.Objects saved = objects.get("mock", FbSnapshots.Objects.class);
         assertThat(saved).isNotNull();

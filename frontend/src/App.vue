@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { state, bootstrap, loadObjs, checkConn, loadStorage } from './stores/app'
+import { state, bootstrap, loadObjs, checkConn } from './stores/app'
+import { startLive, stopLive, onLive } from './lib/live'
 import { palette } from './stores/ui'
 import Sidebar from './components/Sidebar.vue'
 import MobileTabbar from './components/MobileTabbar.vue'
@@ -21,18 +22,27 @@ const showLogin = computed(() => state.ready && state.auth.required && !state.au
 function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (state.auth.authed) palette.value = !palette.value }
 }
+// Realtime: đăng nhập xong thì nối WebSocket. Camp vừa đổi (bởi lịch/rule, người khác, tab khác) thì tải lại
+// bảng Tổng quan sau 2 giây (gom nhiều thay đổi liền nhau thành 1 lần tải); đang sửa ô nào thì để lượt sau.
+watch(() => state.ready && state.auth.authed, (on) => (on ? startLive() : stopLive()), { immediate: true })
+let objTimer = 0
+const offObjects = onLive('objects', () => {
+  clearTimeout(objTimer)
+  objTimer = setTimeout(() => {
+    if (route.name === 'overview' && !document.hidden && !state.objsLoading && !document.querySelector('.editing')) loadObjs(false, true)
+  }, 2000)
+})
 let timer = 0
 onMounted(() => {
   bootstrap()
   window.addEventListener('keydown', onKey)
-  // Tự làm mới mỗi 60 giây khi đang xem Tổng quan (chạy ngầm). Không ép: server chỉ gọi Facebook khi số liệu đã cũ
-  // (2–5 phút tuỳ mức dùng API) để khỏi bị Facebook giới hạn số lần gọi.
+  // Dự phòng khi mất WebSocket: tự làm mới mỗi 60 giây khi đang xem Tổng quan (chạy ngầm). Không ép: server chỉ gọi
+  // Facebook khi số liệu đã cũ (2–5 phút tuỳ mức dùng API) để khỏi bị Facebook giới hạn số lần gọi.
   timer = setInterval(() => {
-    if (state.auth.authed && !document.hidden && state.storage && state.storage.mode === 'remote') loadStorage()
     if (route.name === 'overview' && !document.hidden && state.auth.authed && !state.objsLoading && !document.querySelector('.editing')) { loadObjs(false, true); checkConn() }
   }, 60000)
 })
-onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInterval(timer) })
+onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInterval(timer); clearTimeout(objTimer); offObjects(); stopLive() })
 </script>
 
 <template>

@@ -7,6 +7,8 @@ import { toastError } from '../stores/ui'
 import { timeOf, dayLabel } from '../lib/format'
 import { kindOf, KIND_LABEL } from '../lib/logHints'
 import { accountLabel } from '../lib/accounts'
+import { onLive } from '../lib/live'
+import { mergeLog } from '../shared/logs.mjs'
 import Btn from '../components/Btn.vue'
 import EmptyState from '../components/EmptyState.vue'
 import Skeleton from '../components/Skeleton.vue'
@@ -23,14 +25,16 @@ const current = ref(null)
 async function load({ silent = false } = {}) {
   try { logs.value = await api('logs', 'GET', undefined, { bg: silent }) } catch (e) { if (!silent) toastError(e) } finally { loaded.value = true }
 }
-// Quay lại tab/cửa sổ thì tự tải lại (lịch/rule có thể vừa chạy)
+// Dòng mới (hoặc vừa hoàn tác) do server đẩy qua WebSocket: hiện ngay, không cần tải lại
+const offLive = onLive('logs', (entry) => { if (loaded.value) logs.value = mergeLog(logs.value, entry) })
+// Quay lại tab/cửa sổ thì tự tải lại (phòng khi WebSocket bị ngắt lúc tab ngủ)
 const onVisible = () => { if (!document.hidden && loaded.value) load({ silent: true }) }
 onMounted(() => {
   load()
   if (!state.schedules.length && !state.rules.length) loadState().catch(() => {})
   document.addEventListener('visibilitychange', onVisible)
 })
-onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+onBeforeUnmount(() => { document.removeEventListener('visibilitychange', onVisible); offLive() })
 
 // ----- Trạng thái của 1 dòng -----
 const STATUS = {
