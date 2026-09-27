@@ -1,9 +1,10 @@
 package com.fbads.engine;
 
-import com.fbads.engine.state.EngineState;
-import com.fbads.facebook.FbException;
-import com.fbads.logs.LogService;
-import com.fbads.settings.SettingsService;
+import com.fbads.client.FbException;
+import com.fbads.service.EngineState;
+import com.fbads.service.LogService;
+import com.fbads.service.ReportService;
+import com.fbads.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

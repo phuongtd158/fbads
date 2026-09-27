@@ -1,14 +1,13 @@
 package com.fbads.engine;
 
-import com.fbads.automation.Schedule;
-import com.fbads.automation.ScheduleRepository;
-import com.fbads.engine.state.EngineState;
-import com.fbads.facebook.AdObject;
-import com.fbads.facebook.BulkFilter;
-import com.fbads.facebook.FacebookService;
-import com.fbads.facebook.RateLimits;
-import com.fbads.settings.AppSettings;
-import com.fbads.settings.SettingsService;
+import com.fbads.client.RateLimits;
+import com.fbads.dto.AdObject;
+import com.fbads.entity.AppSettings;
+import com.fbads.entity.Schedule;
+import com.fbads.repository.ScheduleRepository;
+import com.fbads.service.EngineState;
+import com.fbads.service.FacebookService;
+import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

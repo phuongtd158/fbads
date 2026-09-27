@@ -1,10 +1,10 @@
 package com.fbads.validation;
 
-import com.fbads.automation.Condition;
-import com.fbads.automation.Rule;
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
-import com.fbads.facebook.AdObject;
+import com.fbads.dto.AdObject;
+import com.fbads.dto.Condition;
+import com.fbads.entity.Rule;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;

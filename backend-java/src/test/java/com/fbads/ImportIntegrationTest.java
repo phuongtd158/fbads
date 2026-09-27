@@ -1,6 +1,6 @@
 package com.fbads;
 
-import com.fbads.engine.state.EngineState;
+import com.fbads.service.EngineState;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

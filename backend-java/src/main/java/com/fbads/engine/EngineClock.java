@@ -1,6 +1,6 @@
 package com.fbads.engine;
 
-import com.fbads.settings.SettingsService;
+import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;

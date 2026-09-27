@@ -1,10 +1,10 @@
 package com.fbads.engine;
 
 import com.fbads.common.Fmt;
-import com.fbads.engine.state.EngineState;
-import com.fbads.facebook.AdObject;
-import com.fbads.settings.AppSettings;
-import com.fbads.settings.SettingsService;
+import com.fbads.dto.AdObject;
+import com.fbads.entity.AppSettings;
+import com.fbads.service.EngineState;
+import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

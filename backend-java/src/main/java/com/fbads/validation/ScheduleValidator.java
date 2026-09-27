@@ -1,10 +1,10 @@
 package com.fbads.validation;
 
-import com.fbads.automation.Schedule;
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
+import com.fbads.dto.AdObject;
 import com.fbads.engine.ScheduleRunner;
-import com.fbads.facebook.AdObject;
+import com.fbads.entity.Schedule;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;

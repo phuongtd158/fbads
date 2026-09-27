@@ -1,7 +1,7 @@
 package com.fbads.validation;
 
 import com.fbads.common.Json;
-import com.fbads.settings.AppSettings;
+import com.fbads.entity.AppSettings;
 import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;

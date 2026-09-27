@@ -1,15 +1,15 @@
 package com.fbads.engine;
 
+import com.fbads.client.FbException;
 import com.fbads.common.Fmt;
-import com.fbads.engine.state.EngineState;
-import com.fbads.facebook.AdObject;
-import com.fbads.facebook.FacebookService;
-import com.fbads.facebook.FbException;
-import com.fbads.logs.LogEntry;
-import com.fbads.logs.LogService;
-import com.fbads.notify.TelegramService;
-import com.fbads.settings.AppSettings;
-import com.fbads.settings.SettingsService;
+import com.fbads.dto.AdObject;
+import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
+import com.fbads.service.EngineState;
+import com.fbads.service.FacebookService;
+import com.fbads.service.LogService;
+import com.fbads.service.SettingsService;
+import com.fbads.service.TelegramService;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;

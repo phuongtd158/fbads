@@ -1,14 +1,13 @@
 package com.fbads.engine;
 
-import com.fbads.automation.Condition;
-import com.fbads.automation.Rule;
 import com.fbads.common.Fmt;
-import com.fbads.engine.state.EngineState;
-import com.fbads.engine.state.RuleMark;
-import com.fbads.facebook.AdObject;
-import com.fbads.facebook.Delivery;
-import com.fbads.facebook.Metrics;
-import com.fbads.settings.SettingsService;
+import com.fbads.dto.AdObject;
+import com.fbads.dto.Condition;
+import com.fbads.dto.Metrics;
+import com.fbads.entity.Rule;
+import com.fbads.entity.RuleMark;
+import com.fbads.service.EngineState;
+import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

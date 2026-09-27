@@ -71,13 +71,30 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB thật cho m�
   - đăng nhập và các lớp chặn.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
 
+## Cấu trúc thư mục (chia theo tầng)
+
+Luồng một request: `controller` → `service` → `repository` → DB.
+
+| Thư mục | Chứa gì |
+|---|---|
+| `controller/` | Nhận/trả HTTP, không có logic; `ApiExceptionHandler` đổi lỗi thành JSON |
+| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `FacebookService`, `TelegramService`, `UndoService`, `ReportService`, `DataImporter` |
+| `repository/` | Spring Data JPA, mỗi bảng 1 interface |
+| `entity/` | Class ánh xạ bảng (`@Entity`) |
+| `dto/` | Dữ liệu vào/ra không phải bảng: request, `AdObject`, `Metrics`, `Condition`, `Saved` |
+| `client/` | Gọi dịch vụ ngoài: `GraphClient` (Facebook), giới hạn gọi API, dữ liệu giả |
+| `engine/` | Logic chạy lịch/rule mỗi 30 giây (`EngineTicker`, `ScheduleRunner`, `RuleRunner`…) |
+| `validation/` | Luật kiểm tra lịch/rule/cài đặt (giống `shared/validate.mjs`) |
+| `security/` | Spring Security, mã hoá mật khẩu, filter chặn request lạ |
+| `config/`, `common/` | Cấu hình Spring và tiện ích dùng chung |
+
 ## Đối chiếu Node → Spring (để học)
 
 | Bản Node | Bản Java | Học được gì |
 |---|---|---|
 | `data.json` / Upstash (`lib/store.js`) | MariaDB + Spring Data JPA (`*Repository`), Flyway | Entity, repository, migration, `@Version` |
-| `express.Router` (`lib/routes/*`) | `@RestController` (`web/`) | Mapping, `@RequestBody`, `ResponseEntity` |
-| Middleware tự viết (`lib/middleware.js`, `lib/auth.js`) | Spring Security + Spring Session JDBC, filter `ApiFilters` | SecurityFilterChain, phiên lưu trong DB |
+| `express.Router` (`lib/routes/*`) | `@RestController` (`controller/`) | Mapping, `@RequestBody`, `ResponseEntity` |
+| Middleware tự viết (`lib/middleware.js`, `lib/auth.js`) | Spring Security + Spring Session JDBC, filter `ApiFilters` (`security/`) | SecurityFilterChain, phiên lưu trong DB |
 | `shared/validate.mjs` (chạy cả ở giao diện) | `validation/*Validator` (bản Java của cùng luật) + Bean Validation (`@Valid`, `@StrongPassword`) | Ràng buộc tự viết |
 | `setInterval` trong `lib/engine.js` | `@Scheduled` (`EngineTicker`) + `EngineLock` | Lập lịch, khoá, virtual threads |
 | `fetch` + tự thử lại (`lib/fb.js`) | `RestClient` + Resilience4j `@Retry` (`GraphClient`) | Client HTTP, retry có backoff |
