@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Khởi động với IMPORT_FILE = data.json của bản Node → dữ liệu vào MariaDB, mật khẩu cũ vẫn đăng nhập được. */
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"fbads.engine.enabled=false", "fbads.import.file=src/test/resources/fixtures/data.json"})
+        properties = {"fbads.engine.enabled=false", "fbads.import.file=src/test/resources/fixtures/node-data.json"})
 class ImportIntegrationTest {
     @Container
     @ServiceConnection

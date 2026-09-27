@@ -1,0 +1,174 @@
+{
+  "settings": {
+    "mock": true,
+    "dryRun": true,
+    "adAccountId": "123456789",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "passwordHash": "78ba5cf0ce4c04a7bacb7b7c619f948d:545e3ddbe4d9884252ef649c2a9558e1b1b863ad980eb17e474694afc3e9b81112d3c7cdf58e399c499911f9e5b7ce1b76bdc678734704179db94fef36c85950",
+    "telegramChatId": "-100123",
+    "ruleIntervalMin": 20,
+    "accountTargets": {
+      "123456789": {
+        "cpa": 150000,
+        "roas": 2
+      }
+    }
+  },
+  "schedules": [
+    {
+      "id": "sch00001",
+      "name": "Tắt đêm",
+      "action": "off",
+      "time": "23:00",
+      "times": [
+        "23:00"
+      ],
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "targetMode": "list",
+      "targets": [
+        "mock_1"
+      ],
+      "mode": "percent",
+      "value": 0,
+      "enabled": true
+    },
+    {
+      "id": "sch00002",
+      "name": "Khung giờ",
+      "action": "window",
+      "time": "06:00",
+      "times": [
+        "06:00",
+        "22:00"
+      ],
+      "days": [
+        1,
+        2,
+        3
+      ],
+      "window": {
+        "on": "06:00",
+        "off": "22:00"
+      },
+      "targetMode": "filter",
+      "filter": {
+        "status": "all",
+        "nameIncludes": "Sale"
+      },
+      "exclude": [
+        "mock_2"
+      ],
+      "mode": "percent",
+      "value": 0,
+      "enabled": false
+    }
+  ],
+  "rules": [
+    {
+      "id": "rul00001",
+      "name": "CPA cao",
+      "metric": "cpa",
+      "op": ">",
+      "value": 200000,
+      "conditions": [
+        {
+          "metric": "cpa",
+          "op": ">",
+          "value": 200000
+        },
+        {
+          "metric": "roas",
+          "op": "<",
+          "vs": "target",
+          "factor": 80,
+          "value": 0
+        }
+      ],
+      "match": "any",
+      "range": "last_3d",
+      "minSpend": 100000,
+      "action": "pause",
+      "pct": 0,
+      "budgetMode": "percent",
+      "amount": 0,
+      "maxBudget": 0,
+      "minBudget": 0,
+      "cooldownHours": 6,
+      "resume": "nextday",
+      "resumeAt": "07:00",
+      "from": "",
+      "to": "",
+      "allActive": true,
+      "level": "campaign",
+      "accountIds": [
+        "123456789"
+      ],
+      "targets": [],
+      "enabled": true
+    }
+  ],
+  "logs": [
+    {
+      "id": "log00002",
+      "ts": "2026-09-25T10:00:00.000Z",
+      "kind": "rule",
+      "source": "Rule: CPA cao",
+      "name": "Camp A",
+      "detail": "Tắt camp",
+      "ok": true,
+      "mode": "mock",
+      "dry": false,
+      "refId": "rul00001",
+      "refName": "CPA cao",
+      "target": {
+        "id": "mock_1",
+        "name": "Camp A",
+        "level": "campaign"
+      },
+      "action": {
+        "type": "off"
+      },
+      "before": {
+        "status": "ACTIVE",
+        "dailyBudget": 500000
+      },
+      "after": {
+        "status": "PAUSED"
+      }
+    },
+    {
+      "id": "log00001",
+      "ts": "2026-09-24T10:00:00.000Z",
+      "kind": "manual",
+      "source": "Thủ công",
+      "name": "Camp B",
+      "detail": "Lỗi",
+      "ok": false,
+      "mode": "live",
+      "error": {
+        "message": "Token hết hạn",
+        "code": 190
+      }
+    }
+  ],
+  "state": {
+    "fired": {
+      "sch00001:2026-09-25:23:00": true
+    },
+    "resume": {
+      "rul00001:mock_1": {
+        "ruleId": "rul00001",
+        "objId": "mock_1",
+        "date": "2026-09-25"
+      }
+    }
+  }
+}
