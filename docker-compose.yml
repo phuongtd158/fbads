@@ -1,4 +1,4 @@
-# Chạy cả tool (frontend + backend), MariaDB và Redis trên máy:  docker compose up --build
+# Chạy cả tool (frontend + backend), MariaDB, Redis và Kafka trên máy:  docker compose up --build
 # Mở http://localhost:3000. Dữ liệu MariaDB nằm trong volume "db-data" (xoá: docker compose down -v).
 # Nhập dữ liệu cũ của bản Node: bỏ dấu # ở 2 dòng IMPORT_FILE / volumes của app (chỉ nhập khi DB còn trống).
 services:
@@ -32,6 +32,32 @@ services:
       timeout: 3s
       retries: 20
 
+  # Kafka (chế độ KRaft, không cần ZooKeeper): sự kiện của tool đi qua topic fbads.events (xem backend/README.md).
+  # Hai cổng nghe: kafka:9092 cho app trong Compose, localhost:9094 cho app chạy ngoài Docker (IntelliJ) hoặc công cụ xem topic.
+  # Dữ liệu nằm trong container: docker compose down là mất các sự kiện cũ (không sao, dữ liệu thật ở MariaDB).
+  kafka:
+    image: apache/kafka:4.2.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    ports:
+      - "127.0.0.1:9094:9094"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+
   app:
     build: .
     depends_on:
@@ -39,11 +65,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     environment:
       DB_URL: jdbc:mariadb://db:3306/fbads
       DB_USER: fbads
       DB_PASSWORD: ${DB_PASSWORD:-fbads}
       REDIS_URL: redis://redis:6379
+      KAFKA_ENABLED: "true"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # Trong container tool nghe ở 0.0.0.0 nên bắt buộc có mật khẩu đăng nhập
       APP_PASSWORD: ${APP_PASSWORD:?Hãy đặt APP_PASSWORD, ví dụ APP_PASSWORD=MatKhau@2026 docker compose up}
       # IMPORT_FILE: /import/data.json
