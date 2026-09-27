@@ -9,6 +9,8 @@ import com.fbads.dto.AdObject;
 import com.fbads.dto.FbSnapshots;
 import com.fbads.dto.Metrics;
 import com.fbads.entity.AppSettings;
+import com.fbads.event.AppEvent;
+import com.fbads.event.EventBus;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
@@ -81,10 +83,10 @@ public class FacebookService {
 
     /** Tầng 2 của bộ nhớ đệm (Redis). Tầng 1 là `cache` / `rangeCache` trong bộ nhớ: engine sửa trực tiếp các AdObject trong đó. */
     private final Cache objectsL2, rangesL2;
-    private final LiveEvents live;
+    private final EventBus events;
 
-    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits, CacheManager caches, LiveEvents live) {
-        this.live = live;
+    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits, CacheManager caches, EventBus events) {
+        this.events = events;
         this.settings = settings;
         this.graph = graph;
         this.limits = limits;
@@ -529,7 +531,7 @@ public class FacebookService {
         if (isMock()) mock.setStatus(id, on);
         else call("POST", id, Map.of("status", on ? "ACTIVE" : "PAUSED"), null);
         cache = new Cache0(0, cache.data(), cache.stale());
-        live.publish("objects", Map.of("id", id));
+        events.publish(AppEvent.OBJECTS_CHANGED, id, false, Map.of("id", id));
     }
 
     @CacheEvict(cacheNames = CacheConfig.OBJECTS, allEntries = true)
@@ -542,7 +544,7 @@ public class FacebookService {
             call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null);
         }
         cache = new Cache0(0, cache.data(), cache.stale());
-        live.publish("objects", Map.of("id", id));
+        events.publish(AppEvent.OBJECTS_CHANGED, id, false, Map.of("id", id));
     }
 
     // ------------------------------------------------------------------ Kết nối & token

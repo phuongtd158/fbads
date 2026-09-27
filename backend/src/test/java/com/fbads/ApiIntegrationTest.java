@@ -2,8 +2,13 @@ package com.fbads;
 
 import com.fbads.config.CacheConfig;
 import com.fbads.dto.FbSnapshots;
+import com.fbads.engine.ActionExecutor;
+import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineLock;
+import com.fbads.service.EventStatsService;
+import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.TelegramService;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +73,16 @@ class ApiIntegrationTest {
     EngineLock engineLock;
     @Autowired
     LockProvider locks;
+    @Autowired
+    ActionExecutor executor;
+    @Autowired
+    LogService logs;
+    @Autowired
+    TelegramService telegram;
+    @Autowired
+    EventStatsService stats;
+    @Autowired
+    EngineClock clock;
     Api api;
 
     @BeforeEach
@@ -259,5 +274,38 @@ class ApiIntegrationTest {
             @Override
             public void handleFrame(StompHeaders headers, Object payload) { into.add((String) payload); }
         };
+    }
+
+    /**
+     * Không bật Kafka (mặc định): sự kiện đi bằng Spring events, các consumer chạy ngay trên luồng ghi nhật ký.
+     * Lịch/rule ghi nhật ký → Telegram nhận tin (giống hệt trước đây) và thống kê cộng 1; thao tác tay thì không báo Telegram.
+     */
+    @Test
+    void eventsWithoutKafka() throws Exception {
+        try (TelegramStub tg = new TelegramStub()) {
+            telegram.setApiBase(tg.base());
+            settings.update(s -> { s.setTelegramToken("123:abc"); s.setTelegramChatId("111"); });
+            String today = clock.now().date();
+            int before = actions(today, "schedule");
+
+            executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch · Tắt đêm"); e.setName("Camp 1"); e.setDetail("Đã tắt"); });
+            assertThat(tg.texts).containsExactly("✅ <b>Lịch · Tắt đêm</b>\nCamp 1: Đã tắt");
+
+            executor.record(true, e -> { e.setKind("schedule"); e.setSource("Lịch · Tắt đêm"); e.setName("-"); e.setDetail("Không có gì để làm"); });
+            logs.log(e -> { e.setKind("manual"); e.setSource("Thủ công"); e.setName("Camp 1"); e.setDetail("Tắt"); });
+            assertThat(tg.texts).hasSize(1); // im lặng và thao tác tay: không báo
+            assertThat(actions(today, "schedule")).isEqualTo(before + 2);
+
+            tg.status = 500; // Telegram lỗi: không có Kafka để thử lại, chỉ ghi log, việc ghi nhật ký vẫn xong
+            assertThat(executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule"); e.setName("Camp 2"); e.setDetail("Đã tắt"); }).getId()).isNotNull();
+            assertThat(tg.texts).hasSize(2);
+        } finally {
+            settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
+            telegram.setApiBase("https://api.telegram.org");
+        }
+    }
+
+    private int actions(String day, String source) {
+        return stats.ofDay(day).stream().filter(s -> s.getKey().source().equals(source)).mapToInt(s -> s.getActions()).sum();
     }
 }

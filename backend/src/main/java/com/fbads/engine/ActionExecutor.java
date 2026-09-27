@@ -9,7 +9,6 @@ import com.fbads.service.EngineState;
 import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -18,38 +17,28 @@ import java.util.function.Consumer;
 
 /**
  * Lập kế hoạch (plan) và thực thi (act) một hành động lên camp/nhóm QC, tôn trọng chế độ chạy thử,
- * ghi nhật ký và gửi Telegram. Bản Java của plan()/act()/record() trong lib/engine.js.
+ * ghi nhật ký (Telegram do consumer của sự kiện log.created gửi, xem service/TelegramNotifier). Bản Java của plan()/act()/record() trong lib/engine.js.
  */
 @Service
 public class ActionExecutor {
     private final SettingsService settings;
     private final FacebookService fb;
     private final LogService logs;
-    private final TelegramService telegram;
     private final EngineState state;
     private final EngineClock clock;
 
-    public ActionExecutor(SettingsService settings, FacebookService fb, LogService logs, TelegramService telegram, EngineState state, EngineClock clock) {
+    public ActionExecutor(SettingsService settings, FacebookService fb, LogService logs, EngineState state, EngineClock clock) {
         this.settings = settings;
         this.fb = fb;
         this.logs = logs;
-        this.telegram = telegram;
         this.state = state;
         this.clock = clock;
     }
 
     // ------------------------------------------------------------------ Nhật ký
-    /** Ghi nhật ký (+ Telegram trừ khi silent). */
+    /** Ghi nhật ký; không silent thì sự kiện kèm yêu cầu báo Telegram. */
     public LogEntry record(boolean silent, Consumer<LogEntry> fill) {
-        LogEntry saved = logs.log(fill);
-        if (!silent) {
-            boolean isNotify = saved.getAction() != null && "notify".equals(saved.getAction().get("type"));
-            boolean dry = Boolean.TRUE.equals(saved.getDry());
-            String icon = !saved.succeeded() ? "❌" : isNotify ? "🔔" : Boolean.TRUE.equals(saved.getSkipped()) ? "⏭️" : dry ? "🧪" : "✅";
-            String tag = dry && !isNotify ? " (chạy thử)" : "";
-            telegram.telegram(icon + " <b>" + saved.getSource() + "</b>" + tag + "\n" + saved.getName() + ": " + saved.getDetail());
-        }
-        return saved;
+        return logs.log(fill, !silent);
     }
 
     public static Map<String, Object> target(AdObject o) {

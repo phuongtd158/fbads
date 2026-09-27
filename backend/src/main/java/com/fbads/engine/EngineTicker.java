@@ -2,7 +2,9 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.service.EngineState;
-import com.fbads.service.LiveEvents;
+import com.fbads.event.AppEvent;
+import com.fbads.event.EventBus;
+import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
@@ -37,11 +39,14 @@ public class EngineTicker {
     private final EngineState state;
     private final EngineClock clock;
     private final StringRedisTemplate redis;
-    private final LiveEvents live;
+    private final EventBus events;
+    private final EventStatsService stats;
 
     public EngineTicker(StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
-                        LogService logs, EngineState state, EngineClock clock, LiveEvents live) {
-        this.live = live;
+                        LogService logs, EngineState state, EngineClock clock, EventBus events,
+                        EventStatsService stats) {
+        this.events = events;
+        this.stats = stats;
         this.redis = redis;
         this.schedules = schedules;
         this.rules = rules;
@@ -66,8 +71,12 @@ public class EngineTicker {
         if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent("fbads:engine:rules-ran", "1", Duration.ofMillis(every))))
             step("rule", rules::runRules);
         step("báo cáo", report::tick);
-        step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
-        live.publish("engine", Map.of("at", System.currentTimeMillis()));
+        step("dọn dẹp", () -> {
+            String weekAgo = LocalDate.parse(clock.now().date()).minusDays(7).toString();
+            state.cleanupDaily(weekAgo);
+            stats.cleanup(weekAgo);
+        });
+        events.publish(AppEvent.ENGINE_TICK, "engine", false, Map.of("at", clock.millis()));
     }
 
     private void step(String name, Runnable r) {

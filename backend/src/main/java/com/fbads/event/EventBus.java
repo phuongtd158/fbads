@@ -1,0 +1,57 @@
+package com.fbads.event;
+
+import com.fbads.engine.EngineClock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.util.UUID;
+
+/**
+ * Nơi duy nhất phát sự kiện. Nơi phát (nhật ký, FacebookService, engine) không biết ai nhận và nhận bằng cách nào.
+ * Đang trong transaction thì chờ commit xong mới phát, để consumer không thấy dữ liệu có thể còn bị huỷ.
+ */
+@Service
+public class EventBus {
+    private static final Logger log = LoggerFactory.getLogger(EventBus.class);
+
+    private final EventTransport transport;
+    private final JsonMapper json;
+    private final EngineClock clock;
+
+    public EventBus(EventTransport transport, JsonMapper json, EngineClock clock) {
+        this.transport = transport;
+        this.json = json;
+        this.clock = clock;
+    }
+
+    /**
+     * @param type   loại sự kiện (AppEvent.LOG_CREATED…)
+     * @param key    khoá phân vùng: sự kiện cùng khoá được nhận theo đúng thứ tự phát
+     * @param telegram gửi Telegram cho sự kiện này
+     * @param data   nội dung, chuyển sang JSON ngay lúc phát (đối tượng gốc có thể bị sửa sau đó)
+     */
+    public void publish(String type, String key, boolean telegram, Object data) {
+        AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, key, clock.millis(), telegram, json.valueToTree(data));
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() { send(e); }
+            });
+        } else {
+            send(e);
+        }
+    }
+
+    /** Gửi lỗi (Kafka không chạy…) chỉ ghi log: dữ liệu đã nằm trong DB, mất sự kiện thì chỉ mất thông báo/cập nhật tức thì */
+    private void send(AppEvent e) {
+        try {
+            transport.send(e);
+        } catch (RuntimeException ex) {
+            log.warn("Không phát được sự kiện {} ({}): {}", e.type(), e.id(), ex.getMessage());
+        }
+    }
+}

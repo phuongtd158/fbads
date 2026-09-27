@@ -24,7 +24,8 @@ public class TelegramService {
     private static final Logger log = LoggerFactory.getLogger(TelegramService.class);
     private static final Pattern SPLIT = Pattern.compile("[\\s,;]+");
 
-    public record Result(String id, boolean ok, String error) {
+    /** retryable: lỗi tạm thời (mất mạng, Telegram trả 429/5xx), thử lại sau có thể được. Không đưa ra giao diện. */
+    public record Result(String id, boolean ok, String error, boolean retryable) {
         public Map<String, Object> toJson() {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", id);
@@ -85,16 +86,17 @@ public class TelegramService {
             return http.post().uri(apiBase + "/bot" + token + "/sendMessage").contentType(MediaType.APPLICATION_JSON)
                     .body(Map.of("chat_id", id, "text", text, "parse_mode", "HTML"))
                     .exchange((req, res) -> {
-                        if (res.getStatusCode().is2xxSuccessful()) return new Result(id, true, null);
+                        if (res.getStatusCode().is2xxSuccessful()) return new Result(id, true, null, false);
                         JsonNode j;
                         try { j = mapper.readTree(res.getBody()); } catch (RuntimeException e) { j = mapper.createObjectNode(); }
                         int code = j.path("error_code").asInt(res.getStatusCode().value());
                         // che token phòng khi mô tả lỗi nhắc lại nó: kết quả này được đưa ra giao diện và nhật ký
                         String msg = friendly(code, j.path("description").asString(null)).replace(token, "***");
-                        return new Result(id, false, msg);
+                        int status = res.getStatusCode().value();
+                        return new Result(id, false, msg, status == 429 || status >= 500);
                     });
         } catch (RuntimeException e) {
-            return new Result(id, false, "Không kết nối được tới Telegram. Kiểm tra mạng internet.");
+            return new Result(id, false, "Không kết nối được tới Telegram. Kiểm tra mạng internet.", true);
         }
     }
 
@@ -107,8 +109,6 @@ public class TelegramService {
         for (Result r : results) if (!r.ok()) log.warn("Telegram lỗi ({}): {}", r.id(), r.error());
         return new SendResult(true, results);
     }
-
-    public boolean telegram(String text) { return send(text).anyOk(); }
 
     /** Kết quả gửi → phản hồi: gửi được cho ít nhất một người thì 200, không ai nhận được thì 400 */
     public static Reply reply(SendResult r) {

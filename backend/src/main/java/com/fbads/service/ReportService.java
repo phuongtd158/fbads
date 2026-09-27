@@ -5,6 +5,8 @@ import com.fbads.dto.AdObject;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.AppSettings;
+import com.fbads.event.AppEvent;
+import com.fbads.event.EventBus;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -12,7 +14,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Báo cáo Telegram hằng ngày (và nút Gửi báo cáo). Nhiều tài khoản → mỗi tài khoản một phần (loại tiền có thể khác nhau). */
+/**
+ * Báo cáo Telegram hằng ngày (và nút Gửi báo cáo). Nhiều tài khoản → mỗi tài khoản một phần (loại tiền có thể khác nhau).
+ * Tới giờ thì engine chỉ phát sự kiện report.daily, consumer Telegram gửi. Nút "Gửi báo cáo" gửi thẳng vì giao diện cần biết ngay kết quả.
+ */
 @Service
 public class ReportService {
     private final FacebookService fb;
@@ -20,8 +25,11 @@ public class ReportService {
     private final SettingsService settings;
     private final EngineState state;
     private final EngineClock clock;
+    private final EventBus events;
 
-    public ReportService(FacebookService fb, TelegramService telegram, SettingsService settings, EngineState state, EngineClock clock) {
+    public ReportService(FacebookService fb, TelegramService telegram, SettingsService settings, EngineState state, EngineClock clock,
+                         EventBus events) {
+        this.events = events;
         this.fb = fb;
         this.telegram = telegram;
         this.settings = settings;
@@ -29,7 +37,10 @@ public class ReportService {
         this.clock = clock;
     }
 
-    public TelegramService.SendResult send() {
+    /** Nút "Gửi báo cáo": gửi ngay, trả kết quả cho giao diện */
+    public TelegramService.SendResult send() { return telegram.send(text()); }
+
+    String text() {
         List<AdObject> camps = fb.listObjects(true).stream().filter(AdObject::isCampaign).toList();
         Map<String, List<AdObject>> groups = new LinkedHashMap<>();
         for (AdObject o : camps) groups.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);
@@ -47,7 +58,7 @@ public class ReportService {
                     + "\nKết quả: " + Fmt.num(results) + (results > 0 ? " | CPA " + Fmt.money(spend / results) + cur : "")
                     + (lines.isEmpty() ? "" : "\n" + String.join("\n", lines)));
         }
-        return telegram.send("📊 <b>Báo cáo Facebook Ads</b>\n" + String.join("\n", parts));
+        return "📊 <b>Báo cáo Facebook Ads</b>\n" + String.join("\n", parts);
     }
 
     /** Tới giờ báo cáo (trễ tối đa 10 phút) và hôm nay chưa gửi → gửi */
@@ -58,7 +69,7 @@ public class ReportService {
         int at = EngineClock.toMin(s.getReportTime());
         if (now.minutes() >= at && now.minutes() - at <= ScheduleRunner.GRACE_MIN && !state.hasDaily(now.date(), "report")) {
             state.putDaily(now.date(), "report", null);
-            send();
+            events.publish(AppEvent.DAILY_REPORT, "report", true, Map.of("text", text()));
         }
     }
 }

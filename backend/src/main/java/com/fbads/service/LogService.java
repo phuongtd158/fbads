@@ -2,6 +2,8 @@ package com.fbads.service;
 
 import com.fbads.common.Ids;
 import com.fbads.entity.LogEntry;
+import com.fbads.event.AppEvent;
+import com.fbads.event.EventBus;
 import com.fbads.repository.LogRepository;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -19,22 +21,28 @@ public class LogService {
     public static final int KEEP = 1000;
 
     private final LogRepository repo;
-    private final LiveEvents live;
+    private final EventBus events;
     private final AtomicInteger sinceTrim = new AtomicInteger();
 
-    public LogService(LogRepository repo, LiveEvents live) {
+    public LogService(LogRepository repo, EventBus events) {
         this.repo = repo;
-        this.live = live;
+        this.events = events;
     }
 
-    /** Tạo dòng nhật ký mới: fill điền các trường. Trả về dòng đã lưu (có id, ts). */
-    public LogEntry log(Consumer<LogEntry> fill) {
+    /** Tạo dòng nhật ký mới, không báo Telegram (thao tác tay, lỗi hệ thống…). */
+    public LogEntry log(Consumer<LogEntry> fill) { return log(fill, false); }
+
+    /**
+     * Tạo dòng nhật ký mới: fill điền các trường. Trả về dòng đã lưu (có id, ts).
+     * Phát sự kiện log.created: giao diện, thống kê và (nếu notify) Telegram nhận.
+     */
+    public LogEntry log(Consumer<LogEntry> fill, boolean notify) {
         LogEntry e = new LogEntry();
         fill.accept(e);
         e.setId(Ids.uid());
         e.setTs(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         LogEntry saved = repo.save(e);
-        live.publish("logs", saved);
+        events.publish(AppEvent.LOG_CREATED, saved.getId(), notify, saved);
         if (sinceTrim.incrementAndGet() >= 50) trim();
         return saved;
     }
@@ -54,7 +62,7 @@ public class LogService {
     /** Sửa dòng đã có (vd. đánh dấu đã hoàn tác): giao diện nhận bản mới qua WebSocket, thay theo id */
     public LogEntry save(LogEntry e) {
         LogEntry saved = repo.save(e);
-        live.publish("logs", saved);
+        events.publish(AppEvent.LOG_UPDATED, saved.getId(), false, saved);
         return saved;
     }
 }

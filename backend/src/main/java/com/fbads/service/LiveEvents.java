@@ -1,26 +1,25 @@
 package com.fbads.service;
 
+import com.fbads.event.AppEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 /**
- * Sự kiện realtime cho giao diện (WebSocket STOMP):
- *   publish("logs", dòng nhật ký) → Redis kênh "fbads:live" → MỌI bản tool nhận → gửi tới trình duyệt đang nghe "/topic/logs".
- * Đi qua Redis pub/sub để chạy nhiều bản tool thì người dùng nối vào bản nào cũng nhận được sự kiện do bản khác tạo.
- *
- * Các loại sự kiện: logs (dòng nhật ký mới/đã sửa), objects ({id}: camp/nhóm vừa đổi trạng thái hoặc ngân sách),
- * engine ({at}: xong một lượt tự động).
+ * Consumer "WebSocket": đẩy sự kiện xuống trình duyệt (STOMP) ở các kênh
+ *   /topic/logs    (log.created, log.updated: dòng nhật ký, giao diện thay theo id)
+ *   /topic/objects (objects.changed: {id} camp/nhóm vừa đổi)
+ *   /topic/engine  (engine.tick: {at} xong một lượt tự động).
+ * Trình duyệt có thể nối vào bất kỳ bản tool nào, nên mỗi bản đều phải nhận đủ sự kiện:
+ *  - bật Kafka: mỗi bản đọc topic bằng một consumer group riêng (xem KafkaEventListeners) rồi gọi deliver();
+ *  - tắt Kafka: broadcast() phát qua Redis pub/sub kênh "fbads:live", mọi bản nghe kênh đó rồi gọi deliver().
  */
 @Service
 public class LiveEvents {
@@ -31,30 +30,47 @@ public class LiveEvents {
     private final JsonMapper json;
     private final SimpMessagingTemplate ws;
 
-    public LiveEvents(StringRedisTemplate redis, JsonMapper json, SimpMessagingTemplate ws,
-                      @Qualifier("redisListeners") RedisMessageListenerContainer listeners) {
+    public LiveEvents(StringRedisTemplate redis, JsonMapper json, SimpMessagingTemplate ws) {
         this.redis = redis;
         this.json = json;
         this.ws = ws;
-        listeners.addMessageListener((message, pattern) -> deliver(new String(message.getBody(), StandardCharsets.UTF_8)), new ChannelTopic(CHANNEL));
     }
 
-    /** Gửi sự kiện. Redis lỗi thì bỏ qua: giao diện vẫn tự làm mới định kỳ nên chỉ chậm hơn, không mất dữ liệu. */
-    public void publish(String type, Object data) {
+    /** Kênh STOMP của loại sự kiện, null = giao diện không cần */
+    static String topicOf(String type) {
+        return switch (type) {
+            case AppEvent.LOG_CREATED, AppEvent.LOG_UPDATED -> "logs";
+            case AppEvent.OBJECTS_CHANGED -> "objects";
+            case AppEvent.ENGINE_TICK -> "engine";
+            default -> null;
+        };
+    }
+
+    /** Đẩy xuống trình duyệt đang nối vào bản tool này */
+    public void deliver(AppEvent e) {
+        String topic = topicOf(e.type());
+        if (topic == null) return;
+        ws.convertAndSend("/topic/" + topic, json.writeValueAsString(e.data()));
+    }
+
+    /** Chế độ không Kafka: phát qua Redis để mọi bản tool cùng nhận. Redis lỗi thì bỏ qua (giao diện vẫn tự làm mới định kỳ). */
+    public void broadcast(AppEvent e) {
+        if (topicOf(e.type()) == null) return;
         try {
-            redis.convertAndSend(CHANNEL, json.writeValueAsString(Map.of("type", type, "data", data)));
-        } catch (RuntimeException e) {
-            log.warn("Không gửi được sự kiện realtime ({}): {}", type, e.getMessage());
+            redis.convertAndSend(CHANNEL, json.writeValueAsString(e));
+        } catch (RuntimeException ex) {
+            log.warn("Không gửi được sự kiện realtime qua Redis ({}): {}", e.type(), ex.getMessage());
         }
     }
 
-    /** Nhận từ Redis → đẩy xuống trình duyệt đang nối vào bản tool này */
-    private void deliver(String raw) {
-        try {
-            JsonNode msg = json.readTree(raw);
-            ws.convertAndSend("/topic/" + msg.get("type").asString(), json.writeValueAsString(msg.get("data")));
-        } catch (RuntimeException e) {
-            log.warn("Sự kiện realtime hỏng: {}", e.getMessage());
-        }
+    /** Chế độ không Kafka: nghe kênh Redis, nhận được thì deliver() */
+    public void listenRedis(RedisMessageListenerContainer listeners) {
+        listeners.addMessageListener((message, pattern) -> {
+            try {
+                deliver(json.readValue(new String(message.getBody(), StandardCharsets.UTF_8), AppEvent.class));
+            } catch (RuntimeException ex) {
+                log.warn("Sự kiện realtime hỏng: {}", ex.getMessage());
+            }
+        }, new ChannelTopic(CHANNEL));
     }
 }
