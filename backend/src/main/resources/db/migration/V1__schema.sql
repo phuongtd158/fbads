@@ -7,9 +7,9 @@ CREATE TABLE app_settings (
     version              INT          NOT NULL DEFAULT 0,
     mock                 BOOLEAN      NOT NULL DEFAULT TRUE,
     dry_run              BOOLEAN      NOT NULL DEFAULT TRUE,
-    access_token         TEXT         NOT NULL DEFAULT '',
+    access_token         TEXT         NOT NULL DEFAULT (''),
     ad_account_id        VARCHAR(40)  NOT NULL DEFAULT '',
-    ad_account_ids       JSON         NOT NULL DEFAULT '[]',
+    ad_account_ids       JSON         NOT NULL DEFAULT ('[]'),
     fb_app_id            VARCHAR(40)  NOT NULL DEFAULT '',
     fb_app_secret        VARCHAR(100) NOT NULL DEFAULT '',
     fb_config_id         VARCHAR(40)  NOT NULL DEFAULT '',
@@ -26,7 +26,7 @@ CREATE TABLE app_settings (
     kill_switch_enabled  BOOLEAN      NOT NULL DEFAULT FALSE,
     daily_spend_limit    BIGINT       NOT NULL DEFAULT 0,
     kill_scope           VARCHAR(10)  NOT NULL DEFAULT 'total',
-    account_targets      JSON         NOT NULL DEFAULT '{}'
+    account_targets      JSON         NOT NULL DEFAULT ('{}')
 );
 INSERT INTO app_settings (id) VALUES (1);
 

@@ -25,7 +25,7 @@ Những gì được nhập:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `DB_URL` | `jdbc:mariadb://localhost:3306/fbads` | Địa chỉ MariaDB (MySQL 8 cũng chạy được) |
+| `DB_URL` | `jdbc:mariadb://localhost:3306/fbads` | Địa chỉ MariaDB 10.6+ hoặc MySQL 8.0.13+. Với MySQL 8 thêm `?allowPublicKeyRetrieval=true` (xem dưới) |
 | `DB_USER`, `DB_PASSWORD` | `fbads` | Tài khoản DB |
 | `REDIS_URL` | `redis://localhost:6379` | Địa chỉ Redis (bắt buộc). Upstash: `rediss://default:MẬT_KHẨU@xxx.upstash.io:6379` |
 | `REDIS_CONFIGURE_ACTION` | `notify-keyspace-events` | Đặt `none` khi Redis dịch vụ không cho lệnh `CONFIG` (Upstash, ElastiCache) |
@@ -34,6 +34,14 @@ Những gì được nhập:
 | `PUBLIC_URL` | | Địa chỉ công khai, dùng cho đăng nhập Facebook |
 | `PUBLIC_DIR` | `../frontend/dist` | Thư mục giao diện đã build |
 | `ENGINE_ENABLED` | `true` | Tắt vòng chạy lịch/rule (dùng khi test) |
+
+### Dùng MySQL 8 thay MariaDB
+
+- Giữ nguyên driver, chỉ đổi địa chỉ: `DB_URL=jdbc:mariadb://localhost:3306/fbads?allowPublicKeyRetrieval=true`.
+  Thiếu tham số này sẽ gặp lỗi `RSA public key is not available client side` (MySQL 8 mặc định đăng nhập bằng `caching_sha2_password`).
+- Lần chạy trước bị lỗi migration thì xoá DB tạo lại cho sạch: `DROP DATABASE fbads; CREATE DATABASE fbads;`.
+- DB MariaDB tạo trước ngày 27/09/2026 có thể báo `Validate failed: Migration checksum mismatch for migration version 1`
+  (file V1 đã sửa cho chạy được trên MySQL 8, lược đồ không đổi). Cách nhanh nhất cũng là xoá DB tạo lại rồi nhập lại dữ liệu bằng `IMPORT_FILE`.
 
 ## Test
 
@@ -53,6 +61,7 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB và Redis th�
   - phiên đăng nhập ở Redis, nhập sai 5 lần thì bị khoá 15 phút;
   - client STOMP nhận nhật ký và sự kiện camp ngay khi đổi ngân sách; chưa đăng nhập thì bị từ chối.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
+- **MySqlCompatTest** chạy toàn bộ migration và ghi/đọc cài đặt, lịch, nhật ký trên MySQL 8.0 thật.
 
 ## Cấu trúc thư mục (chia theo tầng)
 
