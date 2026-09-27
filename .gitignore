@@ -5,19 +5,16 @@ data.json.*
 *.log
 node_modules/
 
-# Giao diện Vue (build ra public/)
-web/node_modules/
-web/dist/
+# Giao diện Vue: bản build (npm run build → frontend/dist)
+frontend/dist/
+
+# Backend Java: thư mục build của Maven
+backend/target/
 
 # IDE
 .idea/
 .vscode/
 .fastRequest/
-# Cấu hình ngrok cá nhân
-ngrok-domain.txt
 
 # Cấu hình chạy thử cục bộ của công cụ (không đưa lên repo)
 .claude/
-
-# Bản Java (backend-java/): thư mục build của Maven
-backend-java/target/
