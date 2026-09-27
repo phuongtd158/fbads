@@ -10,9 +10,11 @@ export default defineConfig({
   build: { outDir: 'dist', emptyOutDir: true, chunkSizeWarningLimit: 900 },
   server: {
     port: 5173,
+    // changeOrigin: false = giữ nguyên Host của trình duyệt (localhost:5173). Vite 8 mặc định đổi Host thành
+    // 127.0.0.1:3000, khi đó Host khác Origin và backend chặn vì tưởng là gọi chéo ("Origin không hợp lệ").
     proxy: {
-      '/api': API,
-      '/ws': { target: API, ws: true },
+      '/api': { target: API, changeOrigin: false },
+      '/ws': { target: API, ws: true, changeOrigin: false },
     },
   },
 })
