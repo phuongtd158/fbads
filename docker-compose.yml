@@ -1,4 +1,4 @@
-# Chạy cả tool (frontend + backend) và MariaDB trên máy:  docker compose up --build
+# Chạy cả tool (frontend + backend), MariaDB và Redis trên máy:  docker compose up --build
 # Mở http://localhost:3000. Dữ liệu MariaDB nằm trong volume "db-data" (xoá: docker compose down -v).
 # Nhập dữ liệu cũ của bản Node: bỏ dấu # ở 2 dòng IMPORT_FILE / volumes của app (chỉ nhập khi DB còn trống).
 services:
@@ -20,15 +20,30 @@ services:
       timeout: 5s
       retries: 20
 
+  # Redis: cache số liệu Facebook, phiên đăng nhập, khoá vòng tự động, đẩy sự kiện realtime giữa các instance
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]   # ghi ra đĩa để khởi động lại không mất phiên đăng nhập
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   app:
     build: .
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DB_URL: jdbc:mariadb://db:3306/fbads
       DB_USER: fbads
       DB_PASSWORD: ${DB_PASSWORD:-fbads}
+      REDIS_URL: redis://redis:6379
       # Trong container tool nghe ở 0.0.0.0 nên bắt buộc có mật khẩu đăng nhập
       APP_PASSWORD: ${APP_PASSWORD:?Hãy đặt APP_PASSWORD, ví dụ APP_PASSWORD=MatKhau@2026 docker compose up}
       # IMPORT_FILE: /import/data.json
@@ -40,3 +55,4 @@ services:
 
 volumes:
   db-data:
+  redis-data:

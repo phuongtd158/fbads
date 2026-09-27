@@ -17,7 +17,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
  *  - /api/auth, /api/login, /api/logout, /api/fb/callback: không cần đăng nhập;
  *  - /api/**: cần đăng nhập NẾU đã đặt mật khẩu (AuthorizationManager tự viết, đọc cài đặt mỗi lần nên đặt mật khẩu là có hiệu lực ngay);
  *  - còn lại (giao diện, /actuator/health): mở.
- * Phiên đăng nhập lưu bằng Spring Session JDBC (bảng SPRING_SESSION) nên khởi động lại server không bị đăng xuất.
+ * Phiên đăng nhập lưu ở Redis (Spring Session Data Redis) nên khởi động lại server không bị đăng xuất, chạy nhiều bản vẫn dùng chung phiên.
  * CSRF của Spring tắt vì đã có bộ lọc cùng-origin + bắt buộc JSON (security/ApiFilters), giống bản Node và không phải sửa giao diện.
  */
 @Configuration

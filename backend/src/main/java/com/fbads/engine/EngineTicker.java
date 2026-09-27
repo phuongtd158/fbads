@@ -7,15 +7,19 @@ import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.LocalDate;
 
 /**
  * Vòng lặp của engine: 30 giây một lần (@Scheduled, fixedDelay = đợi lượt trước xong rồi mới tính giờ lượt sau).
  * Mỗi phần chạy trong try/catch riêng: lịch lỗi không làm mất lượt kiểm tra rule và báo cáo (bản Node thì mất cả lượt).
+ * @SchedulerLock (ShedLock, khoá ở Redis): chạy nhiều bản tool thì mỗi lượt chỉ 1 bản chạy; lượt nào không lấy được khoá thì bỏ qua.
  * Tắt bằng ENGINE_ENABLED=false (vd khi kiểm thử).
  */
 @Component
@@ -23,7 +27,6 @@ import java.time.LocalDate;
 public class EngineTicker {
     private static final Logger log = LoggerFactory.getLogger(EngineTicker.class);
 
-    private final EngineLock lock;
     private final ScheduleRunner schedules;
     private final RuleRunner rules;
     private final ReportService report;
@@ -31,11 +34,11 @@ public class EngineTicker {
     private final LogService logs;
     private final EngineState state;
     private final EngineClock clock;
-    private volatile long lastRules = 0;
+    private final StringRedisTemplate redis;
 
-    public EngineTicker(EngineLock lock, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
+    public EngineTicker(StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
                         LogService logs, EngineState state, EngineClock clock) {
-        this.lock = lock;
+        this.redis = redis;
         this.schedules = schedules;
         this.rules = rules;
         this.report = report;
@@ -46,18 +49,18 @@ public class EngineTicker {
     }
 
     @Scheduled(initialDelay = 3000, fixedDelayString = "${fbads.engine.tick-ms:30000}")
+    @SchedulerLock(name = EngineLock.NAME, lockAtMostFor = EngineLock.AT_MOST)
     public void tick() {
-        if (!lock.tryRun(this::runOnce)) log.debug("Lượt trước vẫn đang chạy, bỏ qua lượt này.");
+        runOnce();
     }
 
     void runOnce() {
         step("lịch", schedules::tick);
         step("bật lại theo hẹn", rules::tickResumes);
         long every = Math.max(1, settings.get().getRuleIntervalMin()) * 60_000L;
-        if (System.currentTimeMillis() - lastRules >= every) {
-            lastRules = System.currentTimeMillis();
+        // "Đến giờ kiểm tra rule chưa" lưu ở Redis (SET NX + hết hạn) để nhiều bản tool không cùng chạy rule trong một chu kỳ
+        if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent("fbads:engine:rules-ran", "1", Duration.ofMillis(every))))
             step("rule", rules::runRules);
-        }
         step("báo cáo", report::tick);
         step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
     }

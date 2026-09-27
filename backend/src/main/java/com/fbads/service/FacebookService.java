@@ -4,9 +4,15 @@ import com.fbads.client.FbException;
 import com.fbads.client.GraphClient;
 import com.fbads.client.MockAds;
 import com.fbads.client.RateLimits;
+import com.fbads.config.CacheConfig;
 import com.fbads.dto.AdObject;
+import com.fbads.dto.FbSnapshots;
 import com.fbads.dto.Metrics;
 import com.fbads.entity.AppSettings;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
@@ -55,7 +61,7 @@ public class FacebookService {
 
     private record AccInfo(String name, String currency, int status, long at) {}
 
-    private record Cache(long at, List<AdObject> data, boolean stale) {}
+    private record Cache0(long at, List<AdObject> data, boolean stale) {}
 
     private static final class RangeEntry {
         final long at; final Map<String, Metrics> data; final boolean mock; volatile boolean stale;
@@ -69,14 +75,53 @@ public class FacebookService {
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<String, AccInfo> accInfo = new ConcurrentHashMap<>();
     private final Map<String, RangeEntry> rangeCache = new ConcurrentHashMap<>();
-    private volatile Cache cache = new Cache(0, null, false);
+    private volatile Cache0 cache = new Cache0(0, null, false);
     private volatile List<Map<String, Object>> accErrors = List.of();
     private volatile String currency = "VND";
 
-    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits) {
+    /** Tầng 2 của bộ nhớ đệm (Redis). Tầng 1 là `cache` / `rangeCache` trong bộ nhớ: engine sửa trực tiếp các AdObject trong đó. */
+    private final Cache objectsL2, rangesL2;
+
+    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits, CacheManager caches) {
         this.settings = settings;
         this.graph = graph;
         this.limits = limits;
+        this.objectsL2 = caches.getCache(CacheConfig.OBJECTS);
+        this.rangesL2 = caches.getCache(CacheConfig.RANGES);
+    }
+
+    /** Khoá cache theo nguồn dữ liệu: đổi tài khoản / dữ liệu giả thì không dùng nhầm số của nguồn khác */
+    private String sourceKey() {
+        return isMock() ? "mock" : "live:" + String.join(",", settings.get().accountIds());
+    }
+
+    /** Vừa khởi động (tầng 1 trống): lấy bản đã lưu ở Redis, nếu có */
+    private void warmFromRedis() {
+        if (cache.data() != null) return;
+        FbSnapshots.Objects s = get(objectsL2, sourceKey(), FbSnapshots.Objects.class);
+        if (s == null || s.items() == null) return;
+        cache = new Cache0(s.at(), s.items(), false);
+        accErrors = s.accountErrors() == null ? List.of() : s.accountErrors();
+        if (s.currency() != null) currency = s.currency();
+    }
+
+    private void saveToRedis() {
+        put(objectsL2, sourceKey(), new FbSnapshots.Objects(cache.at(), cache.data(), accErrors, currency));
+    }
+
+    /** Redis lỗi thì coi như không có cache (tool vẫn chạy, chỉ gọi Facebook nhiều hơn) */
+    private static <T> T get(Cache c, String key, Class<T> type) {
+        try {
+            return c.get(key, type);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static void put(Cache c, String key, Object value) {
+        try {
+            c.put(key, value);
+        } catch (RuntimeException ignored) { /* như trên */ }
     }
 
     private static double offsetOf(String cur) { return NO_DECIMAL.contains(cur) ? 1 : 100; }
@@ -294,23 +339,26 @@ public class FacebookService {
     public List<AdObject> listObjects(boolean force) {
         lock.lock();
         try {
+            warmFromRedis();
             long now = System.currentTimeMillis(), age = now - cache.at();
             if (isMock()) {
                 if (!force && cache.data() != null && age < MOCK_TTL_MS) return cache.data();
-                cache = new Cache(now, mock.list(), false);
+                cache = new Cache0(now, mock.list(), false);
+                saveToRedis();
                 return cache.data();
             }
             long ttl = force ? FORCE_MIN_MS : limits.pct() >= 60 ? TTL_BUSY_MS : TTL_MS;
             if (cache.data() != null && age < ttl) return cache.data();
             if (limits.blocked()) {
-                if (cache.data() != null) { cache = new Cache(cache.at(), cache.data(), true); return cache.data(); }
+                if (cache.data() != null) { cache = new Cache0(cache.at(), cache.data(), true); return cache.data(); }
                 throw rateLimitError();
             }
             try {
                 List<AdObject> data = realList();
-                cache = new Cache(System.currentTimeMillis(), data, false);
+                cache = new Cache0(System.currentTimeMillis(), data, false);
+                saveToRedis();
             } catch (FbException e) {
-                if (cache.data() != null && e.isRateLimit()) { cache = new Cache(cache.at(), cache.data(), true); return cache.data(); }
+                if (cache.data() != null && e.isRateLimit()) { cache = new Cache0(cache.at(), cache.data(), true); return cache.data(); }
                 throw e;
             }
             return cache.data();
@@ -393,8 +441,10 @@ public class FacebookService {
         return m;
     }
 
+    /** Đổi nguồn dữ liệu (token, tài khoản, bật/tắt dữ liệu giả): bỏ hết số đã lưu, cả ở Redis */
+    @CacheEvict(cacheNames = {CacheConfig.OBJECTS, CacheConfig.RANGES, CacheConfig.ACCOUNTS}, allEntries = true)
     public void resetCache() {
-        cache = new Cache(0, null, false);
+        cache = new Cache0(0, null, false);
         accErrors = List.of();
         accInfo.clear();
         rangeCache.clear();
@@ -434,8 +484,13 @@ public class FacebookService {
         lock.lock();
         try {
             long now = System.currentTimeMillis();
-            RangeEntry c = rangeCache.get(q.key());
             boolean isMock = isMock();
+            String l2Key = sourceKey() + "|" + q.key();
+            RangeEntry c = rangeCache.get(q.key());
+            if (c == null) { // vừa khởi động: lấy bản đã lưu ở Redis
+                FbSnapshots.Range saved = get(rangesL2, l2Key, FbSnapshots.Range.class);
+                if (saved != null && saved.data() != null) rangeCache.put(q.key(), c = new RangeEntry(saved.at(), saved.data(), saved.mock()));
+            }
             long ttl = force ? FORCE_MIN_MS : limits.pct() >= 60 ? TTL_BUSY_MS : RANGE_TTL_MS;
             if (c != null && c.mock == isMock && now - c.at < ttl) return new RangeResult(c.data, c.at, c.stale);
             boolean usable = c != null && c.mock == isMock;
@@ -452,6 +507,7 @@ public class FacebookService {
             }
             RangeEntry e = new RangeEntry(System.currentTimeMillis(), data, isMock);
             rangeCache.put(q.key(), e);
+            put(rangesL2, l2Key, new FbSnapshots.Range(e.at, data, isMock));
             return new RangeResult(data, e.at, false);
         } finally {
             lock.unlock();
@@ -465,12 +521,15 @@ public class FacebookService {
     }
 
     // ------------------------------------------------------------------ Thay đổi
+    /** Sau khi đổi: số ở Redis đã cũ → xoá (@CacheEvict); lần đọc sau tải lại từ Facebook */
+    @CacheEvict(cacheNames = CacheConfig.OBJECTS, allEntries = true)
     public void setStatus(String id, boolean on) {
         if (isMock()) mock.setStatus(id, on);
         else call("POST", id, Map.of("status", on ? "ACTIVE" : "PAUSED"), null);
-        cache = new Cache(0, cache.data(), cache.stale());
+        cache = new Cache0(0, cache.data(), cache.stale());
     }
 
+    @CacheEvict(cacheNames = CacheConfig.OBJECTS, allEntries = true)
     public void setBudget(String id, double amount) {
         long rounded = Math.round(amount);
         if (isMock()) mock.setBudget(id, rounded);
@@ -479,7 +538,7 @@ public class FacebookService {
             String cur = o != null && o.currency != null ? o.currency : currency;
             call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null);
         }
-        cache = new Cache(0, cache.data(), cache.stale());
+        cache = new Cache0(0, cache.data(), cache.stale());
     }
 
     // ------------------------------------------------------------------ Kết nối & token
@@ -503,6 +562,8 @@ public class FacebookService {
         try { return inspectToken(token); } catch (RuntimeException e) { return null; }
     }
 
+    /** Danh sách tài khoản của một token: giữ 5 phút ở Redis. Khoá cache là mã băm của token, không phải token. */
+    @Cacheable(cacheNames = CacheConfig.ACCOUNTS, key = "T(com.fbads.common.Hash).sha256(#token)")
     public Map<String, Object> listAccounts(String token) {
         JsonNode me = call("GET", "me", Map.of("fields", "name"), token);
         List<JsonNode> list = callAll("me/adaccounts", Map.of("fields", "account_id,name,currency,account_status"), token);

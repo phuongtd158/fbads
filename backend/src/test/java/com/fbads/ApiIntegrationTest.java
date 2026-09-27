@@ -1,18 +1,28 @@
 package com.fbads;
 
+import com.fbads.config.CacheConfig;
+import com.fbads.dto.FbSnapshots;
+import com.fbads.engine.EngineLock;
 import com.fbads.service.SettingsService;
+import net.javacrumbs.shedlock.core.LockConfiguration;
+import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mariadb.MariaDBContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,10 +40,22 @@ class ApiIntegrationTest {
     @ServiceConnection
     static MariaDBContainer db = new MariaDBContainer("mariadb:11.8");
 
+    @Container
+    @ServiceConnection(name = "redis")
+    static GenericContainer<?> redisServer = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+
     @LocalServerPort
     int port;
     @Autowired
     SettingsService settings;
+    @Autowired
+    StringRedisTemplate redis;
+    @Autowired
+    CacheManager caches;
+    @Autowired
+    EngineLock engineLock;
+    @Autowired
+    LockProvider locks;
     Api api;
 
     @BeforeEach
@@ -134,6 +156,54 @@ class ApiIntegrationTest {
             assertThat(api.get("/api/state").status()).isEqualTo(200);
         } finally {
             settings.update(s -> s.setPasswordHash("")); // các test khác chạy không cần đăng nhập
+        }
+    }
+
+    /** Số camp tải từ Facebook được lưu ở Redis; đổi ngân sách thì bản ở Redis bị xoá */
+    @Test
+    void objectsAreCachedInRedis() {
+        assertThat(api.get("/api/objects?force=1").status()).isEqualTo(200);
+        var objects = caches.getCache(CacheConfig.OBJECTS);
+        FbSnapshots.Objects saved = objects.get("mock", FbSnapshots.Objects.class);
+        assertThat(saved).isNotNull();
+        assertThat(saved.items()).anyMatch(o -> o.id.equals("mock_1"));
+        assertThat(redis.keys("fbads:cache:fb-objects::*")).isNotEmpty();
+
+        assertThat(api.post("/api/objects/mock_2/budget", Map.of("amount", 222000, "name", "Camp 2")).status()).isEqualTo(200);
+        assertThat(objects.get("mock")).isNull();
+    }
+
+    /** Vòng tự động (@SchedulerLock) và nút "Chạy ngay" (EngineLock) dùng chung một khoá trên Redis */
+    @Test
+    void engineLockIsSharedThroughRedis() {
+        LockConfiguration other = new LockConfiguration(Instant.now(), EngineLock.NAME, Duration.ofMinutes(1), Duration.ZERO);
+        boolean blocked = engineLock.run(() -> locks.lock(other).isEmpty());
+        assertThat(blocked).isTrue();
+        var after = locks.lock(other); // chạy xong thì khoá được nhả
+        assertThat(after).isPresent();
+        after.get().unlock();
+    }
+
+    /** Phiên đăng nhập nằm ở Redis; nhập sai 5 lần thì khoá 15 phút (đếm ở Redis) */
+    @Test
+    void sessionsAndLoginLockoutInRedis() {
+        assertThat(api.post("/api/password", Map.of("newPassword", "MatKhau@2026")).status()).isEqualTo(200);
+        try {
+            Api stranger = new Api(port);
+            assertThat(stranger.post("/api/login", Map.of("password", "MatKhau@2026")).status()).isEqualTo(200);
+            assertThat(redis.keys("fbads:session:sessions:*")).isNotEmpty();
+
+            redis.delete(redis.keys("fbads:login:*")); // test khác có thể đã nhập sai
+            Api attacker = new Api(port);
+            for (int i = 0; i < 5; i++) assertThat(attacker.post("/api/login", Map.of("password", "sai")).status()).isEqualTo(401);
+            Api.Res locked = attacker.post("/api/login", Map.of("password", "MatKhau@2026"));
+            assertThat(locked.status()).isEqualTo(429);
+            assertThat(locked.body().get("error").asString()).contains("15 phút");
+            String lockKey = redis.keys("fbads:login:lock:*").iterator().next();
+            assertThat(redis.getExpire(lockKey)).isBetween(1L, 900L);
+        } finally {
+            redis.delete(redis.keys("fbads:login:*"));
+            settings.update(s -> s.setPasswordHash(""));
         }
     }
 }

@@ -19,10 +19,18 @@ spring:
       hibernate.jdbc.time_zone: UTC
   flyway:
     enabled: true
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}   # Upstash/Redis có mật khẩu: rediss://default:<mật khẩu>@<host>:6379
   session:
     timeout: 30d
-    jdbc:
-      initialize-schema: never # bảng SPRING_SESSION tạo bằng Flyway (V2)
+    data:
+      redis:
+        repository-type: indexed       # cần tìm phiên theo người dùng (đổi mật khẩu → đăng xuất mọi nơi)
+        namespace: fbads:session
+        configure-action: ${REDIS_CONFIGURE_ACTION:notify-keyspace-events}   # Redis dịch vụ (Upstash…) cấm CONFIG → đặt none
+  cache:
+    type: redis                        # các cache và thời gian giữ: config/CacheConfig
 
 server:
   port: ${PORT:3000}

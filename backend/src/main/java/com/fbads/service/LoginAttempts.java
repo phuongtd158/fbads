@@ -2,23 +2,35 @@ package com.fbads.service;
 
 import com.fbads.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Giới hạn thử sai theo IP: 5 lần sai → khoá 15 phút.
+ * Giới hạn thử sai theo IP: 5 lần sai → khoá 15 phút. Đếm trong Redis nên khởi động lại không mất, chạy nhiều bản vẫn đếm chung:
+ *  - fbads:login:fail:{ip}  INCR mỗi lần sai, tự hết hạn sau 15 phút không sai thêm
+ *  - fbads:login:lock:{ip}  có khoá này = đang bị chặn; TTL của khoá = thời gian còn phải chờ
  * Sau proxy chỉ tin đúng tiêu đề IP của nền tảng đang chạy (Render: cf-connecting-ip), vì nơi khác người dùng có thể tự gửi tiêu đề này.
  */
 @Component
 public class LoginAttempts {
-    private record Fail(int n, long until) {}
+    static final int MAX_FAILS = 5;
+    static final Duration WINDOW = Duration.ofMinutes(15);
 
-    private final Map<String, Fail> fails = new ConcurrentHashMap<>();
     private final AppProperties props;
+    private final StringRedisTemplate redis;
 
-    public LoginAttempts(AppProperties props) { this.props = props; }
+    public LoginAttempts(AppProperties props, StringRedisTemplate redis) {
+        this.props = props;
+        this.redis = redis;
+    }
+
+    private static String failKey(String ip) { return "fbads:login:fail:" + ip; }
+
+    private static String lockKey(String ip) { return "fbads:login:lock:" + ip; }
 
     private String ipHeader() {
         String h = props.clientIpHeader().trim().toLowerCase();
@@ -40,17 +52,22 @@ public class LoginAttempts {
     }
 
     public int lockedMinutes(HttpServletRequest req) {
-        Fail f = fails.get(ipOf(req));
-        long now = System.currentTimeMillis();
-        return f != null && f.until() > now ? (int) Math.ceil((f.until() - now) / 60000.0) : 0;
+        Long ms = redis.getExpire(lockKey(ipOf(req)), TimeUnit.MILLISECONDS);
+        return ms != null && ms > 0 ? (int) Math.ceil(ms / 60000.0) : 0;
     }
 
     public void recordFail(HttpServletRequest req) {
-        fails.compute(ipOf(req), (k, f) -> {
-            int n = (f == null ? 0 : f.n()) + 1;
-            return n >= 5 ? new Fail(0, System.currentTimeMillis() + 15 * 60_000) : new Fail(n, f == null ? 0 : f.until());
-        });
+        String ip = ipOf(req);
+        Long n = redis.opsForValue().increment(failKey(ip));
+        redis.expire(failKey(ip), WINDOW);
+        if (n != null && n >= MAX_FAILS) {
+            redis.opsForValue().set(lockKey(ip), "1", WINDOW);
+            redis.delete(failKey(ip));
+        }
     }
 
-    public void clear(HttpServletRequest req) { fails.remove(ipOf(req)); }
+    public void clear(HttpServletRequest req) {
+        String ip = ipOf(req);
+        redis.delete(List.of(failKey(ip), lockKey(ip)));
+    }
 }

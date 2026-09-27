@@ -57,7 +57,7 @@ public class AuthController {
         return m;
     }
 
-    /** Đăng nhập thành công: lưu SecurityContext vào phiên (Spring Session ghi xuống DB) và đổi mã phiên (chống session fixation) */
+    /** Đăng nhập thành công: lưu SecurityContext vào phiên (Spring Session ghi vào Redis) và đổi mã phiên (chống session fixation) */
     private void signIn(Authentication a, HttpServletRequest req, HttpServletResponse res) {
         req.getSession(true);
         req.changeSessionId();
