@@ -1,7 +1,7 @@
 <script setup>
 import { computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { state, bootstrap, loadObjs, checkConn } from './stores/app'
+import { state, bootstrap, loadObjs, checkConn, noWorkspace } from './stores/app'
 import { startLive, stopLive, onLive } from './lib/live'
 import { palette } from './stores/ui'
 import Sidebar from './components/Sidebar.vue'
@@ -13,6 +13,7 @@ import ConfirmHost from './components/ConfirmHost.vue'
 import ToastHost from './components/ToastHost.vue'
 import TopProgress from './components/TopProgress.vue'
 import LoginView from './views/LoginView.vue'
+import NoWorkspaceView from './views/NoWorkspaceView.vue'
 import Skeleton from './components/Skeleton.vue'
 
 const route = useRoute()
@@ -22,9 +23,10 @@ const showLogin = computed(() => state.ready && state.auth.required && !state.au
 function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (state.auth.authed) palette.value = !palette.value }
 }
-// Realtime: đăng nhập xong thì nối WebSocket. Camp vừa đổi (bởi lịch/rule, người khác, tab khác) thì tải lại
+// Realtime: đăng nhập xong thì nối WebSocket vào kênh của workspace đang chọn; đổi workspace thì nối lại. Camp vừa đổi (bởi lịch/rule, người khác, tab khác) thì tải lại
 // bảng Tổng quan sau 2 giây (gom nhiều thay đổi liền nhau thành 1 lần tải); đang sửa ô nào thì để lượt sau.
-watch(() => state.ready && state.auth.authed, (on) => (on ? startLive() : stopLive()), { immediate: true })
+const liveWs = computed(() => (state.ready && state.auth.authed && state.auth.workspace ? state.auth.workspace.id : null))
+watch(liveWs, (id) => { stopLive(); if (id) startLive(id) }, { immediate: true })
 let objTimer = 0
 const offObjects = onLive('objects', () => {
   clearTimeout(objTimer)
@@ -49,6 +51,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); clearInter
   <TopProgress />
   <div v-if="!state.ready" class="boot"><Skeleton w="220px" h="14px" /></div>
   <LoginView v-else-if="showLogin" />
+  <NoWorkspaceView v-else-if="noWorkspace()" />
   <div v-else class="shell">
     <Sidebar />
     <div class="main">

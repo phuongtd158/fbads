@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, TrendingUp, LogOut, Search, BookOpen } from 'lucide-vue-next'
 import { state, logout } from '../stores/app'
 import { palette, toastError } from '../stores/ui'
+import WorkspaceSwitcher from './WorkspaceSwitcher.vue'
 
 const route = useRoute()
 const nav = computed(() => [
@@ -30,6 +31,7 @@ async function doLogout() { try { await logout() } catch (e) { toastError(e) } }
 <template>
   <aside>
     <div class="brand"><span class="logo"><TrendingUp :size="18" /></span><b>FB Ads Auto</b></div>
+    <WorkspaceSwitcher v-if="state.auth.required" />
 
     <button class="find" @click="palette = true"><Search :size="15" /><span>Tìm nhanh…</span><kbd>Ctrl K</kbd></button>
 

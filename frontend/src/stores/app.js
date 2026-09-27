@@ -3,7 +3,9 @@ import { api, onUnauthorized } from '../lib/api'
 
 export const state = reactive({
   ready: false,
-  auth: { required: false, authed: true, envManaged: false },
+  // required: đã có tài khoản (phải đăng nhập); setup: chưa có tài khoản nào (chế độ mở); signup: được tự đăng ký
+  // workspace: { id, name, role } đang chọn; workspaces: mọi workspace của người này
+  auth: { required: false, authed: true, envManaged: false, setup: false, signup: false, user: null, workspace: null, workspaces: [] },
   settings: {},
   schedules: [],
   rules: [],
@@ -22,6 +24,30 @@ onUnauthorized(() => { state.auth.authed = false })
 
 export async function loadAuth() {
   try { Object.assign(state.auth, await api('auth', 'GET', undefined, { bg: true })) } catch { /* tool tắt */ }
+}
+
+// Vai trò trong workspace đang chọn: VIEWER chỉ xem, EDITOR sửa lịch/rule/camp, OWNER thêm cài đặt và thành viên
+export const role = () => state.auth.workspace?.role || 'OWNER'
+export const canEdit = () => role() !== 'VIEWER'
+export const isOwner = () => role() === 'OWNER'
+// Đã đăng nhập nhưng chưa thuộc workspace nào (bị gỡ khỏi workspace, chưa được mời)
+export const noWorkspace = () => state.auth.required && state.auth.authed && !state.auth.workspace
+
+// Đổi workspace: tải lại toàn bộ dữ liệu (cài đặt, lịch, rule, camp đều là của workspace mới)
+async function reloadAll() {
+  await loadAuth()
+  resetData()
+  if (!noWorkspace()) { await loadState(); checkConn(true) }
+}
+
+export async function switchWorkspace(id) {
+  await api('workspaces/switch', 'POST', { id })
+  await reloadAll()
+}
+
+export async function createWorkspace(name) {
+  await api('workspaces', 'POST', { name })
+  await reloadAll()
 }
 
 export async function loadState() {
@@ -73,7 +99,7 @@ export function resetData() {
 
 export async function bootstrap() {
   await loadAuth()
-  if (!(state.auth.required && !state.auth.authed)) {
+  if (!(state.auth.required && !state.auth.authed) && !noWorkspace()) {
     try { await loadState() } catch { /* hiển thị lỗi qua toast ở nơi gọi */ }
   }
   state.ready = true
@@ -82,15 +108,17 @@ export async function bootstrap() {
 
 export async function afterLogin() {
   // Tải dữ liệu trước, bật giao diện chính sau cùng (loadAuth đặt authed=true) để không bị resetData xoá dở
-  await loadState()
+  const a = await api('auth', 'GET', undefined, { bg: true })
+  if (a.workspace) await loadState()
   resetData()
-  await loadAuth()
-  checkConn()
+  Object.assign(state.auth, a)
+  if (a.workspace) checkConn()
 }
 
 export async function logout() {
   await api('logout', 'POST')
   state.auth.authed = false
+  state.auth.user = null; state.auth.workspace = null; state.auth.workspaces = []
   state.settings = {}; state.schedules = []; state.rules = []
   resetData()
 }

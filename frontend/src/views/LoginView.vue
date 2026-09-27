@@ -1,12 +1,17 @@
 <script setup>
 import { ref } from 'vue'
-import { TrendingUp, Lock, CalendarClock, Zap, BellRing, Eye, EyeOff } from 'lucide-vue-next'
+import { TrendingUp, Lock, UserPlus, CalendarClock, Zap, BellRing, Eye, EyeOff } from 'lucide-vue-next'
 import { api } from '../lib/api'
-import { afterLogin } from '../stores/app'
+import { state, afterLogin } from '../stores/app'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import Btn from '../components/Btn.vue'
 
+// Đăng nhập bằng tên đăng nhập + mật khẩu. Server bật ALLOW_SIGNUP thì có thêm "Đăng ký" (tài khoản + workspace riêng).
+const mode = ref('login') // login | register
+const username = ref('')
 const pw = ref('')
+const name = ref('')
+const wsName = ref('')
 const show = ref(false)
 const err = ref('')
 const input = ref(null)
@@ -14,10 +19,11 @@ const busy = ref(false)
 
 // Chỉ gửi qua sự kiện submit của form (Enter hoặc bấm nút) — tránh gọi hai lần
 async function submit() {
-  if (!pw.value || busy.value) return
+  if (!username.value || !pw.value || busy.value) return
   err.value = ''; busy.value = true
   try {
-    await api('login', 'POST', { password: pw.value })
+    if (mode.value === 'login') await api('login', 'POST', { username: username.value, password: pw.value })
+    else await api('register', 'POST', { username: username.value, password: pw.value, name: name.value, workspaceName: wsName.value })
     await afterLogin()
   } catch (e) {
     err.value = e.message
@@ -25,6 +31,7 @@ async function submit() {
     input.value && input.value.focus()
   } finally { busy.value = false }
 }
+function toggle() { mode.value = mode.value === 'login' ? 'register' : 'login'; err.value = '' }
 const features = [
   { i: CalendarClock, t: 'Hẹn giờ bật/tắt camp', d: 'Không cần dậy sớm nữa — tool chạy đúng giờ thay bạn.' },
   { i: Zap, t: 'Rule theo hiệu quả', d: 'Tự tắt camp CPA cao, tăng ngân sách camp ROAS tốt.' },
@@ -44,15 +51,25 @@ const features = [
     <main>
       <div class="theme"><ThemeToggle /></div>
       <form class="card form" @submit.prevent="submit">
-        <span class="lock"><Lock :size="22" /></span>
-        <h1>Đăng nhập</h1>
-        <p class="muted">Nhập mật khẩu để tiếp tục</p>
+        <span class="lock"><component :is="mode === 'login' ? Lock : UserPlus" :size="22" /></span>
+        <h1>{{ mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản' }}</h1>
+        <p class="muted">{{ mode === 'login' ? 'Nhập tên đăng nhập và mật khẩu để tiếp tục' : 'Bạn sẽ có một workspace riêng để kết nối Facebook của mình' }}</p>
+        <input v-model="username" class="input line" placeholder="Tên đăng nhập" autocomplete="username" autocapitalize="none" autofocus />
+        <template v-if="mode === 'register'">
+          <input v-model="name" class="input line" placeholder="Tên hiển thị (không bắt buộc)" autocomplete="name" />
+          <input v-model="wsName" class="input line" placeholder="Tên workspace, vd. tên cửa hàng (không bắt buộc)" />
+        </template>
         <div class="pw">
-          <input ref="input" v-model="pw" class="input" :type="show ? 'text' : 'password'" placeholder="Mật khẩu" autocomplete="current-password" autofocus />
+          <input ref="input" v-model="pw" class="input" :type="show ? 'text' : 'password'" placeholder="Mật khẩu" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" />
           <button type="button" class="eye" :aria-label="show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" @click="show = !show"><component :is="show ? EyeOff : Eye" :size="18" /></button>
         </div>
         <p class="err" :class="{ on: err }" role="alert">{{ err }}</p>
-        <Btn type="submit" variant="primary" size="lg" block :loading="busy">Đăng nhập</Btn>
+        <Btn type="submit" variant="primary" size="lg" block :loading="busy">{{ mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản' }}</Btn>
+        <p v-if="state.auth.signup" class="switch">
+          {{ mode === 'login' ? 'Chưa có tài khoản?' : 'Đã có tài khoản?' }}
+          <button type="button" class="link" @click="toggle">{{ mode === 'login' ? 'Đăng ký' : 'Đăng nhập' }}</button>
+        </p>
+        <p v-else class="switch faint">Chưa có tài khoản? Nhờ chủ workspace thêm bạn vào.</p>
       </form>
     </main>
   </div>
@@ -77,7 +94,10 @@ main { position: relative; display: grid; place-items: center; padding: 28px; }
 .lock { width: 52px; height: 52px; border-radius: 17px; display: grid; place-items: center; margin: 0 auto 16px; background: var(--accent-soft); color: var(--accent); }
 h1 { font-size: 26px; letter-spacing: -.03em; }
 .form > p.muted { margin: 4px 0 24px; }
+.line { margin-bottom: 12px; padding-top: 12px; padding-bottom: 12px; }
 .pw { position: relative; }
+.switch { margin-top: 16px; font-size: 14px; color: var(--text-2); }
+.link { border: 0; background: none; color: var(--accent); font-weight: 600; padding: 0; }
 .pw .input { padding-right: 46px; padding-top: 12px; padding-bottom: 12px; }
 .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; background: none; color: var(--text-3); border-radius: 10px; display: grid; place-items: center; }
 .eye:hover { color: var(--text); background: var(--surface-3); }

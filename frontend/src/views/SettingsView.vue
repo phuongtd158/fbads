@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target, Users } from 'lucide-vue-next'
 import ConnectionPanel from './settings/ConnectionPanel.vue'
 import ModePanel from './settings/ModePanel.vue'
 import ProtectPanel from './settings/ProtectPanel.vue'
@@ -10,6 +10,7 @@ import TelegramPanel from './settings/TelegramPanel.vue'
 import GeneralPanel from './settings/GeneralPanel.vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
 import SecurityPanel from './settings/SecurityPanel.vue'
+import MembersPanel from './settings/MembersPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,6 +22,7 @@ const tabs = [
   { v: 'telegram', label: 'Telegram', icon: Send, comp: TelegramPanel },
   { v: 'general', label: 'Chung', icon: SlidersHorizontal, comp: GeneralPanel },
   { v: 'appearance', label: 'Giao diện', icon: Palette, comp: AppearancePanel },
+  { v: 'members', label: 'Thành viên', icon: Users, comp: MembersPanel },
   { v: 'security', label: 'Bảo mật', icon: Lock, comp: SecurityPanel },
 ]
 const tab = computed(() => tabs.find((t) => t.v === route.params.tab) || tabs[0])
