@@ -3,11 +3,13 @@ package com.fbads;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
 import com.fbads.event.AppEvent;
-import com.fbads.event.EventBus;
 import com.fbads.event.EventTopics;
 import com.fbads.service.EventStatsService;
+import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
+import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -41,7 +43,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +62,8 @@ import static org.awaitility.Awaitility.await;
 
 /**
  * Bật Kafka thật (Testcontainers): một sự kiện được cả 3 consumer nhận (Telegram, thống kê, WebSocket),
- * gửi Telegram lỗi thì thử lại qua topic riêng rồi vào DLT, sự kiện nhận trùng chỉ đếm một lần.
+ * gửi Telegram lỗi thì thử lại qua topic riêng rồi vào DLT, sự kiện nhận trùng chỉ đếm và gửi Telegram một lần,
+ * bản ghi hỏng bị bỏ qua ngay.
  * Thời gian chờ giữa các lần thử rút xuống 300 ms cho test nhanh.
  */
 @Testcontainers
@@ -86,8 +92,6 @@ class KafkaEventsTest {
     @Autowired
     ActionExecutor executor;
     @Autowired
-    EventBus events;
-    @Autowired
     TelegramService telegram;
     @Autowired
     SettingsService settings;
@@ -101,6 +105,8 @@ class KafkaEventsTest {
     StringRedisTemplate redis;
     @Autowired
     JsonMapper json;
+    @Autowired
+    ReportService reports;
 
     @BeforeAll
     static void startStub() throws Exception { tg = new TelegramStub(); }
@@ -128,13 +134,7 @@ class KafkaEventsTest {
         StompSession ws = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
         try {
             BlockingQueue<String> live = new LinkedBlockingQueue<>();
-            ws.subscribe("/topic/logs", new StompFrameHandler() {
-                @Override
-                public Type getPayloadType(StompHeaders headers) { return String.class; }
-
-                @Override
-                public void handleFrame(StompHeaders headers, Object payload) { live.add((String) payload); }
-            });
+            ws.subscribe("/topic/logs", collect(live));
             Thread.sleep(300);
             String today = clock.now().date();
             int before = actions(today, "rule");
@@ -142,15 +142,16 @@ class KafkaEventsTest {
 
             String logId = executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule · CPA cao"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
 
-            // sự kiện nằm trên topic fbads.events, khoá = mã dòng nhật ký, có cờ gửi Telegram
+            // sự kiện nằm trên topic fbads.events, có cờ gửi Telegram
             ConsumerRecord<String, String> rec = find(EventTopics.EVENTS, r -> r.value().contains(logId));
-            assertThat(rec.key()).isEqualTo(logId);
+            assertThat(rec.key()).isEqualTo("logs"); // mọi sự kiện nhật ký chung một khoá → đúng thứ tự
             JsonNode ev = json.readTree(rec.value());
             assertThat(ev.get("type").asString()).isEqualTo(AppEvent.LOG_CREATED);
             assertThat(ev.get("telegram").asBoolean()).isTrue();
 
-            // 1) Telegram
-            await().atMost(Duration.ofSeconds(20)).until(() -> tg.count("✅ <b>Rule · CPA cao</b>\n" + name + ": Đã tắt") == 1);
+            // 1) Telegram, đúng một lần
+            String text = "✅ <b>Rule · CPA cao</b>\n" + name + ": Đã tắt";
+            await().atMost(Duration.ofSeconds(20)).until(() -> tg.count(text) == 1);
             // 2) thống kê
             await().atMost(Duration.ofSeconds(20)).until(() -> actions(today, "rule") == before + 1);
             // 3) WebSocket: đi qua Kafka, không qua Redis pub/sub
@@ -158,14 +159,85 @@ class KafkaEventsTest {
             assertThat(pushed).isNotNull();
             assertThat(json.readTree(pushed).get("id").asString()).isEqualTo(logId);
             assertThat(redisSubscribers("fbads:live")).isZero();
+            // consumer WebSocket không lưu vị trí đã đọc (group chỉ sống cùng lần chạy này)
+            try (Admin admin = Admin.create(Map.of(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers()))) {
+                String liveGroup = listeners.getListenerContainer("fbads-live").getGroupId();
+                assertThat(liveGroup).startsWith("fbads-live-");
+                assertThat(admin.listConsumerGroupOffsets(liveGroup).partitionsToOffsetAndMetadata().get(10, TimeUnit.SECONDS)).isEmpty();
+            }
+            Thread.sleep(1500);
+            assertThat(tg.count(text)).isEqualTo(1);
         } finally {
             ws.disconnect();
         }
+    }
 
-        // báo cáo hằng ngày cũng đi qua consumer Telegram
-        String report = "📊 <b>Báo cáo Facebook Ads</b>\n" + UUID.randomUUID();
-        events.publish(AppEvent.DAILY_REPORT, "report", true, Map.of("text", report));
-        await().atMost(Duration.ofSeconds(20)).until(() -> tg.count(report) == 1);
+    /** Báo cáo hằng ngày: engine tới giờ thì phát report.daily, consumer Telegram gửi; lượt sau cùng ngày không gửi lại */
+    @Test
+    void dailyReportGoesThroughKafka() throws Exception {
+        String before = settings.get().getReportTime();
+        settings.update(s -> s.setReportTime("08:00"));
+        clock.setClock(Clock.fixed(Instant.parse("2031-03-04T01:02:00Z"), ZoneOffset.UTC)); // 08:02 giờ Việt Nam
+        try {
+            reports.tick();
+            reports.tick();
+            await().atMost(Duration.ofSeconds(20)).until(() -> reportsSent() == 1);
+            Thread.sleep(1500);
+            assertThat(reportsSent()).isEqualTo(1);
+            ConsumerRecord<String, String> rec = find(EventTopics.EVENTS, r -> r.value().contains(AppEvent.DAILY_REPORT));
+            assertThat(json.readTree(rec.value()).get("telegram").asBoolean()).isTrue();
+        } finally {
+            clock.setClock(Clock.systemUTC());
+            settings.update(s -> s.setReportTime(before));
+        }
+    }
+
+    /** Đổi ngân sách qua API: log.created (thao tác tay, không báo Telegram) và objects.changed đều lên Kafka, giao diện nhận cả hai */
+    @Test
+    void manualChangeReachesUiThroughKafka() throws Exception {
+        WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
+        client.setMessageConverter(new StringMessageConverter());
+        StompSession ws = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+        try {
+            BlockingQueue<String> objects = new LinkedBlockingQueue<>();
+            BlockingQueue<String> logs = new LinkedBlockingQueue<>();
+            ws.subscribe("/topic/objects", collect(objects));
+            ws.subscribe("/topic/logs", collect(logs));
+            Thread.sleep(300);
+            String today = clock.now().date();
+            int before = actions(today, "manual");
+
+            Api api = new Api(port);
+            assertThat(api.post("/api/objects/mock_2/budget", Map.of("amount", 444000, "name", "Camp 2")).status()).isEqualTo(200);
+
+            find(EventTopics.EVENTS, r -> r.value().contains(AppEvent.OBJECTS_CHANGED) && r.value().contains("mock_2"));
+            String obj = objects.poll(20, TimeUnit.SECONDS);
+            assertThat(obj).isNotNull();
+            assertThat(json.readTree(obj).get("id").asString()).isEqualTo("mock_2");
+            String line = logs.poll(20, TimeUnit.SECONDS);
+            assertThat(line).isNotNull();
+            assertThat(json.readTree(line).get("kind").asString()).isEqualTo("manual");
+            await().atMost(Duration.ofSeconds(20)).until(() -> actions(today, "manual") == before + 1);
+        } finally {
+            ws.disconnect();
+        }
+    }
+
+    /** Bản ghi không đọc được: thống kê và WebSocket bỏ qua ngay (không chặn bản ghi sau), Telegram đưa thẳng vào DLT */
+    @Test
+    void badRecordsAreSkipped() {
+        String today = clock.now().date();
+        String source = "bad" + UUID.randomUUID().toString().substring(0, 8);
+        String broken = "không phải JSON " + UUID.randomUUID();
+        kafkaTemplate.send(EventTopics.EVENTS, "bad", broken);
+        kafkaTemplate.send(EventTopics.EVENTS, "bad", "{}");
+        kafkaTemplate.send(EventTopics.EVENTS, "bad", "null");
+        kafkaTemplate.send(EventTopics.EVENTS, "bad", eventJson(UUID.randomUUID().toString(), source, false));
+
+        // trước đây mỗi bản ghi hỏng bị thử lại 5 lần × 2 giây
+        await().atMost(Duration.ofSeconds(5)).until(() -> actions(today, source) == 1);
+        ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().equals(broken));
+        assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("BadEventException");
     }
 
     /** Telegram lỗi tạm thời (500): thử đủ 3 lần (1 + 2 lần qua topic thử lại) rồi vào DLT */
@@ -194,24 +266,39 @@ class KafkaEventsTest {
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã tắt")).isEqualTo(1);
     }
 
-    /** Kafka có thể giao một sự kiện 2 lần: thống kê chỉ đếm một lần */
+    /** Kafka có thể giao một sự kiện 2 lần: thống kê chỉ đếm một lần, Telegram chỉ gửi một lần */
     @Test
-    void duplicateDeliveryIsCountedOnce() {
+    void duplicateDeliveryIsHandledOnce() {
         String today = clock.now().date();
         String source = "dup" + UUID.randomUUID().toString().substring(0, 8);
-        String dup = eventJson(UUID.randomUUID().toString(), source);
+        String dup = eventJson(UUID.randomUUID().toString(), source, true);
         kafkaTemplate.send(EventTopics.EVENTS, "dup", dup);
         kafkaTemplate.send(EventTopics.EVENTS, "dup", dup);
         // cùng khoá → cùng partition → sự kiện đánh dấu này được đọc sau 2 bản trùng
-        kafkaTemplate.send(EventTopics.EVENTS, "dup", eventJson(UUID.randomUUID().toString(), source + "-end"));
+        kafkaTemplate.send(EventTopics.EVENTS, "dup", eventJson(UUID.randomUUID().toString(), source + "-end", true));
 
-        await().atMost(Duration.ofSeconds(20)).until(() -> actions(today, source + "-end") == 1);
+        await().atMost(Duration.ofSeconds(20)).until(() -> actions(today, source + "-end") == 1 && tg.count(textOf(source + "-end")) == 1);
         assertThat(actions(today, source)).isEqualTo(1);
+        assertThat(tg.count(textOf(source))).isEqualTo(1);
     }
 
-    private String eventJson(String id, String kind) {
-        return json.writeValueAsString(new AppEvent(id, AppEvent.LOG_CREATED, "dup", clock.millis(), false,
-                json.valueToTree(Map.of("id", "x", "kind", kind))));
+    private String eventJson(String id, String kind, boolean telegram) {
+        return json.writeValueAsString(new AppEvent(id, AppEvent.LOG_CREATED, "dup", clock.millis(), telegram,
+                json.valueToTree(Map.of("id", "x", "kind", kind, "source", "Lịch", "name", kind, "detail", "Đã tắt"))));
+    }
+
+    private static String textOf(String name) { return "✅ <b>Lịch</b>\n" + name + ": Đã tắt"; }
+
+    private long reportsSent() { return tg.texts.stream().filter(t -> t.startsWith("📊 <b>Báo cáo Facebook Ads</b>")).count(); }
+
+    private static StompFrameHandler collect(BlockingQueue<String> into) {
+        return new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) { return String.class; }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) { into.add((String) payload); }
+        };
     }
 
     private int actions(String day, String source) {

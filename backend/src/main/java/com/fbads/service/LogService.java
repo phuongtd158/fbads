@@ -19,6 +19,8 @@ import java.util.function.Consumer;
 @Service
 public class LogService {
     public static final int KEEP = 1000;
+    /** Mọi sự kiện nhật ký dùng chung khoá này → cùng một partition Kafka → Telegram và giao diện nhận đúng thứ tự ghi */
+    static final String EVENT_KEY = "logs";
 
     private final LogRepository repo;
     private final EventBus events;
@@ -42,7 +44,7 @@ public class LogService {
         e.setId(Ids.uid());
         e.setTs(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         LogEntry saved = repo.save(e);
-        events.publish(AppEvent.LOG_CREATED, saved.getId(), notify, saved);
+        events.publish(AppEvent.LOG_CREATED, EVENT_KEY, notify, saved);
         if (sinceTrim.incrementAndGet() >= 50) trim();
         return saved;
     }
@@ -62,7 +64,7 @@ public class LogService {
     /** Sửa dòng đã có (vd. đánh dấu đã hoàn tác): giao diện nhận bản mới qua WebSocket, thay theo id */
     public LogEntry save(LogEntry e) {
         LogEntry saved = repo.save(e);
-        events.publish(AppEvent.LOG_UPDATED, saved.getId(), false, saved);
+        events.publish(AppEvent.LOG_UPDATED, EVENT_KEY, false, saved);
         return saved;
     }
 }

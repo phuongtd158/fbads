@@ -7,6 +7,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineLock;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
+import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
 import net.javacrumbs.shedlock.core.LockConfiguration;
@@ -35,8 +36,10 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import java.lang.reflect.Type;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -83,6 +86,8 @@ class ApiIntegrationTest {
     EventStatsService stats;
     @Autowired
     EngineClock clock;
+    @Autowired
+    ReportService reports;
     Api api;
 
     @BeforeEach
@@ -287,6 +292,7 @@ class ApiIntegrationTest {
             settings.update(s -> { s.setTelegramToken("123:abc"); s.setTelegramChatId("111"); });
             String today = clock.now().date();
             int before = actions(today, "schedule");
+            int manualBefore = actions(today, "manual");
 
             executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch · Tắt đêm"); e.setName("Camp 1"); e.setDetail("Đã tắt"); });
             assertThat(tg.texts).containsExactly("✅ <b>Lịch · Tắt đêm</b>\nCamp 1: Đã tắt");
@@ -295,11 +301,22 @@ class ApiIntegrationTest {
             logs.log(e -> { e.setKind("manual"); e.setSource("Thủ công"); e.setName("Camp 1"); e.setDetail("Tắt"); });
             assertThat(tg.texts).hasSize(1); // im lặng và thao tác tay: không báo
             assertThat(actions(today, "schedule")).isEqualTo(before + 2);
+            assertThat(actions(today, "manual")).isEqualTo(manualBefore + 1);
 
             tg.status = 500; // Telegram lỗi: không có Kafka để thử lại, chỉ ghi log, việc ghi nhật ký vẫn xong
             assertThat(executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule"); e.setName("Camp 2"); e.setDetail("Đã tắt"); }).getId()).isNotNull();
             assertThat(tg.texts).hasSize(2);
+
+            // báo cáo hằng ngày: tới giờ thì gửi, lượt sau cùng ngày không gửi lại
+            tg.status = 200;
+            settings.update(s -> s.setReportTime("08:00"));
+            clock.setClock(Clock.fixed(Instant.parse("2031-03-04T01:02:00Z"), ZoneOffset.UTC)); // 08:02 giờ Việt Nam
+            reports.tick();
+            reports.tick();
+            assertThat(tg.texts).hasSize(3);
+            assertThat(tg.texts.get(2)).startsWith("📊 <b>Báo cáo Facebook Ads</b>");
         } finally {
+            clock.setClock(Clock.systemUTC());
             settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
             telegram.setApiBase("https://api.telegram.org");
         }

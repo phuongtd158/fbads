@@ -6,14 +6,14 @@ Nhánh này là bản học **Spring Boot**. Bản Node.js đang chạy thật n
 
 | Thư mục | Nội dung |
 |---|---|
-| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MariaDB, cache/phiên/realtime qua Redis. Chi tiết trong [backend/README.md](backend/README.md) |
+| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MariaDB, cache/phiên/realtime qua Redis, sự kiện qua Kafka (tuỳ chọn). Chi tiết trong [backend/README.md](backend/README.md) |
 | `frontend/` | Vue 3 + Vite, nhận cập nhật realtime qua WebSocket |
 
 ## Chạy nhanh bằng Docker
 ```bash
 APP_PASSWORD='MatKhau@2026' docker compose up --build
 ```
-Mở http://localhost:3000 và đăng nhập bằng mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB và Redis.
+Mở http://localhost:3000 và đăng nhập bằng mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB, Redis và Kafka.
 
 ## Chạy khi đang code
 Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
@@ -29,6 +29,8 @@ Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
    cd backend
    mvn spring-boot:run        # API ở http://127.0.0.1:3000
    ```
+   Muốn thử Kafka: `docker run -d --name fbads-kafka -p 127.0.0.1:9092:9092 apache/kafka:4.2.0` rồi chạy backend với `KAFKA_ENABLED=true`
+   (xem [backend/README.md](backend/README.md#sự-kiện-và-kafka)).
 3. Frontend (cửa sổ 2):
    ```bash
    cd frontend
@@ -39,7 +41,7 @@ Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
 Sửa giao diện là thấy ngay, không cần build. Muốn backend tự phục vụ giao diện ở cổng 3000 thì chạy `npm run build` trong `frontend/` (ra `frontend/dist`).
 
 ## Test
-- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MariaDB và Redis thật.
+- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MariaDB, MySQL 8, Redis và Kafka thật.
 - Frontend: `cd frontend && npm test`. Kiểm tra các luật dùng chung ở `frontend/src/shared/` (kiểm tra dữ liệu, tiền, ngày…).
 
 ## Tính năng

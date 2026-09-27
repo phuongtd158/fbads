@@ -35,11 +35,14 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:                          # khoá và nội dung là chuỗi (JSON do app tự viết/đọc, xem event/AppEvent)
       properties:
-        max.block.ms: 3000             # Kafka không chạy: chờ tối đa 3 giây rồi bỏ, không treo engine
+        max.block.ms: 3000             # Kafka không chạy: mỗi sự kiện chờ tối đa 3 giây rồi bỏ (trên luồng gửi riêng, engine không phải chờ)
         request.timeout.ms: 10000
         delivery.timeout.ms: 30000
     consumer:
       auto-offset-reset: earliest      # group mới đọc từ đầu topic (không sót sự kiện phát lúc consumer chưa chạy)
+    admin:
+      fail-fast: true                  # KAFKA_ENABLED=true mà Kafka chưa chạy: dừng khởi động và báo lỗi rõ, không chạy khi chưa có topic
+      operation-timeout: 15s
 
 server:
   port: ${PORT:3000}
@@ -84,7 +87,7 @@ fbads:
     enabled: ${ENGINE_ENABLED:true}
     tick-ms: 30000
   kafka:
-    enabled: ${KAFKA_ENABLED:false}              # false: sự kiện đi bằng Spring events trong ứng dụng (không cần Kafka)
+    enabled: ${KAFKA_ENABLED:false}              # chỉ "true" mới bật Kafka; giá trị khác: sự kiện đi bằng Spring events trong ứng dụng
     telegram:
       attempts: 4                                # gửi Telegram: 1 lần + 3 lần thử lại (5 giây, 15 giây, 45 giây) rồi vào DLT
       backoff-ms: 5000

@@ -9,7 +9,7 @@ import tools.jackson.databind.JsonNode;
  *
  * @param id     mã duy nhất (UUID): consumer dùng để bỏ qua bản nhận trùng (Kafka giao "ít nhất một lần")
  * @param type   loại sự kiện, xem các hằng bên dưới
- * @param key    khoá phân vùng Kafka: cùng khoá → cùng partition → nhận đúng thứ tự (vd. các sự kiện của cùng một dòng nhật ký)
+ * @param key    khoá phân vùng Kafka: cùng khoá → cùng partition → nhận đúng thứ tự (vd. mọi sự kiện nhật ký dùng khoá "logs")
  * @param at     thời điểm phát (epoch ms)
  * @param telegram true = gửi Telegram cho sự kiện này
  * @param data   nội dung (dòng nhật ký, {id} của camp…), đúng dạng JSON mà giao diện đang nhận

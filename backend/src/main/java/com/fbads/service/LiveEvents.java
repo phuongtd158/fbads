@@ -38,6 +38,7 @@ public class LiveEvents {
 
     /** Kênh STOMP của loại sự kiện, null = giao diện không cần */
     static String topicOf(String type) {
+        if (type == null) return null;
         return switch (type) {
             case AppEvent.LOG_CREATED, AppEvent.LOG_UPDATED -> "logs";
             case AppEvent.OBJECTS_CHANGED -> "objects";

@@ -5,7 +5,7 @@ import com.fbads.service.LiveEvents;
 import com.fbads.service.TelegramNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.kafka.annotation.BackOff;
 import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,15 +20,17 @@ import tools.jackson.databind.json.JsonMapper;
  * Các consumer đọc topic fbads.events khi bật Kafka. Mỗi consumer một group id riêng: Kafka giao mọi bản ghi
  * cho từng group, nên thêm consumer mới không ảnh hưởng consumer cũ.
  *
- *  - fbads-telegram: gửi Telegram. Lỗi tạm thời → bản ghi chuyển sang topic thử lại fbads.events-telegram-retry-0, -1…
- *    (chờ tăng dần), hết lượt → fbads.events-telegram-dlt. Lỗi cố định (token/chat id sai) → vào thẳng DLT.
- *    Thử lại bằng topic riêng nên một tin lỗi không chặn các tin sau.
+ *  - fbads-telegram: gửi Telegram, mỗi sự kiện một lần (TelegramNotifier.handleOnce). Lỗi tạm thời → bản ghi chuyển sang
+ *    topic thử lại fbads.events-telegram-retry-0, -1… (chờ tăng dần), hết lượt → fbads.events-telegram-dlt.
+ *    Lỗi cố định (token/chat id sai) hoặc bản ghi hỏng → vào thẳng DLT.
+ *    Thử lại bằng topic riêng nên một tin lỗi không chặn các tin sau; đổi lại, tin được thử lại sẽ đến sau các tin phát sau nó.
  *  - fbads-stats: đếm thao tác theo ngày. Nhiều bản tool dùng chung group này → mỗi sự kiện chỉ đếm một lần.
  *  - fbads-live-{ngẫu nhiên}: đẩy xuống trình duyệt. Mỗi bản tool một group riêng → bản nào cũng nhận đủ,
- *    vì trình duyệt có thể nối vào bất kỳ bản nào. Chỉ đọc sự kiện mới (latest): sự kiện cũ không còn ý nghĩa với giao diện.
+ *    vì trình duyệt có thể nối vào bất kỳ bản nào. Chỉ đọc sự kiện mới (latest) và không lưu vị trí đã đọc:
+ *    sự kiện cũ không còn ý nghĩa với giao diện.
  */
 @Component
-@ConditionalOnProperty(name = "fbads.kafka.enabled", havingValue = "true")
+@Conditional(KafkaMode.On.class)
 public class KafkaEventListeners {
     private static final Logger log = LoggerFactory.getLogger(KafkaEventListeners.class);
 
@@ -44,17 +46,20 @@ public class KafkaEventListeners {
         this.json = json;
     }
 
-    /** Bản ghi không đọc được thì thử lại cũng vô ích → vào thẳng DLT (Telegram) hoặc bỏ qua (consumer khác) */
+    /** Bản ghi không đọc được: thử lại cũng vô ích → vào thẳng DLT (Telegram) hoặc bỏ qua (thống kê, WebSocket) */
     static class BadEventException extends RuntimeException {
-        BadEventException(Throwable cause) { super("Sự kiện không đọc được: " + cause.getMessage(), cause); }
+        BadEventException(String why, Throwable cause) { super("Sự kiện không đọc được: " + why, cause); }
     }
 
-    private AppEvent parse(String payload) {
+    AppEvent parse(String payload) {
+        AppEvent e;
         try {
-            return json.readValue(payload, AppEvent.class);
-        } catch (RuntimeException e) {
-            throw new BadEventException(e);
+            e = json.readValue(payload, AppEvent.class);
+        } catch (RuntimeException ex) {
+            throw new BadEventException(ex.getMessage(), ex);
         }
+        if (e == null || e.id() == null || e.type() == null) throw new BadEventException("thiếu id hoặc type", null);
+        return e;
     }
 
     @RetryableTopic(
@@ -64,17 +69,25 @@ public class KafkaEventListeners {
             dltTopicSuffix = EventTopics.TELEGRAM_DLT_SUFFIX,
             topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
             exclude = {TelegramNotifier.PermanentFailure.class, BadEventException.class},
-            numPartitions = "1",
+            numPartitions = EventTopics.PARTITIONS + "",
             replicationFactor = "1")
-    @KafkaListener(id = "fbads-telegram", groupId = "fbads-telegram", topics = EventTopics.EVENTS)
+    // RECORD: báo đã đọc sau từng tin, tool chết giữa chừng thì ít tin phải đọc lại (tin đã gửi vẫn không gửi lại, xem handleOnce)
+    @KafkaListener(id = "fbads-telegram", groupId = "fbads-telegram", topics = EventTopics.EVENTS, ackMode = "RECORD")
     public void telegram(String payload) {
-        telegram.handle(parse(payload));
+        telegram.handleOnce(parse(payload));
     }
 
-    /** Tin Telegram đã hết lượt thử (hoặc lỗi cố định): nằm lại ở topic DLT để xem sau, ở đây chỉ ghi log */
+    /** Tin Telegram đã hết lượt thử (hoặc lỗi cố định): nằm lại ở topic DLT để xem sau, ở đây chỉ ghi log (không kèm nội dung tin) */
     @DltHandler
     public void telegramFailed(String payload, @Header(name = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String error) {
-        log.error("Bỏ tin Telegram sau khi thử lại không được: {} — sự kiện: {}", error, payload);
+        String what;
+        try {
+            AppEvent e = parse(payload);
+            what = e.type() + " " + e.id();
+        } catch (BadEventException ex) {
+            what = "hỏng, " + payload.length() + " byte";
+        }
+        log.error("Bỏ tin Telegram (sự kiện {}) sau khi thử lại không được: {}. Bản ghi còn ở topic {}", what, error, EventTopics.TELEGRAM_DLT);
     }
 
     @KafkaListener(id = "fbads-stats", groupId = "fbads-stats", topics = EventTopics.EVENTS)
@@ -82,9 +95,17 @@ public class KafkaEventListeners {
         stats.handle(parse(payload));
     }
 
+    /**
+     * Lỗi thì chỉ ghi log: đẩy lại một cập nhật giao diện cũ là vô ích (giao diện vẫn tự làm mới định kỳ).
+     * MANUAL mà không bao giờ báo đã đọc + neverCommit (KafkaEvents): group này không lưu vị trí nào.
+     */
     @KafkaListener(id = "fbads-live", groupId = "fbads-live-#{T(java.util.UUID).randomUUID()}", topics = EventTopics.EVENTS,
-            properties = "auto.offset.reset=latest")
+            properties = "auto.offset.reset=latest", ackMode = "MANUAL", containerPostProcessor = "neverCommit")
     public void live(String payload) {
-        live.deliver(parse(payload));
+        try {
+            live.deliver(parse(payload));
+        } catch (RuntimeException ex) {
+            log.warn("Không đẩy được sự kiện xuống giao diện: {}", ex.getMessage());
+        }
     }
 }

@@ -1,8 +1,13 @@
 package com.fbads.service;
 
 import com.fbads.event.AppEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
+
+import java.time.Duration;
 
 /**
  * Consumer "Telegram": nhận sự kiện, sự kiện nào cần báo thì soạn tin và gửi.
@@ -23,13 +28,63 @@ public class TelegramNotifier {
         public PermanentFailure(String message) { super(message); }
     }
 
-    private final TelegramService telegram;
+    /** Dấu "đã gửi" của từng sự kiện trong Redis: fbads:tg:{id}, giữ 2 ngày */
+    static final String SENT_PREFIX = "fbads:tg:";
+    private static final Duration SENT_KEEP = Duration.ofDays(2);
+    private static final Logger log = LoggerFactory.getLogger(TelegramNotifier.class);
 
-    public TelegramNotifier(TelegramService telegram) { this.telegram = telegram; }
+    private final TelegramService telegram;
+    private final StringRedisTemplate redis;
+
+    public TelegramNotifier(TelegramService telegram, StringRedisTemplate redis) {
+        this.telegram = telegram;
+        this.redis = redis;
+    }
 
     public void handle(AppEvent e) {
         String text = textOf(e);
+        if (text != null) send(text);
+    }
+
+    /**
+     * Như handle(), nhưng mỗi sự kiện chỉ gửi một lần dù Kafka giao lại (tool chết trước khi kịp báo đã đọc…).
+     * Đặt dấu "đã gửi" trong Redis trước khi gửi (SET NX); gửi lỗi thì xoá dấu để lượt thử lại gửi được.
+     * Redis lỗi thì vẫn gửi: thà trùng tin còn hơn mất tin.
+     */
+    public void handleOnce(AppEvent e) {
+        String text = textOf(e);
         if (text == null) return;
+        String key = SENT_PREFIX + e.id();
+        if (!claim(key)) {
+            log.info("Bỏ qua tin Telegram đã gửi (sự kiện {})", e.id());
+            return;
+        }
+        try {
+            send(text);
+        } catch (RuntimeException ex) {
+            release(key);
+            throw ex;
+        }
+    }
+
+    private boolean claim(String key) {
+        try {
+            return !Boolean.FALSE.equals(redis.opsForValue().setIfAbsent(key, "1", SENT_KEEP));
+        } catch (RuntimeException ex) {
+            log.warn("Không kiểm tra được tin Telegram đã gửi chưa (Redis lỗi), vẫn gửi: {}", ex.getMessage());
+            return true;
+        }
+    }
+
+    private void release(String key) {
+        try {
+            redis.delete(key);
+        } catch (RuntimeException ex) {
+            log.warn("Không xoá được dấu đã gửi {} (Redis lỗi), lượt thử lại sẽ bỏ qua tin này: {}", key, ex.getMessage());
+        }
+    }
+
+    private void send(String text) {
         TelegramService.SendResult r = telegram.send(text);
         // chưa cài Telegram, hoặc ít nhất một người đã nhận: xong (không gửi lại cho người đã nhận)
         if (!r.configured() || r.anyOk()) return;

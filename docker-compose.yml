@@ -72,7 +72,7 @@ services:
       DB_USER: fbads
       DB_PASSWORD: ${DB_PASSWORD:-fbads}
       REDIS_URL: redis://redis:6379
-      KAFKA_ENABLED: "true"
+      KAFKA_ENABLED: ${KAFKA_ENABLED:-true}
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # Trong container tool nghe ở 0.0.0.0 nên bắt buộc có mật khẩu đăng nhập
       APP_PASSWORD: ${APP_PASSWORD:?Hãy đặt APP_PASSWORD, ví dụ APP_PASSWORD=MatKhau@2026 docker compose up}
