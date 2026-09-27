@@ -97,6 +97,12 @@ fbads:
     upstash-url: ${UPSTASH_REDIS_REST_URL:}
     upstash-token: ${UPSTASH_REDIS_REST_TOKEN:}
     data-key: ${DATA_KEY:}
+  logging:                                       # log chi tiết (xem README "Xem log chi tiết"); profile dev bật hết
+    controller: ${LOG_CONTROLLER:false}          # method được gọi, tham số, kết quả, thời gian ở từng tầng
+    service: ${LOG_SERVICE:false}
+    engine: ${LOG_ENGINE:false}
+    repository: ${LOG_REPOSITORY:false}
+    sql: ${LOG_SQL:false}                        # câu SQL Hibernate chạy, kèm giá trị tham số
 
 logging:
   level:

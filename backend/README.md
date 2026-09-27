@@ -37,6 +37,8 @@ Những gì được nhập:
 | `ENGINE_ENABLED` | `true` | Tắt vòng chạy lịch/rule (dùng khi test) |
 | `KAFKA_ENABLED` | `false` | `true`: sự kiện đi qua Kafka (xem dưới). Giá trị khác: đi bằng Spring events, không cần Kafka |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Địa chỉ Kafka, chỉ dùng khi `KAFKA_ENABLED=true` |
+| `SPRING_PROFILES_ACTIVE` | | `dev`: bật log chi tiết ở mọi tầng và log SQL (xem "Xem log chi tiết") |
+| `LOG_CONTROLLER`, `LOG_SERVICE`, `LOG_ENGINE`, `LOG_REPOSITORY`, `LOG_SQL` | `false` (profile `dev`: `true`) | Bật/tắt log chi tiết từng tầng |
 
 ### Dùng MySQL 8 thay MariaDB
 
@@ -91,6 +93,37 @@ SELECT * FROM event_stats ORDER BY day DESC, source;
 
 Chạy bằng `docker compose` thì Kafka đã bật sẵn, và nghe thêm ở `localhost:9094` để xem topic từ ngoài Docker. Tắt Kafka: `KAFKA_ENABLED=false docker compose up`.
 
+## Xem log chi tiết
+
+Để học và gỡ lỗi: xem method nào được gọi, với tham số gì, trả về gì, mất bao lâu, và câu SQL nào chạy xuống DB.
+Nhanh nhất là chạy với profile `dev` (IntelliJ: Environment variables `SPRING_PROFILES_ACTIVE=dev`), profile này bật hết:
+
+```
+fbads.calls.controller : → ObjectsController.budget(id="mock_1", b={"amount":510000,"name":"Camp 1"})
+fbads.calls.service    :   → ObjectService.setBudget(id="mock_1", amount=510000.0, name="Camp 1")
+fbads.calls.repository :     → LogRepository.save(entity={"kind":"manual","name":"Camp 1",…})
+org.hibernate.SQL      :       insert into logs (…) values (?, ?, …)
+org.hibernate.orm.jdbc.bind : binding parameter (1:VARCHAR) <- [manual]
+fbads.calls.repository :     ← LogRepository.save 6 ms: {…}
+fbads.calls.service    :   ← ObjectService.setBudget 18 ms
+```
+
+| Cờ | Tầng | Ghi gì |
+|---|---|---|
+| `LOG_CONTROLLER` | `controller/` | Request vào API nào, tham số |
+| `LOG_SERVICE` | `service/` | Nghiệp vụ, Telegram, Facebook, sự kiện |
+| `LOG_ENGINE` | `engine/` | Vòng tự động mỗi 30 giây (bỏ qua `EngineClock` vì chỉ đọc giờ) |
+| `LOG_REPOSITORY` | `repository/` | Method repository được gọi (kể cả `save`, `findById`) và thời gian |
+| `LOG_SQL` | Hibernate | Câu SQL (xuống dòng cho dễ đọc) và giá trị từng tham số `?` |
+
+- Bật/tắt riêng từng tầng bằng biến môi trường. Ví dụ dùng `dev` nhưng thấy vòng tự động làm rối log thì thêm `LOG_ENGINE=false`.
+  Không dùng `dev` mà chỉ muốn xem SQL thì đặt `LOG_SQL=true`.
+- Mỗi lần gọi ghi 2 dòng: `→` lúc vào, `←` lúc ra (kèm số ms và kết quả), `✗` nếu lỗi. Lời gọi lồng nhau thụt lề vào trong.
+- Tham số có tên chứa password, token, secret (và `pw`, `code`) in ra `***`. Giá trị dài quá 300 ký tự bị cắt, danh sách chỉ in 5 phần tử đầu.
+- Câu SQL chạy lâu hơn 100 ms có thêm dòng `Slow query took … milliseconds` (chỉ trong profile `dev`).
+- **Lưu ý**: log SQL in nguyên giá trị tham số, kể cả token Facebook/Telegram khi lưu Cài đặt. Chỉ bật trên máy mình, đừng bật trên Render hay VPS.
+- Mã nằm ở `logging/` (`CallLogging` là các aspect, `CallLogger` định dạng dòng log). Tầng nào tắt thì aspect của tầng đó không được tạo.
+
 ## Test
 
 ```bash
@@ -115,6 +148,7 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redi
   - sự kiện nhận 2 lần chỉ đếm và gửi Telegram 1 lần; bản ghi hỏng bị bỏ qua ngay;
   - báo cáo hằng ngày và thao tác đổi ngân sách đi qua Kafka.
 - **KafkaEventSenderTest**: Kafka không chạy thì nơi phát sự kiện không phải chờ.
+- **CallLoggingTest**, **CallLoggerTest**: log chi tiết đủ các tầng và SQL, tầng tắt thì im lặng, không lộ mật khẩu/token.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
 - **MySqlCompatTest** chạy toàn bộ migration và ghi/đọc cài đặt, lịch, nhật ký, thống kê trên MySQL 8.0 thật.
 
@@ -134,6 +168,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | `event/` | Sự kiện: `EventBus`, bản Kafka (`KafkaEvents`, `KafkaEventListeners`) và bản Spring events (`LocalEvents`) |
 | `validation/` | Luật kiểm tra lịch/rule/cài đặt (giống `frontend/src/shared/validate.mjs`) |
 | `security/` | Spring Security, mã hoá mật khẩu, filter chặn request lạ |
+| `logging/` | Log chi tiết từng tầng bằng Spring AOP (`@Aspect`, `@Around`) |
 | `config/`, `common/` | Cấu hình Spring (Redis, cache, WebSocket, Jackson…) và tiện ích dùng chung |
 
 ## Đối chiếu Node → Spring (để học)
@@ -150,6 +185,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | Giao diện tự tải lại mỗi 60 giây | WebSocket STOMP `/ws` + Redis pub/sub (`WebSocketConfig`, `LiveEvents`) | Đẩy sự kiện realtime, chạy được nhiều bản |
 | Gọi Telegram ngay trong engine (`lib/engine.js`) | Sự kiện qua Kafka: topic, consumer group, `@RetryableTopic` + DLT (`event/`) | Producer/consumer, thử lại bằng topic riêng, consumer idempotent |
 | `fetch` + tự thử lại (`lib/fb.js`) | `RestClient` + Resilience4j `@Retry` (`GraphClient`) | Client HTTP, retry có backoff |
+| `console.log` rải rác | Aspect `@Around` bọc mọi method của một tầng (`logging/CallLogging`) | AOP, pointcut, proxy |
 | `/api/health` | Actuator `/actuator/health` | Theo dõi sức khoẻ ứng dụng |
 
 ## Bản Java chắc chắn hơn ở mấy chỗ

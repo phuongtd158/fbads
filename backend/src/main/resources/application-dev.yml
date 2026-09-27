@@ -1,0 +1,16 @@
+# Profile dev (SPRING_PROFILES_ACTIVE=dev): bật log chi tiết ở mọi tầng và log SQL.
+# Tắt riêng một tầng: đặt biến môi trường tương ứng = false, ví dụ LOG_ENGINE=false.
+fbads:
+  logging:
+    controller: ${LOG_CONTROLLER:true}
+    service: ${LOG_SERVICE:true}
+    engine: ${LOG_ENGINE:true}
+    repository: ${LOG_REPOSITORY:true}
+    sql: ${LOG_SQL:true}
+
+spring:
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true              # SQL xuống dòng cho dễ đọc
+        log_slow_query: 100           # câu SQL chạy lâu hơn 100 ms: ghi thêm dòng "Slow query took … milliseconds"
