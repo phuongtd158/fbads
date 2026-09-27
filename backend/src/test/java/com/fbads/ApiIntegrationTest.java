@@ -21,11 +21,23 @@ import org.testcontainers.mariadb.MariaDBContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
+import org.springframework.messaging.converter.StringMessageConverter;
+import org.springframework.messaging.simp.stomp.StompFrameHandler;
+import org.springframework.messaging.simp.stomp.StompHeaders;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+
+import java.lang.reflect.Type;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -205,5 +217,47 @@ class ApiIntegrationTest {
             redis.delete(redis.keys("fbads:login:*"));
             settings.update(s -> s.setPasswordHash(""));
         }
+    }
+
+    /** Đổi ngân sách → trình duyệt đang nghe WebSocket nhận ngay dòng nhật ký mới và sự kiện camp đổi */
+    @Test
+    void liveEventsOverWebSocket() throws Exception {
+        WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
+        client.setMessageConverter(new StringMessageConverter());
+        StompSession ws = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {}).get(10, TimeUnit.SECONDS);
+        try {
+            BlockingQueue<String> logs = new LinkedBlockingQueue<>(), objects = new LinkedBlockingQueue<>();
+            ws.subscribe("/topic/logs", collect(logs));
+            ws.subscribe("/topic/objects", collect(objects));
+            Thread.sleep(300); // chờ SUBSCRIBE tới server
+
+            assertThat(api.post("/api/objects/mock_3/budget", Map.of("amount", 333000, "name", "Camp 3")).status()).isEqualTo(200);
+            JsonNode obj = Api.JSON.readTree(objects.poll(10, TimeUnit.SECONDS));
+            assertThat(obj.get("id").asString()).isEqualTo("mock_3");
+            JsonNode log = Api.JSON.readTree(logs.poll(10, TimeUnit.SECONDS));
+            assertThat(log.get("after").get("dailyBudget").asLong()).isEqualTo(333000);
+            assertThat(log.get("id").asString()).isEqualTo(api.get("/api/logs").body().get(0).get("id").asString());
+        } finally {
+            ws.disconnect();
+        }
+
+        // Đã đặt mật khẩu mà chưa đăng nhập thì không mở được WebSocket
+        assertThat(api.post("/api/password", Map.of("newPassword", "MatKhau@2026")).status()).isEqualTo(200);
+        try {
+            var stranger = client.connectAsync("ws://localhost:" + port + "/ws", new StompSessionHandlerAdapter() {});
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> stranger.get(10, TimeUnit.SECONDS)).hasMessageContaining("401");
+        } finally {
+            settings.update(s -> s.setPasswordHash(""));
+        }
+    }
+
+    private static StompFrameHandler collect(BlockingQueue<String> into) {
+        return new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) { return String.class; }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) { into.add((String) payload); }
+        };
     }
 }

@@ -16,6 +16,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
  * Spring Security:
  *  - /api/auth, /api/login, /api/logout, /api/fb/callback: không cần đăng nhập;
  *  - /api/**: cần đăng nhập NẾU đã đặt mật khẩu (AuthorizationManager tự viết, đọc cài đặt mỗi lần nên đặt mật khẩu là có hiệu lực ngay);
+ *  - /ws (WebSocket realtime): như /api;
  *  - còn lại (giao diện, /actuator/health): mở.
  * Phiên đăng nhập lưu ở Redis (Spring Session Data Redis) nên khởi động lại server không bị đăng xuất, chạy nhiều bản vẫn dùng chung phiên.
  * CSRF của Spring tắt vì đã có bộ lọc cùng-origin + bắt buộc JSON (security/ApiFilters), giống bản Node và không phải sửa giao diện.
@@ -40,7 +41,7 @@ public class SecurityConfig {
                 .headers(h -> h.cacheControl(cc -> cc.disable())) // cache do từng phần tự đặt (API: no-store, file build: 1 năm)
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/api/auth", "/api/login", "/api/logout", "/api/fb/callback").permitAll()
-                        .requestMatchers("/api/**").access((authentication, ctx) -> new AuthorizationDecision(auth.allowed(authentication.get())))
+                        .requestMatchers("/api/**", "/ws", "/ws/**").access((authentication, ctx) -> new AuthorizationDecision(auth.allowed(authentication.get())))
                         .anyRequest().permitAll())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) -> unauthorized(res))

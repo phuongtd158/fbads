@@ -2,6 +2,7 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.service.EngineState;
+import com.fbads.service.LiveEvents;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.Map;
 
 /**
  * Vòng lặp của engine: 30 giây một lần (@Scheduled, fixedDelay = đợi lượt trước xong rồi mới tính giờ lượt sau).
@@ -35,9 +37,11 @@ public class EngineTicker {
     private final EngineState state;
     private final EngineClock clock;
     private final StringRedisTemplate redis;
+    private final LiveEvents live;
 
     public EngineTicker(StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
-                        LogService logs, EngineState state, EngineClock clock) {
+                        LogService logs, EngineState state, EngineClock clock, LiveEvents live) {
+        this.live = live;
         this.redis = redis;
         this.schedules = schedules;
         this.rules = rules;
@@ -63,6 +67,7 @@ public class EngineTicker {
             step("rule", rules::runRules);
         step("báo cáo", report::tick);
         step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
+        live.publish("engine", Map.of("at", System.currentTimeMillis()));
     }
 
     private void step(String name, Runnable r) {

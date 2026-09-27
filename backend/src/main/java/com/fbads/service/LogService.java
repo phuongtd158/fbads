@@ -19,9 +19,13 @@ public class LogService {
     public static final int KEEP = 1000;
 
     private final LogRepository repo;
+    private final LiveEvents live;
     private final AtomicInteger sinceTrim = new AtomicInteger();
 
-    public LogService(LogRepository repo) { this.repo = repo; }
+    public LogService(LogRepository repo, LiveEvents live) {
+        this.repo = repo;
+        this.live = live;
+    }
 
     /** Tạo dòng nhật ký mới: fill điền các trường. Trả về dòng đã lưu (có id, ts). */
     public LogEntry log(Consumer<LogEntry> fill) {
@@ -30,6 +34,7 @@ public class LogService {
         e.setId(Ids.uid());
         e.setTs(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         LogEntry saved = repo.save(e);
+        live.publish("logs", saved);
         if (sinceTrim.incrementAndGet() >= 50) trim();
         return saved;
     }
@@ -46,5 +51,10 @@ public class LogService {
 
     public Optional<LogEntry> find(String id) { return repo.findById(id); }
 
-    public LogEntry save(LogEntry e) { return repo.save(e); }
+    /** Sửa dòng đã có (vd. đánh dấu đã hoàn tác): giao diện nhận bản mới qua WebSocket, thay theo id */
+    public LogEntry save(LogEntry e) {
+        LogEntry saved = repo.save(e);
+        live.publish("logs", saved);
+        return saved;
+    }
 }

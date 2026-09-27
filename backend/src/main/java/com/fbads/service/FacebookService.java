@@ -81,8 +81,10 @@ public class FacebookService {
 
     /** Tầng 2 của bộ nhớ đệm (Redis). Tầng 1 là `cache` / `rangeCache` trong bộ nhớ: engine sửa trực tiếp các AdObject trong đó. */
     private final Cache objectsL2, rangesL2;
+    private final LiveEvents live;
 
-    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits, CacheManager caches) {
+    public FacebookService(SettingsService settings, GraphClient graph, RateLimits limits, CacheManager caches, LiveEvents live) {
+        this.live = live;
         this.settings = settings;
         this.graph = graph;
         this.limits = limits;
@@ -527,6 +529,7 @@ public class FacebookService {
         if (isMock()) mock.setStatus(id, on);
         else call("POST", id, Map.of("status", on ? "ACTIVE" : "PAUSED"), null);
         cache = new Cache0(0, cache.data(), cache.stale());
+        live.publish("objects", Map.of("id", id));
     }
 
     @CacheEvict(cacheNames = CacheConfig.OBJECTS, allEntries = true)
@@ -539,6 +542,7 @@ public class FacebookService {
             call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null);
         }
         cache = new Cache0(0, cache.data(), cache.stale());
+        live.publish("objects", Map.of("id", id));
     }
 
     // ------------------------------------------------------------------ Kết nối & token
