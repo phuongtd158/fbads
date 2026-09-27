@@ -76,6 +76,9 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # Trong container tool nghe ở 0.0.0.0 nên bắt buộc có mật khẩu đăng nhập
       APP_PASSWORD: ${APP_PASSWORD:?Hãy đặt APP_PASSWORD, ví dụ APP_PASSWORD=MatKhau@2026 docker compose up}
+      # Khoá mã hoá token trong DB; đặt một lần rồi giữ nguyên
+      SECRET_KEY: ${SECRET_KEY:-}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
       # IMPORT_FILE: /import/data.json
     # volumes:
     #   - ./data.json:/import/data.json:ro

@@ -11,9 +11,9 @@ Nhánh này là bản học **Spring Boot**. Bản Node.js đang chạy thật n
 
 ## Chạy nhanh bằng Docker
 ```bash
-APP_PASSWORD='MatKhau@2026' docker compose up --build
+APP_PASSWORD='MatKhau@2026' SECRET_KEY='mot-chuoi-dai-ngau-nhien' docker compose up --build
 ```
-Mở http://localhost:3000 và đăng nhập bằng mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB, Redis và Kafka.
+Mở http://localhost:3000 và đăng nhập tài khoản `admin` với mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB, Redis và Kafka.
 
 ## Chạy khi đang code
 Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
@@ -55,7 +55,18 @@ Sửa giao diện là thấy ngay, không cần build. Muốn backend tự phụ
 - Nhật ký chi tiết: bấm một dòng để xem nguyên nhân lỗi, cách khắc phục, mã lỗi Facebook, yêu cầu đã gửi, trước/sau, điều kiện rule; có nút sao chép và chạy lại. Token không bao giờ được ghi vào nhật ký.
 - Giao diện sáng/tối/theo hệ thống, 5 màu nhấn, thanh lệnh nhanh `Ctrl K`, dùng được trên điện thoại.
 - Hướng dẫn ngay trong app: trang **Hướng dẫn** (tìm kiếm, FAQ, thuật ngữ), dấu `?` giải thích cạnh các ô khó, thẻ **Bắt đầu nhanh** tự tick theo tiến độ.
-- Đăng nhập bằng mật khẩu (Cài đặt → Bảo mật, hoặc biến môi trường `APP_PASSWORD`).
+- Nhiều người dùng: mỗi người một tài khoản, dữ liệu chia theo **workspace** (xem dưới).
+
+## Nhiều người dùng và workspace
+Mỗi workspace có cài đặt, token Facebook, Telegram, lịch, rule, nhật ký và vòng tự động riêng. Một người có thể ở nhiều workspace và đổi qua lại ở ô chọn trên thanh bên.
+
+- **Chưa có tài khoản nào**: tool mở, không cần đăng nhập. Tạo tài khoản đầu tiên ở Cài đặt → Bảo mật, hoặc đặt `APP_PASSWORD` (tạo/đồng bộ tài khoản `admin`). Người tạo đầu tiên là chủ workspace có sẵn (dữ liệu cũ nằm ở đây).
+- **Vai trò** (Cài đặt → Thành viên):
+  - Chủ: toàn quyền, kể cả token Facebook, Telegram, thành viên.
+  - Biên tập: sửa lịch, rule, bật/tắt camp, đổi ngân sách, hoàn tác.
+  - Chỉ xem: xem số liệu, lịch, rule, nhật ký.
+- Chủ thêm thành viên bằng tên đăng nhập; người chưa có tài khoản thì đặt kèm mật khẩu ban đầu. Muốn cho người lạ tự đăng ký thì đặt `ALLOW_SIGNUP=true` (người tự đăng ký tạo workspace riêng của họ).
+- Mỗi workspace phải kết nối token Facebook riêng. Cho khách ngoài dùng token của họ qua ứng dụng Meta của bạn thì ứng dụng cần qua **App Review** quyền `ads_management`.
 
 ## Đăng nhập bằng Facebook (lấy token bằng 1 nút)
 Cài đặt → Kết nối Facebook → chọn **Đăng nhập Facebook**:
@@ -76,6 +87,6 @@ Dùng **Facebook Login for Business** thì tạo một cấu hình có 2 quyền
 ## An toàn
 - Mặc định ở chế độ dùng thử (dữ liệu giả). Khi kết nối thật, mặc định "Chạy thử" (chỉ ghi log). Tắt sau vài ngày khi thấy log đúng ý.
 - Server mặc định chỉ nghe 127.0.0.1. Mở ra mạng (`HOST=0.0.0.0`, như trong Docker) thì bắt buộc có `APP_PASSWORD`.
-- Token và mật khẩu (đã băm) nằm trong bảng `app_settings` của MariaDB. Không chia sẻ bản sao lưu DB.
-- Quên mật khẩu đặt trong Cài đặt: chạy `UPDATE app_settings SET password_hash='';` trong MariaDB rồi khởi động lại tool.
+- Đặt `SECRET_KEY` (chuỗi dài ngẫu nhiên): token Facebook, App Secret và token Telegram được mã hoá AES-256-GCM trước khi ghi vào DB. Giữ nguyên `SECRET_KEY` mãi về sau; mất hoặc đổi khoá thì phải kết nối lại Facebook/Telegram. Mật khẩu người dùng nằm ở bảng `users` (đã băm bcrypt).
+- Quên mật khẩu: tài khoản `admin` thì đổi `APP_PASSWORD` rồi khởi động lại. Tài khoản khác chưa có nút đặt lại; tạm thời `admin` tạo tài khoản mới cho người đó rồi thêm vào workspace.
 - Nếu camp dùng CBO (ngân sách ở cấp camp), chỉnh ngân sách ở cấp camp; nhóm QC sẽ không có ngân sách riêng.

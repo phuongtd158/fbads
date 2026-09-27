@@ -31,7 +31,9 @@ Những gì được nhập:
 | `REDIS_URL` | `redis://localhost:6379` | Địa chỉ Redis (bắt buộc). Upstash: `rediss://default:MẬT_KHẨU@xxx.upstash.io:6379` |
 | `REDIS_CONFIGURE_ACTION` | `notify-keyspace-events` | Đặt `none` khi Redis dịch vụ không cho lệnh `CONFIG` (Upstash, ElastiCache) |
 | `PORT`, `HOST` | `3000`, `127.0.0.1` | Cổng và địa chỉ nghe |
-| `APP_PASSWORD` | | Mật khẩu đăng nhập; bắt buộc khi `HOST` không phải máy này |
+| `APP_PASSWORD` | | Mật khẩu của tài khoản `admin` (tạo nếu chưa có); bắt buộc khi `HOST` không phải máy này |
+| `SECRET_KEY` | | Khoá mã hoá token trong DB (AES-256-GCM). Chưa đặt thì lưu nguyên văn và có cảnh báo lúc khởi động. Đặt rồi thì không được đổi |
+| `ALLOW_SIGNUP` | `false` | `true`: trang đăng nhập có nút tự đăng ký, mỗi người đăng ký có workspace riêng |
 | `PUBLIC_URL` | | Địa chỉ công khai, dùng cho đăng nhập Facebook |
 | `PUBLIC_DIR` | `../frontend/dist` | Thư mục giao diện đã build |
 | `ENGINE_ENABLED` | `true` | Tắt vòng chạy lịch/rule (dùng khi test) |
@@ -137,6 +139,8 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redi
   - 20 ca kiểm tra lịch/rule cho kết quả giống hệt `frontend/src/shared/validate.mjs`;
   - lịch, thao tác tay, hoàn tác;
   - đăng nhập và các lớp chặn;
+  - tài khoản, workspace tách dữ liệu, vai trò Chủ/Biên tập/Chỉ xem bị chặn đúng chỗ;
+  - token trong DB đã được mã hoá;
   - số liệu Facebook được cache ở Redis và bị xoá khi đổi ngân sách;
   - vòng tự động và nút "Chạy ngay" dùng chung khoá ShedLock;
   - phiên đăng nhập ở Redis, nhập sai 5 lần thì bị khoá 15 phút;
@@ -148,6 +152,7 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redi
   - sự kiện nhận 2 lần chỉ đếm và gửi Telegram 1 lần; bản ghi hỏng bị bỏ qua ngay;
   - báo cáo hằng ngày và thao tác đổi ngân sách đi qua Kafka.
 - **KafkaEventSenderTest**: Kafka không chạy thì nơi phát sự kiện không phải chờ.
+- **SecretConverterTest**: mã hoá/giải mã token, sai khoá thì báo lỗi rõ ràng.
 - **CallLoggingTest**, **CallLoggerTest**: log chi tiết đủ các tầng và SQL, tầng tắt thì im lặng, không lộ mật khẩu/token.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
 - **MySqlCompatTest** chạy toàn bộ migration và ghi/đọc cài đặt, lịch, nhật ký, thống kê trên MySQL 8.0 thật.
@@ -167,7 +172,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | `engine/` | Logic chạy lịch/rule mỗi 30 giây (`EngineTicker`, `ScheduleRunner`, `RuleRunner`…) |
 | `event/` | Sự kiện: `EventBus`, bản Kafka (`KafkaEvents`, `KafkaEventListeners`) và bản Spring events (`LocalEvents`) |
 | `validation/` | Luật kiểm tra lịch/rule/cài đặt (giống `frontend/src/shared/validate.mjs`) |
-| `security/` | Spring Security, mã hoá mật khẩu, filter chặn request lạ |
+| `security/` | Spring Security, mã hoá mật khẩu, filter chặn request lạ, `WorkspaceContext` + `WorkspaceFilter` (workspace và vai trò của từng request) |
 | `logging/` | Log chi tiết từng tầng bằng Spring AOP (`@Aspect`, `@Around`) |
 | `config/`, `common/` | Cấu hình Spring (Redis, cache, WebSocket, Jackson…) và tiện ích dùng chung |
 
@@ -211,3 +216,11 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 
 1. ~~**Redis**~~ và ~~**WebSocket (STOMP)**~~: đã xong (giai đoạn 2).
 2. ~~**Kafka**~~: đã xong (giai đoạn 3), xem mục "Sự kiện và Kafka".
+
+## Nhiều người dùng (workspace)
+
+- Bảng `users`, `workspaces`, `workspace_members` (migration `V5__workspaces.sql`). Mọi bảng dữ liệu có cột `workspace_id`; dữ liệu cũ vào workspace 1.
+- Entity đánh dấu `@TenantId` (Hibernate): mọi truy vấn tự thêm `workspace_id = ?`, lấy từ `WorkspaceContext` qua `TenantConfig`. Không cần sửa từng repository.
+- `WorkspaceFilter` đặt workspace cho mỗi request (lưu trong phiên, đổi bằng `POST /api/workspaces/switch`) và chặn theo vai trò: Chỉ xem không gọi được lệnh ghi, chỉ Chủ vào được cài đặt/Facebook/Telegram/thành viên.
+- `EngineTicker` chạy từng workspace một, mỗi workspace một khoá ShedLock `fbads-engine-ws-{id}`. Sự kiện Kafka mang theo workspace; WebSocket gửi tới `/topic/ws.{id}.logs|objects|engine` và chỉ thành viên được nghe.
+- API mới: `POST /api/setup` (tài khoản đầu tiên), `POST /api/register` (khi `ALLOW_SIGNUP`), `GET/POST /api/workspaces`, `POST /api/workspace` (đổi tên), `GET/POST /api/members`, `POST /api/members/{id}/role`, `DELETE /api/members/{id}`. `POST /api/login` nhận `{username, password}` (bỏ trống username = `admin`).
