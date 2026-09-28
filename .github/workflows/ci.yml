@@ -1,0 +1,32 @@
+# Chạy kiểm thử và build giao diện cho mỗi PR và mỗi lần push lên dev.
+# (Render vẫn tự deploy khi push lên dev; CI giúp thấy lỗi trên PR trước khi merge.)
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Cài thư viện server
+        run: npm ci
+      - name: Kiểm thử (npm test)
+        run: npm test
+      - name: Cài thư viện giao diện
+        run: npm ci
+        working-directory: web
+      - name: Build giao diện
+        run: npm run build
+        working-directory: web

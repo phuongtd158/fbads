@@ -27,6 +27,8 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API 
 - Bảo vệ ngân sách: bỏ qua camp đang học, giới hạn thay đổi ngân sách mỗi ngày, dừng khẩn khi tổng chi tiêu vượt mức.
 - Hoàn tác: đưa camp về trạng thái/ngân sách trước đó ngay từ Nhật ký (trong 3 ngày).
 - Telegram: thông báo mỗi thay đổi + báo cáo hằng ngày.
+- Canh 24/7: báo Telegram khi token Facebook còn ≤ 7 ngày hoặc đã hỏng, khi vòng tự động lỗi 3 lượt liên tiếp hoặc một lượt bị kẹt quá 5 phút (và khi chạy lại bình thường). Gọi Facebook có giới hạn 30 giây; lời gọi đọc số liệu tự thử lại khi mạng chập chờn, lời gọi bật/tắt/đổi ngân sách thì không (tránh làm hai lần).
+- `GET /api/health` (không cần đăng nhập): `200` khi vòng lịch/rule vừa chạy xong một lượt trong 5 phút gần nhất, `503` khi bị kẹt hoặc ngừng. Dùng cho UptimeRobot và Health Check của Render.
 - Nhật ký chi tiết: bấm một dòng để xem nguyên nhân lỗi, cách khắc phục, mã lỗi Facebook, yêu cầu đã gửi, trước/sau, điều kiện rule; có nút sao chép và chạy lại. Token không bao giờ được ghi vào nhật ký.
 - Giao diện sáng/tối/theo hệ thống, 5 màu nhấn, thanh lệnh nhanh `Ctrl K`, dùng được trên điện thoại.
 - Hướng dẫn ngay trong app: trang **Hướng dẫn** (tìm kiếm, FAQ, thuật ngữ), dấu `?` giải thích cạnh các ô khó, thẻ **Bắt đầu nhanh** tự tick theo tiến độ.
@@ -63,7 +65,8 @@ Gói Free không có ổ đĩa, nên dữ liệu để ở Upstash. Gói Free c�
 2. **Tạo `DATA_KEY`**: chuỗi ngẫu nhiên dài, ví dụ chạy `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`. Lưu nó vào trình quản lý mật khẩu.
 3. **Render**: dashboard.render.com → **New → Blueprint** → repo này, nhánh `dev`. Render đọc `render.yaml` (Docker, gói Free, Singapore). Khi được hỏi, nhập 4 biến: `APP_PASSWORD` (mật khẩu đăng nhập), `DATA_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`. Bấm Apply.
    - Nếu đã tạo service tay: **Environment** → thêm 4 biến trên (và `TZ` = `Asia/Ho_Chi_Minh`), **xoá `DATA_DIR`** nếu có, rồi Deploy lại. Gói Free thì không gắn Disk.
-4. **Giữ tool thức**: dùng UptimeRobot (hoặc dịch vụ tương tự) tạo monitor HTTP(s) gọi `https://<tên>.onrender.com/api/auth` mỗi 5 phút. Bật cảnh báo qua Telegram/email để biết khi tool sập.
+4. **Giữ tool thức**: dùng UptimeRobot (hoặc dịch vụ tương tự) tạo monitor HTTP(s) gọi `https://<tên>.onrender.com/api/health` mỗi 5 phút. Bật cảnh báo qua Telegram/email: `/api/health` báo lỗi cả khi web còn sống mà vòng lịch/rule đã ngừng.
+   - Service tạo tay (không qua Blueprint) thì `render.yaml` không có tác dụng: vào **Settings → Health Check Path** đặt `/api/health`.
 5. Xem log deploy, cần có `Lưu dữ liệu: Upstash (đã mã hoá bằng DATA_KEY)` và `Đăng nhập: BẬT`. Mở địa chỉ tool, đăng nhập rồi vào Cài đặt → Kết nối Facebook. Ở Cài đặt → Chung có dòng "Nơi lưu dữ liệu" cho biết lần lưu cuối.
 
 Lưu ý gói Free: mỗi lần Render khởi động lại tool mất khoảng 1 phút, lịch trễ dưới 10 phút vẫn được chạy bù. Render có thể khởi động lại instance Free bất cứ lúc nào. Lịch phải chạy đúng giờ thì nên dùng cách B.
@@ -74,6 +77,7 @@ Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) g
 ### Chung cho cả hai cách
 - Chỉ chạy **1 instance**. Đừng chạy song song bản ngrok/máy bạn với cùng token Facebook vì việc sẽ bị làm hai lần.
 - Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn).
+- GitHub Actions (`.github/workflows/ci.yml`) chạy `npm test` và build giao diện cho mỗi PR và mỗi lần push lên `dev`. Chỉ merge PR khi CI xanh.
 - IP người dùng lấy từ tiêu đề `CF-Connecting-IP` (tự nhận biết qua biến `RENDER`); có thể ép bằng biến `CLIENT_IP_HEADER`.
 
 ## Kiểm tra dữ liệu (validate)
