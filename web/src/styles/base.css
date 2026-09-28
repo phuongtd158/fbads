@@ -59,3 +59,7 @@ code { background: var(--surface-3); padding: 1px 6px; border-radius: 6px; font-
 @media (pointer: coarse) {
   input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { font-size: 16px !important; }
 }
+/* Chạy như app (đã cài lên màn hình chính): chừa chỗ cho tai thỏ/cạnh cong khi xoay ngang */
+@media (display-mode: standalone) {
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+}

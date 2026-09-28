@@ -1,7 +1,17 @@
 <script setup>
-import { Sun, Moon, Monitor, Check } from 'lucide-vue-next'
+import { Sun, Moon, Monitor, Check, Smartphone, Share, SquarePlus, CheckCircle2 } from 'lucide-vue-next'
 import { themeMode, setThemeMode, accent, setAccent, resolvedTheme } from '../../stores/ui'
 import { ACCENTS } from '../../lib/constants'
+import { pwa, promptInstall } from '../../lib/pwa'
+import { toast } from '../../stores/ui'
+import Btn from '../../components/Btn.vue'
+import Callout from '../../components/Callout.vue'
+
+async function install() {
+  const r = await promptInstall()
+  if (r === 'accepted') toast('Đã cài. Mở “FB Ads” từ màn hình chính')
+  else if (r === null) toast('Trình duyệt chưa cho cài lúc này, hãy tải lại trang rồi thử lại', 'error')
+}
 
 const modes = [
   { v: 'light', label: 'Sáng', icon: Sun },
@@ -29,6 +39,24 @@ const modes = [
       <button v-for="(a, k) in ACCENTS" :key="k" class="sw" :class="{ on: accent === k }" :title="a.label" :aria-label="a.label" @click="setAccent(k)"
         :style="{ background: `linear-gradient(135deg, ${a[resolvedTheme][0]}, ${a[resolvedTheme][1]})` }"><Check v-if="accent === k" :size="18" /></button>
     </div>
+
+    <h4>Cài lên điện thoại</h4>
+    <div class="app">
+      <img src="/icons/icon-192.png" alt="" width="52" height="52" />
+      <div class="ab">
+        <p v-if="pwa.installed" class="st"><CheckCircle2 :size="16" /> Đang chạy như app</p>
+        <p v-else class="muted">Thêm tool vào màn hình chính để mở nhanh như một ứng dụng, toàn màn hình, không có thanh địa chỉ. Số liệu vẫn luôn là mới nhất.</p>
+        <template v-if="!pwa.installed">
+          <Callout v-if="!pwa.secure" tone="info">Chỉ cài được khi mở tool qua <b>https</b> (vd bản trên Render) hoặc <code>localhost</code>. Mở bằng địa chỉ IP trong mạng nhà thì chỉ thêm được lối tắt.</Callout>
+          <Btn v-else-if="pwa.canPrompt" variant="primary" :icon="Smartphone" :action="install">Cài app</Btn>
+          <ol v-else-if="pwa.ios" class="ios">
+            <li>Trong Safari, bấm nút <b>Chia sẻ</b> <Share :size="15" /> ở thanh dưới.</li>
+            <li>Chọn <b>Thêm vào MH chính</b> <SquarePlus :size="15" /> rồi bấm <b>Thêm</b>.</li>
+          </ol>
+          <p v-else class="faint">Mở trang này bằng <b>Chrome</b> trên Android (hoặc Chrome/Edge trên máy tính) để thấy nút Cài app. Trên iPhone, dùng Safari. Nếu đã cài rồi, mở từ màn hình chính.</p>
+        </template>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -53,5 +81,12 @@ h4 { font-size: 15px; margin: 26px 0 12px; }
 .swatches { display: flex; gap: 12px; flex-wrap: wrap; }
 .sw { width: 44px; height: 44px; border-radius: 50%; border: 0; color: #fff; display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(0, 0, 0, .4); transition: transform .25s cubic-bezier(.34, 1.56, .64, 1); }
 .sw:hover { transform: scale(1.12); } .sw.on { outline: 3px solid var(--surface); box-shadow: 0 0 0 5px var(--accent-ring); }
+.app { display: flex; gap: 16px; align-items: flex-start; }
+.app img { border-radius: 14px; flex: none; }
+.ab { display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.ab p { margin: 0; font-size: 14.5px; }
+.st { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--success); }
+.ios { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 14.5px; }
+.ios svg { vertical-align: -3px; }
 @media (max-width: 700px) { .themes { grid-template-columns: 1fr; } }
 </style>
