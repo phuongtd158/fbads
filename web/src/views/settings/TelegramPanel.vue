@@ -1,6 +1,6 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
-import { Send, Save, FileText, CheckCircle2, XCircle, Users } from 'lucide-vue-next'
+import { reactive, ref, computed, onMounted } from 'vue'
+import { Send, Save, FileText, CheckCircle2, XCircle, Users, Bot } from 'lucide-vue-next'
 import { state, saveSettings } from '../../stores/app'
 import { toast } from '../../stores/ui'
 import { api } from '../../lib/api'
@@ -8,8 +8,14 @@ import { checkTelegramToken, checkTelegramChats, parseChatIds, isTime, MAX_TG_CH
 import Btn from '../../components/Btn.vue'
 import Field from '../../components/Field.vue'
 import Badge from '../../components/Badge.vue'
+import Switch from '../../components/Switch.vue'
+import Callout from '../../components/Callout.vue'
 
-const f = reactive({ token: '', chatId: state.settings.telegramChatId || '', reportTime: state.settings.reportTime || '08:00' })
+const f = reactive({ token: '', chatId: state.settings.telegramChatId || '', reportTime: state.settings.reportTime || '08:00', commands: !!state.settings.telegramCommands })
+// Trạng thái nhận lệnh (lib/tgbot.js): đang hỏi tin Telegram chưa, lỗi gần nhất (vd có bản tool khác dùng cùng bot)
+const bot = ref(null)
+const loadBot = async () => { try { bot.value = await api('telegram/bot', 'GET', undefined, { bg: true }) } catch { bot.value = null } }
+onMounted(loadBot)
 const submitted = ref(false)
 const touched = reactive({})
 const result = ref(null) // kết quả gửi thử / báo cáo gần nhất: [{ id, ok, error? }]
@@ -35,8 +41,9 @@ const show = (k) => (submitted.value || touched[k] ? errs.value[k] : '')
 async function save() {
   submitted.value = true
   if (Object.keys(errs.value).length) { toast('Hãy sửa các mục báo lỗi trước khi lưu', 'error'); return false }
-  await saveSettings({ telegramToken: f.token.trim(), telegramChatId: f.chatId.trim(), reportTime: f.reportTime })
+  await saveSettings({ telegramToken: f.token.trim(), telegramChatId: f.chatId.trim(), reportTime: f.reportTime, telegramCommands: f.commands })
   f.token = ''
+  setTimeout(loadBot, 1500) // bot bắt đầu/ngừng hỏi tin sau vài giây
   f.chatId = state.settings.telegramChatId || '' // server đã chuẩn hoá (bỏ trùng, cách nhau ", ")
   toast('Đã lưu cài đặt Telegram')
   return true
@@ -81,6 +88,17 @@ const report = () => run('report', 'Đã gửi báo cáo', 'Đã gửi báo cáo
         </div>
       </Field>
     </div>
+    <div class="cmd">
+      <span class="ic"><Bot :size="20" /></span>
+      <div class="cb">
+        <h4>Nhận lệnh từ Telegram</h4>
+        <p class="muted">Nhắn <code>/status</code>, <code>/camps</code>, <code>/report</code> cho bot để xem tình hình và tắt camp ngay trên điện thoại. Tin báo của lịch/rule có nút <b>Hoàn tác</b>, rule chỉ thông báo có nút <b>Tắt camp</b>. Bấm nút nào bot cũng hỏi lại trước khi làm. Chỉ các Chat ID ở trên mới điều khiển được.</p>
+        <p v-if="bot && bot.enabled && bot.polling && !bot.lastError" class="st ok"><CheckCircle2 :size="15" /> Đang nhận lệnh</p>
+        <p v-else-if="bot && bot.enabled && bot.lastError" class="st no"><XCircle :size="15" /> {{ bot.lastError }}</p>
+      </div>
+      <Switch v-model="f.commands" label="Nhận lệnh từ Telegram" />
+    </div>
+    <Callout v-if="f.commands" tone="warning">Chỉ bật ở <b>một</b> bản tool cho mỗi bot (vd bản trên Render, không bật thêm ở máy nhà). Thao tác Tắt camp từ Telegram là thật, kể cả khi tool đang ở chế độ Chạy thử, giống bấm tắt trên giao diện.</Callout>
     <div class="btns">
       <Btn variant="primary" :icon="Save" :action="save">Lưu</Btn>
       <Btn :icon="Send" :action="test">Gửi tin thử</Btn>
@@ -94,7 +112,7 @@ const report = () => run('report', 'Đã gửi báo cáo', 'Đã gửi báo cáo
     </ul>
     <details>
       <summary>Cách lấy Bot Token và Chat ID</summary>
-      <ol><li>Chat với <b>@BotFather</b>, gõ <code>/newbot</code> để lấy Bot Token.</li><li>Nhắn 1 tin bất kỳ cho bot vừa tạo.</li><li>Mở <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> và lấy số <code>chat.id</code>.</li>
+      <ol><li>Chat với <b>@BotFather</b>, gõ <code>/newbot</code> để lấy Bot Token.</li><li>Nhắn 1 tin bất kỳ cho bot vừa tạo.</li><li>Mở <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> và lấy số <code>chat.id</code>. Nếu đã bật “Nhận lệnh từ Telegram” thì cách này không còn thấy tin nữa: nhắn <code>/id</code> cho bot để nó trả lời Chat ID.</li>
         <li><b>Gửi cho nhiều người:</b> mỗi người nhắn 1 tin cho bot rồi lấy <code>chat.id</code> của họ ở <code>getUpdates</code>, nhập tất cả vào ô Chat ID cách nhau bằng dấu phẩy. Hoặc tạo một nhóm, thêm bot và mọi người vào, gửi 1 tin trong nhóm rồi lấy <code>chat.id</code> của nhóm (số âm, dạng <code>-100…</code>).</li></ol>
     </details>
   </section>
@@ -109,6 +127,10 @@ h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 20px; font-
 .chip { padding: 3px 11px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip.bad { background: var(--danger-soft); color: var(--danger); }
 .btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.cmd { display: flex; gap: 16px; align-items: flex-start; padding: 18px 0; margin-bottom: 14px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.cmd .ic { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.cb { flex: 1; min-width: 0; } .cb h4 { font-size: 15.5px; margin-bottom: 4px; } .cb p { font-size: 14px; line-height: 1.6; margin: 0; }
+.st { display: flex; align-items: center; gap: 6px; margin-top: 8px !important; font-weight: 600; } .st.ok { color: var(--success); } .st.no { color: var(--danger); }
 .res { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 6px; }
 .res li { margin: 0; display: flex; align-items: flex-start; gap: 9px; padding: 9px 12px; border-radius: 10px; font-size: 14px; flex-wrap: wrap; }
 .res li b { font-variant-numeric: tabular-nums; }

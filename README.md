@@ -29,6 +29,7 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API 
 - Bảo vệ ngân sách: bỏ qua camp đang học, giới hạn thay đổi ngân sách mỗi ngày, dừng khẩn khi tổng chi tiêu vượt mức.
 - Hoàn tác: đưa camp về trạng thái/ngân sách trước đó ngay từ Nhật ký (trong 3 ngày).
 - Telegram: thông báo mỗi thay đổi + báo cáo hằng ngày.
+- Điều khiển qua Telegram (Cài đặt → Telegram → "Nhận lệnh từ Telegram", mặc định tắt): lệnh `/status`, `/camps` (kèm nút Tắt), `/report`, `/id`; tin báo có nút Hoàn tác / Tắt camp, bấm là bot hỏi lại. Tool tự hỏi Telegram (long polling) nên không cần địa chỉ công khai. Chỉ các Chat ID đã nhập điều khiển được; chỉ bật ở một bản tool cho mỗi bot.
 - Canh 24/7: báo Telegram khi token Facebook còn ≤ 7 ngày hoặc đã hỏng, khi vòng tự động lỗi 3 lượt liên tiếp hoặc một lượt bị kẹt quá 5 phút (và khi chạy lại bình thường). Gọi Facebook có giới hạn 30 giây; lời gọi đọc số liệu tự thử lại khi mạng chập chờn, lời gọi bật/tắt/đổi ngân sách thì không (tránh làm hai lần).
 - `GET /api/health` (không cần đăng nhập): `200` khi vòng lịch/rule vừa chạy xong một lượt trong 5 phút gần nhất, `503` khi bị kẹt hoặc ngừng. Dùng cho UptimeRobot và Health Check của Render.
 - Nhật ký chi tiết: bấm một dòng để xem nguyên nhân lỗi, cách khắc phục, mã lỗi Facebook, yêu cầu đã gửi, trước/sau, điều kiện rule; có nút sao chép và chạy lại. Token không bao giờ được ghi vào nhật ký.

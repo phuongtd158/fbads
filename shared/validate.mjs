@@ -615,7 +615,7 @@ export function validateSettings(patch = {}, current = {}) {
     }
     if (has('killSwitchEnabled')) v.killSwitchEnabled = !!patch.killSwitchEnabled
     // Cảnh báo bất thường (lib/alerts.js): tài khoản có vấn đề, quảng cáo bị từ chối, chi tiêu tăng vọt so với cùng giờ hôm qua
-    for (const k of ['alertAccount', 'alertDisapproved', 'alertSpike']) if (has(k)) v[k] = !!patch[k]
+    for (const k of ['alertAccount', 'alertDisapproved', 'alertSpike', 'telegramCommands']) if (has(k)) v[k] = !!patch[k]
     if (has('spikePct')) {
         const n = num(patch.spikePct)
         if (!Number.isInteger(n) || n < 10 || n > 1000) e.spikePct = 'Mức tăng vọt từ 10% đến 1000%'
