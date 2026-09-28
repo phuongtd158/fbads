@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX, ChartLine as LineChart } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO, MAX_COL_W } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
@@ -25,6 +25,7 @@ import InfoTip from '../components/InfoTip.vue'
 import Callout from '../components/Callout.vue'
 import BulkBudget from '../components/BulkBudget.vue'
 import OnboardingCard from '../components/OnboardingCard.vue'
+import TrendPanel from '../components/TrendPanel.vue'
 import DateRangePicker from '../components/DateRangePicker.vue'
 import AccountFilter from '../components/AccountFilter.vue'
 import ColumnsMenu from '../components/ColumnsMenu.vue'
@@ -33,6 +34,8 @@ import { allDone, hidden as onboardHidden } from '../stores/onboarding'
 
 const route = useRoute()
 const q = ref(String(route.query.q || ''))
+const trendObj = ref(null) // camp/nhóm QC đang mở bảng xu hướng 30 ngày
+const trendOpen = computed({ get: () => !!trendObj.value, set: (v) => { if (!v) trendObj.value = null } })
 const busy = reactive({})
 const bulkText = ref('')
 const bulkBudget = ref(false) // hộp thoại đổi ngân sách hàng loạt
@@ -439,7 +442,7 @@ async function bulk(on) {
           <TransitionGroup name="row" tag="div" :css="shown.length <= 40">
             <div v-for="it in shown" :key="it.o.id" class="row item" :class="{ off: it.o.status !== 'ACTIVE' }">
               <div class="c-sw"><Switch :model-value="it.o.status === 'ACTIVE'" :disabled="locked(it.o)" :title="locked(it.o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[it.o.id]" :label="'Bật/tắt ' + it.o.name" @update:model-value="(v) => toggle(it.o, v)" /></div>
-              <div class="c-nm"><b :title="it.o.name">{{ it.o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+              <div class="c-nm"><button type="button" class="nmb" :title="'Xem xu hướng 30 ngày: ' + it.o.name" @click="trendObj = it.o"><b>{{ it.o.name }}</b><LineChart :size="14" class="nmi" /></button><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
               <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + it.o.accountId"><b>{{ accountLabel(it.o) }}</b><small v-if="it.o.currency" class="faint">{{ it.o.currency }}</small></div>
               <div class="c-dl"><span class="dl" :class="deliveryOf(it.o).tone" :title="deliveryOf(it.o).label"><i />{{ deliveryOf(it.o).label }}</span></div>
               <div class="metrics">
@@ -479,6 +482,7 @@ async function bulk(on) {
       </div>
     </section>
     <BulkBudget v-model="bulkBudget" :level="ov.level" :account="singleAcc" />
+    <TrendPanel v-model="trendOpen" :obj="trendObj" />
   </div>
 </template>
 
@@ -577,6 +581,12 @@ async function bulk(on) {
 .hd .c-nm { flex-direction: row; align-items: center; padding: 0; }
 .c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }
 .item.off .c-nm b { color: var(--text-2); }
+.nmb { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.nmb b { min-width: 0; }
+.nmb .nmi { flex: none; color: var(--text-3); opacity: 0; transition: opacity .15s; }
+.nmb:hover b { color: var(--accent); }
+.nmb:hover .nmi, .nmb:focus-visible .nmi { opacity: 1; }
+@media (hover: none) { .nmb .nmi { opacity: .7; } }
 .bdg { display: flex; gap: 6px; flex-wrap: wrap; }
 .c-nm .acc { display: none; font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
 .c-ac { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 0; }

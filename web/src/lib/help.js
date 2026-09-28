@@ -36,6 +36,7 @@ export const TOPICS = [
         '**Nhiều tài khoản quảng cáo:** ô “Tất cả tài khoản” ở đầu trang chọn được **một hoặc nhiều** tài khoản (có số chiến dịch của từng tài khoản, nút “Chỉ tài khoản này” để chọn nhanh một cái), cột **Tài khoản** cho biết chiến dịch thuộc tài khoản nào kèm loại tiền của nó. Nếu các tài khoản dùng **khác loại tiền** (vd VND và USD), tổng chi tiêu và ngân sách được tách riêng từng loại tiền, còn CPA / ROAS chỉ hiện khi bạn chọn 1 tài khoản.',
         '**Hành động hàng loạt:** menu **Hành động** gồm Đổi ngân sách hàng loạt, Bật và Tắt các mục **trong danh sách đã lọc** (có ghi rõ số mục sẽ bị đổi, kể cả phần chưa bấm “Xem thêm”), và luôn hỏi xác nhận trước.',
         '**Danh sách dài:** tool chỉ vẽ từng phần cho khỏi giật (30 thẻ trên điện thoại, 60 dòng trên máy tính); bấm **Xem thêm** ở cuối để hiện tiếp. Lọc, sắp xếp, đếm và hàng Tổng luôn tính trên toàn bộ danh sách đã lọc. Có nhiều chiến dịch thì dùng ô tìm kiếm và bộ lọc để thu hẹp cho nhanh.',
+        '**Xem xu hướng 30 ngày:** bấm vào **tên** một chiến dịch hoặc nhóm QC. Bảng mở ra có biểu đồ theo ngày (chọn Chi tiêu, Kết quả, CPA hoặc ROAS), rê chuột hoặc chạm vào một ngày để xem số của ngày đó. Chấm màu phía trên là những ngày camp được **tắt** (đỏ), **bật** (xanh lá) hoặc **đổi ngân sách** (xanh dương), bằng tay, theo lịch hay theo rule, để bạn thấy thay đổi đó có tác dụng không. Cột hôm nay mờ hơn vì chưa hết ngày. Số liệu giữ trong 1 giờ, bấm Làm mới trong bảng để tải lại.',
         '**Làm mới:** số liệu tự cập nhật mỗi 60 giây, hoặc bấm nút Làm mới.',
       ] },
       { t: 'table', head: ['Màu ROAS', 'Nghĩa là'], rows: [['Xanh', 'ROAS từ 2 trở lên — tốt'], ['Vàng', 'ROAS từ 1 đến dưới 2 — tạm ổn, cần theo dõi'], ['Đỏ', 'ROAS dưới 1 — đang lỗ trên quảng cáo']] },
@@ -209,6 +210,7 @@ export const TOPICS = [
         'Tin báo của lịch/rule có nút **Hoàn tác**; rule chỉ thông báo có nút **Tắt camp**. Bấm nút nào bot cũng hỏi lại, nút xác nhận hết hạn sau 10 phút.',
         'Chỉ các Chat ID đã nhập mới điều khiển được. Người lạ nhắn `/start` chỉ được trả lời Chat ID của họ. Khi đã bật, cách lấy Chat ID bằng `getUpdates` không còn dùng được: nhắn `/id` cho bot.',
       ] },
+      { t: 'p', text: '**Báo cáo tuần** (bật sẵn, tắt ở Cài đặt → Telegram): sáng thứ Hai, cùng giờ với báo cáo hằng ngày, tool gửi chi tiêu, kết quả, CPA của tuần trước (thứ Hai → Chủ nhật) so với tuần liền trước, 3 camp tốt nhất (CPA thấp), 3 camp cần xem lại (chi mà không có kết quả, hoặc CPA cao) và số lần tool đã tự bật/tắt/đổi ngân sách. Bấm **Gửi báo cáo tuần** để xem thử bất cứ lúc nào.' },
     ],
   },
   {
