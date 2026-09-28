@@ -2,8 +2,8 @@
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { Check, Eye, Plus, X, Sparkles } from 'lucide-vue-next'
 import { api } from '../lib/api'
-import { METRICS, RANGES } from '../lib/constants'
-import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS } from '../lib/validate'
+import { METRICS, METRIC_SHORT, RANGES, RANGE_LABEL } from '../lib/constants'
+import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS, TOTAL_METRICS } from '../lib/validate'
 import { describeRule } from '../lib/ruleText'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
@@ -66,9 +66,20 @@ function addCond() {
   if (f.value.conditions.length < MAX_CONDITIONS) f.value.conditions.push({ metric: 'roas', op: '<', vs: '', value: 1.5 })
 }
 const removeCond = (i) => { if (f.value.conditions.length > 1) f.value.conditions.splice(i, 1) }
-function onMetric(c) { if (!canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS so được với mục tiêu
-function onMode(c) { if (c.vs === 'target') { c.factor = c.factor || 100 } else { c.vs = ''; delete c.factor } }
-const modesFor = (c) => [{ value: '', label: 'Số cụ thể' }, { value: 'target', label: c.metric === 'spend' ? '% CPA mục tiêu' : '% mục tiêu' }]
+function onMetric(c) { if (c.vs === 'target' && !canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS/chi tiêu so được với mục tiêu
+// Khoảng so sánh mặc định: khoảng dài hơn khoảng của rule (hôm nay → 7 ngày), khác khoảng của rule
+const defaultCompare = () => (f.value.range === 'last_7d' ? 'last_3d' : 'last_7d')
+function onMode(c) {
+  if (c.vs === 'target') { c.factor = c.factor || 100; delete c.compareRange }
+  else if (c.vs === 'range') { c.factor = c.factor || 130; c.compareRange = c.compareRange || defaultCompare() }
+  else { c.vs = ''; delete c.factor; delete c.compareRange }
+}
+const modesFor = (c) => [
+  { value: '', label: 'Số cụ thể' },
+  ...(canTarget(c) ? [{ value: 'target', label: c.metric === 'spend' ? '% CPA mục tiêu' : '% mục tiêu' }] : []),
+  { value: 'range', label: '% khoảng khác' },
+]
+const compareRanges = ['yesterday', 'last_3d', 'last_7d']
 const budgetModes = [{ value: 'percent', label: 'Theo %' }, { value: 'amount', label: 'Theo số tiền' }]
 const matchOptions = [{ value: 'all', label: 'Tất cả điều kiện đúng (VÀ)' }, { value: 'any', label: 'Một trong các điều kiện đúng (HOẶC)' }]
 const toggleAcc = (id) => { const s = new Set(f.value.accountIds); s.has(id) ? s.delete(id) : s.add(id); f.value.accountIds = [...s] }
@@ -131,13 +142,18 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
           <div class="inl">
             <select v-model="c.metric" class="input sel" :aria-label="'Số liệu điều kiện ' + (i + 1)" @change="onMetric(c); touch('c' + i)"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
             <Segmented v-model="c.op" :options="ops" size="sm" />
-            <select v-if="canTarget(c)" v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c)"><option v-for="m in modesFor(c)" :key="m.value" :value="m.value">{{ m.label }}</option></select>
-            <div v-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
+            <select v-model="c.vs" class="input vs" aria-label="So với" @change="onMode(c); touch('c' + i)"><option v-for="m in modesFor(c)" :key="m.value" :value="m.value">{{ m.label }}</option></select>
+            <template v-if="c.vs === 'range'">
+              <div class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với khoảng khác" @input="touch('c' + i)" /><em>%</em></div>
+              <select v-model="c.compareRange" class="input cmp" aria-label="Khoảng so sánh" @change="touch('c' + i)"><option v-for="r in compareRanges" :key="r" :value="r">của {{ RANGE_LABEL[r] }}</option></select>
+            </template>
+            <div v-else-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
             <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="val" aria-label="Ngưỡng" placeholder="vd 150k" @input="touch('c' + i)" />
             <input v-else v-model="c.value" type="number" step="any" min="0" class="input val" aria-label="Ngưỡng" @input="touch('c' + i)" />
             <button v-if="f.conditions.length > 1" type="button" class="rm" :aria-label="'Bỏ điều kiện ' + (i + 1)" @click="removeCond(i)"><X :size="15" /></button>
           </div>
           <p v-if="c.vs === 'target'" class="th">Ngưỡng = <b>{{ c.metric === 'roas' ? 'ROAS' : 'CPA' }} mục tiêu</b> của từng tài khoản × {{ c.factor || 100 }}%<template v-if="c.metric === 'spend'"> (vd 200% = đã chi gấp đôi CPA mục tiêu; thêm điều kiện “Số kết quả nhỏ hơn 1” để cắt lỗ camp chưa ra đơn)</template>. Đặt mục tiêu ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>.</p>
+          <p v-if="c.vs === 'range'" class="th">Ngưỡng = <b>{{ METRIC_SHORT[c.metric] }} của chính {{ unit }} đó</b> trong khoảng so sánh × {{ c.factor || 100 }}%<template v-if="TOTAL_METRICS.includes(c.metric)"> (tính trung bình mỗi ngày, để so được hai khoảng dài ngắn khác nhau)</template>. Vd “CPA hôm nay lớn hơn 130% của 7 ngày gần nhất” = CPA hôm nay cao hơn 30% so với bình thường. {{ unit === 'camp' ? 'Camp' : 'Nhóm QC' }} chưa chi tiêu trong khoảng so sánh thì được bỏ qua.</p>
           <p v-for="m in cErrors(i)" :key="m" class="e">{{ m }}</p>
         </div>
         <Btn v-if="f.conditions.length < MAX_CONDITIONS" size="sm" :icon="Plus" class="addc" @click="addCond">Thêm điều kiện</Btn>
@@ -195,7 +211,7 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
 
 <style scoped>
 .inl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.sel { width: 190px; } .val { width: 130px; } .vs { width: 130px; }
+.sel { width: 190px; } .val { width: 130px; } .vs { width: 170px; } .cmp { width: 210px; }
 .conds { display: grid; gap: 10px; }
 .mrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-2); font-weight: 600; }
 .crow { position: relative; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }

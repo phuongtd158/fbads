@@ -63,7 +63,7 @@ const modeNote = computed(() => {
           <div class="tx">
             <b>{{ i.name }}<Badge v-if="i.learning" tone="info">Đang học</Badge></b>
             <small v-if="i.status === 'match'" class="muted"><Bell v-if="i.result && i.result.notify" :size="12" /> <b>{{ line(i) }}</b> · {{ i.result ? i.result.detail : '' }}</small>
-            <small v-else-if="i.reason" class="muted"><template v-if="i.hit || i.code === 'notarget'"><b>{{ line(i) }}</b> · </template>{{ i.reason }}</small>
+            <small v-else-if="i.reason" class="muted"><template v-if="i.hit || i.code === 'notarget' || i.code === 'nobaseline'"><b>{{ line(i) }}</b> · </template>{{ i.reason }}</small>
             <small v-else class="faint">{{ line(i) }} · chi tiêu {{ fmt(i.spend) }}</small>
           </div>
           <Badge :tone="meta[i.status].tone">{{ meta[i.status].label }}</Badge>

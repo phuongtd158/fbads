@@ -54,6 +54,16 @@ export const conditionsOf = (r) => (r && Array.isArray(r.conditions) && r.condit
 // Khoảng thời gian tính số liệu cho rule (khớp date_preset của Facebook Insights)
 export const RANGES = ['today', 'yesterday', 'last_3d', 'last_7d']
 export const RANGE_LABEL = {today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất'}
+// Số ngày của mỗi khoảng, và các số liệu dạng tổng (cộng dồn theo ngày): khi so hai khoảng khác độ dài, số liệu dạng tổng
+// được chia trung bình theo ngày; số liệu dạng tỉ lệ (CPA, ROAS, CTR…) so thẳng.
+export const RANGE_DAYS = {today: 1, yesterday: 1, last_3d: 3, last_7d: 7}
+export const TOTAL_METRICS = ['spend', 'results', 'messages', 'leads']
+// Ngưỡng của điều kiện "so với khoảng khác" từ giá trị số liệu ở khoảng so sánh; null = chưa có số liệu để so
+export function compareThreshold(c, baseValue) {
+    if (baseValue == null || !Number.isFinite(baseValue) || baseValue <= 0) return null
+    const perDay = TOTAL_METRICS.includes(c.metric) ? baseValue / (RANGE_DAYS[c.compareRange] || 1) : baseValue
+    return perDay * (Number(c.factor) || 100) / 100
+}
 const METRIC_LABEL = {cpa: 'CPA', roas: 'ROAS', spend: 'Chi tiêu', results: 'Số kết quả', ctr: 'CTR', cpc: 'CPC', cpm: 'CPM', messages: 'Số tin nhắn', costPerMessage: 'Chi phí/tin nhắn', leads: 'Số lead', costPerLead: 'Chi phí/lead', frequency: 'Tần suất'}
 const isBlank = (v) => v === '' || v === null || v === undefined
 const num = (v) => (isBlank(v) ? NaN : Number(v))
@@ -305,6 +315,14 @@ export function validateRule(input = {}, ctx = {}) {
             if (!Number.isFinite(factor) || factor <= 0 || factor > 1000) put(i, 'value', 'Phần trăm so với mục tiêu phải từ 1 đến 1000')
             return {metric, op, vs: 'target', factor: Number.isFinite(factor) ? factor : 100, value: 0}
         }
+        if (c.vs === 'range') { // so với chính số liệu đó ở khoảng thời gian khác: ngưỡng = giá trị ở khoảng so sánh × factor%
+            const compareRange = RANGES.includes(c.compareRange) ? c.compareRange : null
+            if (!compareRange) put(i, 'value', 'Chọn khoảng thời gian để so sánh')
+            else if (compareRange === (isBlank(input.range) ? 'today' : input.range)) put(i, 'value', 'Khoảng so sánh phải khác khoảng tính số liệu của rule')
+            const factor = isBlank(c.factor) ? 100 : num(c.factor)
+            if (!Number.isFinite(factor) || factor <= 0 || factor > 1000) put(i, 'value', 'Phần trăm so với khoảng khác phải từ 1 đến 1000')
+            return {metric, op, vs: 'range', compareRange: compareRange || 'last_7d', factor: Number.isFinite(factor) ? factor : 100, value: 0}
+        }
         const value = num(c.value)
         if (!Number.isFinite(value)) put(i, 'value', 'Nhập ngưỡng so sánh')
         else if (value < 0) put(i, 'value', 'Ngưỡng không được âm')
@@ -319,8 +337,8 @@ export function validateRule(input = {}, ctx = {}) {
     const match = input.match === 'any' ? 'any' : 'all'
     // Điều kiện tự mâu thuẫn (VÀ): cùng một số liệu vừa phải lớn hơn a vừa nhỏ hơn b mà a ≥ b thì không bao giờ khớp
     if (match === 'all' && !Object.keys(e).length) {
-        for (const m of uniq(conds.filter((c) => c.vs !== 'target').map((c) => c.metric))) {
-            const same = conds.filter((c) => c.metric === m && c.vs !== 'target')
+        for (const m of uniq(conds.filter((c) => !c.vs).map((c) => c.metric))) {
+            const same = conds.filter((c) => c.metric === m && !c.vs)
             const lo = Math.max(...same.filter((c) => c.op === '>').map((c) => c.value), -Infinity)
             const hi = Math.min(...same.filter((c) => c.op === '<').map((c) => c.value), Infinity)
             if (lo >= hi) { w.push(`Các điều kiện về ${METRIC_LABEL[m]} mâu thuẫn nhau (vừa lớn hơn ${lo}, vừa nhỏ hơn ${hi}) nên rule sẽ không bao giờ khớp.`); break }
@@ -337,6 +355,7 @@ export function validateRule(input = {}, ctx = {}) {
 
     const action = input.action
     if (!['pause', 'increase', 'decrease', 'notify'].includes(action)) e.action = 'Hành động không hợp lệ'
+    if (range === 'today' && conds.some((c) => c.vs === 'range' && TOTAL_METRICS.includes(c.metric))) w.push('Số liệu hôm nay mới tính đến giờ hiện tại, còn khoảng so sánh là trung bình cả ngày, nên chi tiêu/số kết quả hôm nay thường thấp hơn vào buổi sáng. Nên so CPA, ROAS hoặc CTR, hoặc dùng khung giờ cuối ngày.')
     if (range === 'today' && hasDataMetric && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
     // Đổi ngân sách theo % (mặc định) hoặc theo số tiền cố định mỗi lần (amount)
     const budgetMode = (action === 'increase' || action === 'decrease') && input.budgetMode === 'amount' ? 'amount' : 'percent'
@@ -430,8 +449,8 @@ export function validateRule(input = {}, ctx = {}) {
 
     // Cảnh báo mâu thuẫn với rule khác đang bật (chỉ so được khi cả hai rule chỉ có 1 điều kiện số cụ thể)
     const enabled = input.enabled !== false
-    const simple = (r) => conditionsOf(r).length === 1 && conditionsOf(r)[0].vs !== 'target'
-    if (enabled && !e.metric && !e.op && !e.value && !e.action && conds.length === 1 && conds[0].vs !== 'target') {
+    const simple = (r) => conditionsOf(r).length === 1 && !conditionsOf(r)[0].vs
+    if (enabled && !e.metric && !e.op && !e.value && !e.action && conds.length === 1 && !conds[0].vs) {
         const kind = (a) => (a === 'increase' ? 'up' : 'down') // pause & decrease đều là "giảm chi"
         for (const o of rules) {
             if (o.id && o.id === input.id) continue
@@ -595,6 +614,18 @@ export function validateSettings(patch = {}, current = {}) {
         else v.dailyChangeCapPct = n
     }
     if (has('killSwitchEnabled')) v.killSwitchEnabled = !!patch.killSwitchEnabled
+    // Cảnh báo bất thường (lib/alerts.js): tài khoản có vấn đề, quảng cáo bị từ chối, chi tiêu tăng vọt so với cùng giờ hôm qua
+    for (const k of ['alertAccount', 'alertDisapproved', 'alertSpike']) if (has(k)) v[k] = !!patch[k]
+    if (has('spikePct')) {
+        const n = num(patch.spikePct)
+        if (!Number.isInteger(n) || n < 10 || n > 1000) e.spikePct = 'Mức tăng vọt từ 10% đến 1000%'
+        else v.spikePct = n
+    }
+    if (has('spikeMinSpend')) {
+        const n = isBlank(patch.spikeMinSpend) ? 0 : num(patch.spikeMinSpend)
+        if (!Number.isFinite(n) || n < 0 || n > LIMITS.budgetMax) e.spikeMinSpend = 'Chi tiêu tối thiểu phải là số không âm'
+        else v.spikeMinSpend = Math.round(n)
+    }
     if (has('dailySpendLimit')) {
         const n = isBlank(patch.dailySpendLimit) ? 0 : num(patch.dailySpendLimit)
         if (!Number.isFinite(n) || n < 0 || n > LIMITS.budgetMax) e.dailySpendLimit = 'Mức chi tiêu tối đa mỗi ngày phải là số không âm'

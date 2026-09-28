@@ -24,6 +24,8 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API 
 - Lịch: bật/tắt/đổi ngân sách theo giờ và ngày trong tuần, có dòng thời gian trong ngày.
 - Rule: vd "CPA > 150.000 và đã chi ≥ 100.000 thì tắt", có trần/sàn ngân sách và thời gian nghỉ.
 - Rule nâng cao: chọn khoảng thời gian (hôm nay/hôm qua/3 ngày/7 ngày), hành động **Chỉ thông báo**, nút **Xem trước** (rule đang khớp camp nào ngay bây giờ) trước khi cho chạy.
+- Rule so sánh giữa hai khoảng: vd "CPA hôm nay lớn hơn 130% của 7 ngày gần nhất". Chi tiêu, số kết quả, tin nhắn, lead được tính trung bình mỗi ngày trước khi so; CPA, ROAS, CTR… so thẳng.
+- Cảnh báo bất thường (Cài đặt → Bảo vệ ngân sách, 30 phút một lần): tài khoản quảng cáo bị vô hiệu hoá/nợ thanh toán, quảng cáo bị từ chối, chi tiêu hôm nay cao hơn X% so với cùng giờ hôm qua. Gửi Telegram và ghi Nhật ký, mỗi sự việc báo một lần.
 - Bảo vệ ngân sách: bỏ qua camp đang học, giới hạn thay đổi ngân sách mỗi ngày, dừng khẩn khi tổng chi tiêu vượt mức.
 - Hoàn tác: đưa camp về trạng thái/ngân sách trước đó ngay từ Nhật ký (trong 3 ngày).
 - Telegram: thông báo mỗi thay đổi + báo cáo hằng ngày.

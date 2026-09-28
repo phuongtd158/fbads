@@ -1,6 +1,6 @@
 // Cách hiển thị điều kiện của rule (danh sách rule, xem trước, nhật ký, trình soạn) — dùng chung cho mọi nơi.
 import { fmt, fmtDec } from './format'
-import { conditionsOf } from './validate'
+import { conditionsOf, RANGE_DAYS, TOTAL_METRICS } from './validate'
 
 export const opText = (op) => (op === '>' ? 'lớn hơn' : 'nhỏ hơn')
 
@@ -13,17 +13,24 @@ export function fmtMetric(metric, v) {
   return fmt(v)
 }
 
-// Vế phải của điều kiện: "150.000" hoặc "120% mục tiêu"
-export const rhs = (c) => (c.vs === 'target' ? `${c.factor || 100}% ${c.metric === 'spend' ? 'CPA ' : ''}mục tiêu` : fmtMetric(c.metric, Number(c.value)))
+const CMP_RANGE = { today: 'hôm nay', yesterday: 'hôm qua', last_3d: '3 ngày gần nhất', last_7d: '7 ngày gần nhất' }
+// Vế so sánh khi không phải số cụ thể: "120% mục tiêu", "130% của 7 ngày gần nhất (trung bình mỗi ngày)"
+function vsText(c) {
+  if (c.vs === 'target') return `${c.factor || 100}% ${c.metric === 'spend' ? 'CPA ' : ''}mục tiêu`
+  if (c.vs === 'range') return `${c.factor || 100}% của ${CMP_RANGE[c.compareRange] || c.compareRange}${TOTAL_METRICS.includes(c.metric) && RANGE_DAYS[c.compareRange] > 1 ? ' (trung bình mỗi ngày)' : ''}`
+  return ''
+}
+// Vế phải của điều kiện: "150.000", "120% mục tiêu" hoặc "130% của 7 ngày gần nhất"
+export const rhs = (c) => (c.vs ? vsText(c) : fmtMetric(c.metric, Number(c.value)))
 
 export const conditionsOfRule = conditionsOf
 export const matchWord = (m) => (m === 'any' ? 'HOẶC' : 'VÀ')
 
-// Điều kiện đã đánh giá (từ xem trước / nhật ký): "CPA 250.000 > 150.000". Ngưỡng null = tài khoản chưa đặt mục tiêu.
+// Điều kiện đã đánh giá (từ xem trước / nhật ký): "CPA 250.000 > 150.000". Ngưỡng null = tài khoản chưa đặt mục tiêu / khoảng so sánh chưa có số liệu.
 export function evaluated(c) {
   const actual = c.inf || c.actualInf ? Infinity : c.actual
-  const th = c.threshold == null ? 'chưa có mục tiêu' : fmtMetric(c.metric, c.threshold)
-  return { actual: fmtMetric(c.metric, actual), op: c.op === '>' ? '>' : '<', threshold: th, target: c.vs === 'target' ? `${c.factor || 100}% ${c.metric === 'spend' ? 'CPA ' : ''}mục tiêu` : '', hit: !!c.hit, unknown: !!c.unknown }
+  const th = c.threshold == null ? (c.vs === 'range' ? 'chưa có số liệu để so' : 'chưa có mục tiêu') : fmtMetric(c.metric, c.threshold)
+  return { actual: fmtMetric(c.metric, actual), op: c.op === '>' ? '>' : '<', threshold: th, target: vsText(c), hit: !!c.hit, unknown: !!c.unknown }
 }
 
 // Câu mô tả đầy đủ một rule (trình soạn hiện ngay khi sửa). Trả về các câu ngắn, câu đầu là "Nếu … thì …".
