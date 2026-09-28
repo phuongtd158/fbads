@@ -45,7 +45,7 @@ public class SettingsController {
     static Map<String, Object> storage() {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("mode", "db");
-        m.put("provider", "MariaDB");
+        m.put("provider", "MySQL");
         m.put("lastSavedAt", null);
         m.put("lastError", "");
         m.put("pending", false);

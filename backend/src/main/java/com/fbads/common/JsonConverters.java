@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Chuyển trường Java ↔ cột JSON của MariaDB. Mỗi kiểu dữ liệu có một converter riêng (JPA cần lớp cụ thể).
+ * Chuyển trường Java ↔ cột JSON của MySQL. Mỗi kiểu dữ liệu có một converter riêng (JPA cần lớp cụ thể).
  * Dùng JsonMapper riêng (không phải bean của Spring) vì Hibernate tạo converter trước khi có context.
  */
 public final class JsonConverters {

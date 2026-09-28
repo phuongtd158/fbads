@@ -6,11 +6,15 @@ spring:
     virtual:
       enabled: true            # Java 21: mỗi request / tác vụ chạy trên virtual thread (nhẹ, chờ mạng không tốn luồng thật)
   datasource:
-    url: ${DB_URL:jdbc:mariadb://localhost:3306/fbads}
+    url: ${DB_URL:jdbc:mysql://localhost:3306/fbads}   # MySQL 8.0+
     username: ${DB_USER:fbads}
     password: ${DB_PASSWORD:fbads}
     hikari:
       maximum-pool-size: ${DB_POOL_SIZE:5}
+      data-source-properties:          # tham số cho driver MySQL, áp dụng cả khi DB_URL tự đặt
+        allowPublicKeyRetrieval: true  # MySQL 8 đăng nhập bằng caching_sha2_password: thiếu cái này có thể lỗi "Public Key Retrieval is not allowed"
+        connectionTimeZone: UTC        # giờ đọc/ghi luôn là UTC, không phụ thuộc múi giờ của máy chạy tool hay máy chủ MySQL
+        forceConnectionTimeZoneToSession: true
   jpa:
     open-in-view: false
     hibernate:

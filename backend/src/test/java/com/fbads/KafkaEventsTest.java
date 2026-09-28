@@ -38,7 +38,7 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.mariadb.MariaDBContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -74,7 +74,7 @@ import static org.awaitility.Awaitility.await;
 class KafkaEventsTest {
     @Container
     @ServiceConnection
-    static MariaDBContainer db = new MariaDBContainer("mariadb:11.8");
+    static MySQLContainer db = new MySQLContainer("mysql:8.0");
 
     @Container
     @ServiceConnection(name = "redis")

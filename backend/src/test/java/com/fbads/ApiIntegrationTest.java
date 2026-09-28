@@ -2,6 +2,7 @@ package com.fbads;
 
 import com.fbads.config.CacheConfig;
 import com.fbads.dto.FbSnapshots;
+import com.fbads.entity.LogEntry;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineLock;
@@ -30,7 +31,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mariadb.MariaDBContainer;
+import org.testcontainers.mysql.MySQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -46,6 +47,7 @@ import java.lang.reflect.Type;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +59,7 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Chạy cả ứng dụng trên MariaDB thật (Testcontainers), dữ liệu giả (mock), engine tắt.
+ * Chạy cả ứng dụng trên MySQL thật (Testcontainers), dữ liệu giả (mock), engine tắt.
  * Gọi API y như giao diện Vue gọi.
  */
 @Testcontainers
@@ -65,7 +67,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ApiIntegrationTest {
     @Container
     @ServiceConnection
-    static MariaDBContainer db = new MariaDBContainer("mariadb:11.8");
+    static MySQLContainer db = new MySQLContainer("mysql:8.0");
 
     @Container
     @ServiceConnection(name = "redis")
@@ -483,6 +485,15 @@ class ApiIntegrationTest {
             settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
             telegram.setApiBase("https://api.telegram.org");
         }
+    }
+
+    /** Giờ lưu trong MySQL là UTC (connectionTimeZone=UTC), đọc ra đúng thời điểm đã ghi */
+    @Test
+    void timesAreStoredInUtc() {
+        LogEntry saved = logs.log(e -> { e.setKind("manual"); e.setSource("Thủ công"); e.setName("Giờ UTC"); e.setDetail("-"); });
+        LocalDateTime raw = jdbc.queryForObject("SELECT ts FROM logs WHERE id = ?", LocalDateTime.class, saved.getId());
+        assertThat(Duration.between(raw, LocalDateTime.now(ZoneOffset.UTC)).abs()).isLessThan(Duration.ofMinutes(1));
+        assertThat(logs.find(saved.getId()).orElseThrow().getTs()).isEqualTo(saved.getTs());
     }
 
     private int actions(String day, String source) {

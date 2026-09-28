@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** SQL chạy được trên cả MySQL 8 và MariaDB (INSERT IGNORE, ON DUPLICATE KEY UPDATE). */
+/** SQL riêng của MySQL: INSERT IGNORE, ON DUPLICATE KEY UPDATE. */
 public interface EventStatRepository extends JpaRepository<EventStat, EventStat.Key> {
     List<EventStat> findByKeyWorkspaceIdAndKeyDay(long workspaceId, String day);
 

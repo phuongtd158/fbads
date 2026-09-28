@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Nhập dữ liệu của bản Node (data.json, hoặc bản mã hoá trên Upstash) vào MariaDB — chỉ chạy khi DB còn trống,
+ * Nhập dữ liệu của bản Node (data.json, hoặc bản mã hoá trên Upstash) vào MySQL — chỉ chạy khi DB còn trống,
  * nên đặt IMPORT_FILE rồi khởi động lại nhiều lần cũng không nhập trùng.
  * Nhập vào workspace 1: cài đặt, mật khẩu đã băm (thành tài khoản "admin"), lịch, rule, nhật ký, các camp đang chờ bật lại hôm sau.
  * Không nhập các dấu "đã chạy hôm nay" (fired, lastRule…): engine tự làm lại từ đầu, lịch đã qua giờ quá 10 phút không chạy lại.

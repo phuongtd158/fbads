@@ -6,22 +6,22 @@ Nhánh này là bản học **Spring Boot**. Bản Node.js đang chạy thật n
 
 | Thư mục | Nội dung |
 |---|---|
-| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MariaDB, cache/phiên/realtime qua Redis, sự kiện qua Kafka (tuỳ chọn). Chi tiết trong [backend/README.md](backend/README.md) |
+| `backend/` | Java 21 + Spring Boot 4, dữ liệu ở MySQL 8, cache/phiên/realtime qua Redis, sự kiện qua Kafka (tuỳ chọn). Chi tiết trong [backend/README.md](backend/README.md) |
 | `frontend/` | Vue 3 + Vite, nhận cập nhật realtime qua WebSocket |
 
 ## Chạy nhanh bằng Docker
 ```bash
 APP_PASSWORD='MatKhau@2026' SECRET_KEY='mot-chuoi-dai-ngau-nhien' docker compose up --build
 ```
-Mở http://localhost:3000 và đăng nhập tài khoản `admin` với mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MariaDB, Redis và Kafka.
+Mở http://localhost:3000 và đăng nhập tài khoản `admin` với mật khẩu vừa đặt. Lệnh này build cả giao diện lẫn backend, kèm MySQL, Redis và Kafka.
 
 ## Chạy khi đang code
-Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
+Cần Java 21, Maven, Node 20+ và Docker (cho MySQL và Redis). Đã cài sẵn MySQL 8 trên máy thì dùng luôn, bỏ lệnh `docker run` đầu tiên.
 
-1. Bật MariaDB và Redis (một lần):
+1. Bật MySQL và Redis (một lần):
    ```bash
    docker run -d --name fbads-db -p 127.0.0.1:3306:3306 \
-     -e MARIADB_DATABASE=fbads -e MARIADB_USER=fbads -e MARIADB_PASSWORD=fbads -e MARIADB_ROOT_PASSWORD=root mariadb:11.8
+     -e MYSQL_DATABASE=fbads -e MYSQL_USER=fbads -e MYSQL_PASSWORD=fbads -e MYSQL_ROOT_PASSWORD=root mysql:8.0
    docker run -d --name fbads-redis -p 127.0.0.1:6379:6379 redis:7
    ```
 2. Backend (cửa sổ 1):
@@ -41,7 +41,7 @@ Cần Java 21, Maven, Node 20+ và Docker (cho MariaDB và Redis).
 Sửa giao diện là thấy ngay, không cần build. Muốn backend tự phục vụ giao diện ở cổng 3000 thì chạy `npm run build` trong `frontend/` (ra `frontend/dist`).
 
 ## Test
-- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MariaDB, MySQL 8, Redis và Kafka thật.
+- Backend: `cd backend && mvn test`. Cần Docker, vì test bật MySQL 8.0, Redis và Kafka thật.
 - Frontend: `cd frontend && npm test`. Kiểm tra các luật dùng chung ở `frontend/src/shared/` (kiểm tra dữ liệu, tiền, ngày…).
 
 ## Tính năng

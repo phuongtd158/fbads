@@ -10,7 +10,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mariadb.MariaDBContainer;
+import org.testcontainers.mysql.MySQLContainer;
 
 import java.util.Map;
 
@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CallLoggingTest {
     @Container
     @ServiceConnection
-    static MariaDBContainer db = new MariaDBContainer("mariadb:11.8");
+    static MySQLContainer db = new MySQLContainer("mysql:8.0");
 
     @Container
     @ServiceConnection(name = "redis")

@@ -1,6 +1,6 @@
 # Backend (Spring Boot)
 
-Bản chuyển backend Node (`server.js`, `lib/`) sang **Java 21 + Spring Boot 4**, dữ liệu lưu ở **MariaDB**, cache/phiên đăng nhập/khoá/sự kiện realtime ở **Redis**,
+Bản chuyển backend Node (`server.js`, `lib/`) sang **Java 21 + Spring Boot 4**, dữ liệu lưu ở **MySQL 8**, cache/phiên đăng nhập/khoá/sự kiện realtime ở **Redis**,
 sự kiện (Telegram, thống kê, cập nhật giao diện) đi qua **Kafka** khi bật.
 Giao diện Vue (`../frontend`) gọi đúng các API cũ: cùng đường dẫn, cùng dạng JSON.
 
@@ -26,7 +26,7 @@ Những gì được nhập:
 
 | Biến | Mặc định | Ý nghĩa |
 |---|---|---|
-| `DB_URL` | `jdbc:mariadb://localhost:3306/fbads` | Địa chỉ MariaDB 10.6+ hoặc MySQL 8.0.13+. Với MySQL 8 thêm `?allowPublicKeyRetrieval=true` (xem dưới) |
+| `DB_URL` | `jdbc:mysql://localhost:3306/fbads` | Địa chỉ MySQL 8.0.13+ (xem dưới) |
 | `DB_USER`, `DB_PASSWORD` | `fbads` | Tài khoản DB |
 | `REDIS_URL` | `redis://localhost:6379` | Địa chỉ Redis (bắt buộc). Upstash: `rediss://default:MẬT_KHẨU@xxx.upstash.io:6379` |
 | `REDIS_CONFIGURE_ACTION` | `notify-keyspace-events` | Đặt `none` khi Redis dịch vụ không cho lệnh `CONFIG` (Upstash, ElastiCache) |
@@ -42,13 +42,13 @@ Những gì được nhập:
 | `SPRING_PROFILES_ACTIVE` | | `dev`: bật log chi tiết ở mọi tầng và log SQL (xem "Xem log chi tiết") |
 | `LOG_CONTROLLER`, `LOG_SERVICE`, `LOG_ENGINE`, `LOG_REPOSITORY`, `LOG_SQL` | `false` (profile `dev`: `true`) | Bật/tắt log chi tiết từng tầng |
 
-### Dùng MySQL 8 thay MariaDB
+### MySQL
 
-- Giữ nguyên driver, chỉ đổi địa chỉ: `DB_URL=jdbc:mariadb://localhost:3306/fbads?allowPublicKeyRetrieval=true`.
-  Thiếu tham số này sẽ gặp lỗi `RSA public key is not available client side` (MySQL 8 mặc định đăng nhập bằng `caching_sha2_password`).
+- Driver là MySQL Connector/J, địa chỉ dạng `jdbc:mysql://máy:3306/fbads`. Tool tự thêm `allowPublicKeyRetrieval=true`
+  (MySQL 8 đăng nhập bằng `caching_sha2_password`) và giờ UTC, nên không cần gắn tham số vào `DB_URL`.
+- Bản Java không còn chạy trên MariaDB. `DB_URL` cũ dạng `jdbc:mariadb://…` phải đổi thành `jdbc:mysql://…`.
+- DB MySQL đã tạo từ trước (bằng driver MariaDB) dùng tiếp được, không phải xoá tạo lại.
 - Lần chạy trước bị lỗi migration thì xoá DB tạo lại cho sạch: `DROP DATABASE fbads; CREATE DATABASE fbads;`.
-- DB MariaDB tạo trước ngày 27/09/2026 có thể báo `Validate failed: Migration checksum mismatch for migration version 1`
-  (file V1 đã sửa cho chạy được trên MySQL 8, lược đồ không đổi). Cách nhanh nhất cũng là xoá DB tạo lại rồi nhập lại dữ liệu bằng `IMPORT_FILE`.
 
 ## Sự kiện và Kafka
 
@@ -129,7 +129,7 @@ fbads.calls.service    :   ← ObjectService.setBudget 18 ms
 ## Test
 
 ```bash
-mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redis và Kafka thật
+mvn test        # cần Docker: Testcontainers tự bật MySQL 8.0, Redis và Kafka thật
 ```
 
 - **NodeCompatTest** kiểm tra hai thứ do bản Node tạo ra (trong `src/test/resources/fixtures/`):
@@ -145,7 +145,8 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redi
   - vòng tự động và nút "Chạy ngay" dùng chung khoá ShedLock;
   - phiên đăng nhập ở Redis, nhập sai 5 lần thì bị khoá 15 phút;
   - client STOMP nhận nhật ký và sự kiện camp ngay khi đổi ngân sách; chưa đăng nhập thì bị từ chối;
-  - sự kiện khi tắt Kafka: Telegram, thống kê, báo cáo hằng ngày.
+  - sự kiện khi tắt Kafka: Telegram, thống kê, báo cáo hằng ngày;
+  - giờ lưu trong MySQL là UTC.
 - **KafkaEventsTest** bật Kafka thật:
   - một sự kiện tới đủ Telegram, thống kê và WebSocket;
   - Telegram lỗi tạm thời được thử lại rồi vào DLT, lỗi cố định vào thẳng DLT;
@@ -155,7 +156,6 @@ mvn test        # cần Docker: Testcontainers tự bật MariaDB, MySQL 8, Redi
 - **SecretConverterTest**: mã hoá/giải mã token, sai khoá thì báo lỗi rõ ràng.
 - **CallLoggingTest**, **CallLoggerTest**: log chi tiết đủ các tầng và SQL, tầng tắt thì im lặng, không lộ mật khẩu/token.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
-- **MySqlCompatTest** chạy toàn bộ migration và ghi/đọc cài đặt, lịch, nhật ký, thống kê trên MySQL 8.0 thật.
 
 ## Cấu trúc thư mục (chia theo tầng)
 
@@ -180,7 +180,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 
 | Bản Node | Bản Java | Học được gì |
 |---|---|---|
-| `data.json` / Upstash (`lib/store.js`) | MariaDB + Spring Data JPA (`*Repository`), Flyway | Entity, repository, migration, `@Version` |
+| `data.json` / Upstash (`lib/store.js`) | MySQL + Spring Data JPA (`*Repository`), Flyway | Entity, repository, migration, `@Version` |
 | `express.Router` (`lib/routes/*`) | `@RestController` (`controller/`) | Mapping, `@RequestBody`, `ResponseEntity` |
 | Middleware tự viết (`lib/middleware.js`, `lib/auth.js`) | Spring Security + Spring Session Data Redis, filter `ApiFilters` (`security/`) | SecurityFilterChain, phiên lưu ở Redis |
 | `shared/validate.mjs` (chạy cả ở giao diện) | `validation/*Validator` (bản Java của `frontend/src/shared/validate.mjs`) + Bean Validation (`@Valid`, `@StrongPassword`) | Ràng buộc tự viết |
@@ -203,8 +203,8 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 
 ## Đưa lên mạng
 
-- **Render không có MariaDB.** Có 3 cách:
-  - app trên Render, DB ở dịch vụ ngoài (ví dụ Aiven MySQL gói free; đặt `DB_URL=jdbc:mariadb://...`);
+- **Render không có MySQL.** Có 3 cách:
+  - app trên Render, DB ở dịch vụ ngoài (ví dụ Aiven MySQL gói free; đặt `DB_URL=jdbc:mysql://...`);
   - chạy cả app và DB trên VPS bằng `docker compose` (file `docker-compose.yml` ở thư mục gốc);
   - dùng MySQL có sẵn ở chỗ khác.
 - **Redis**: Compose đã có sẵn. Trên Render dùng Upstash (gói free): đặt `REDIS_URL` dạng `rediss://…` và `REDIS_CONFIGURE_ACTION=none`.
