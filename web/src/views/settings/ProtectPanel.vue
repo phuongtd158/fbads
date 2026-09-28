@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
-import { Save, ShieldAlert, Gauge, GraduationCap } from 'lucide-vue-next'
+import { Save, ShieldAlert, Gauge, GraduationCap, BellRing } from 'lucide-vue-next'
 import { state, saveSettings, ensureObjs } from '../../stores/app'
 import { toast } from '../../stores/ui'
 import { validateSettings } from '../../lib/validate'
@@ -11,6 +11,7 @@ import Switch from '../../components/Switch.vue'
 import InfoTip from '../../components/InfoTip.vue'
 import Callout from '../../components/Callout.vue'
 import Segmented from '../../components/Segmented.vue'
+import MoneyInput from '../../components/MoneyInput.vue'
 
 const s = state.settings
 const f = reactive({
@@ -19,6 +20,12 @@ const f = reactive({
   killSwitchEnabled: !!s.killSwitchEnabled,
   dailySpendLimit: s.dailySpendLimit || '',
   killScope: s.killScope === 'account' ? 'account' : 'total', // tổng mọi tài khoản (như trước) hay từng tài khoản
+  // Cảnh báo bất thường (gửi Telegram + ghi Nhật ký, 30 phút kiểm tra một lần)
+  alertAccount: s.alertAccount !== false,
+  alertDisapproved: s.alertDisapproved !== false,
+  alertSpike: s.alertSpike !== false,
+  spikePct: s.spikePct || 50,
+  spikeMinSpend: s.spikeMinSpend ?? 100000,
 })
 const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
 const multiAcc = computed(() => accounts.value.length > 1)
@@ -37,7 +44,7 @@ const touched = reactive({})
 onMounted(() => ensureObjs())
 
 // Cùng luật với server
-const check = computed(() => validateSettings({ ...f, dailySpendLimit: f.dailySpendLimit === '' ? 0 : f.dailySpendLimit }, s))
+const check = computed(() => validateSettings({ ...f, dailySpendLimit: f.dailySpendLimit === '' ? 0 : f.dailySpendLimit, spikeMinSpend: f.spikeMinSpend === '' ? 0 : f.spikeMinSpend }, s))
 const show = (k) => (submitted.value || touched[k] ? check.value.errors[k] : '')
 
 // Chi tiêu hôm nay so với mức dừng khẩn (nếu đã có số liệu)
@@ -113,6 +120,28 @@ async function save() {
     <Callout v-if="f.killSwitchEnabled && !s.mock && s.dryRun" tone="info">Đang ở chế độ Chạy thử: khi vượt mức, tool chỉ ghi Nhật ký chứ chưa tắt camp thật.</Callout>
     <Callout v-if="f.killSwitchEnabled" tone="warning">Sau khi dừng khẩn hôm nay, nếu bạn bật lại camp thì tool sẽ không tắt lại lần nữa trong ngày. Camp tắt sẽ không tự bật lại vào hôm sau, hãy dùng lịch “Bật camp buổi sáng”.</Callout>
 
+    <div class="row last">
+      <span class="ic"><BellRing :size="20" /></span>
+      <div class="rb">
+        <h4>Cảnh báo bất thường</h4>
+        <p class="muted">30 phút kiểm tra một lần, gửi Telegram và ghi Nhật ký. Mỗi sự việc chỉ báo một lần. Chỉ chạy khi đã kết nối Facebook thật.</p>
+        <div class="alts">
+          <div class="alt"><Switch v-model="f.alertAccount" label="Tài khoản quảng cáo có vấn đề (bị vô hiệu hoá, nợ thanh toán…)" /><span>Tài khoản quảng cáo có vấn đề (bị vô hiệu hoá, nợ thanh toán…)</span></div>
+          <div class="alt"><Switch v-model="f.alertDisapproved" label="Quảng cáo bị từ chối" /><span>Quảng cáo bị từ chối</span></div>
+          <div class="alt"><Switch v-model="f.alertSpike" label="Chi tiêu tăng vọt so với cùng giờ hôm qua" /><span>Chi tiêu tăng vọt so với cùng giờ hôm qua</span></div>
+        </div>
+        <div v-if="f.alertSpike" class="spk">
+          <Field label="Báo khi tăng hơn" :error="show('spikePct')">
+            <div class="inl"><input v-model="f.spikePct" class="input num" type="number" min="10" max="1000" step="1" @blur="touched.spikePct = true" /><span class="muted">%</span></div>
+          </Field>
+          <Field label="và hôm nay đã chi từ" :error="show('spikeMinSpend')" hint="Tránh báo tài khoản mới chi vài chục nghìn.">
+            <MoneyInput v-model="f.spikeMinSpend" class="lim" placeholder="vd 100k" @input="touched.spikeMinSpend = true" />
+          </Field>
+        </div>
+      </div>
+    </div>
+    <Callout v-if="(f.alertAccount || f.alertDisapproved || f.alertSpike) && !s.has_telegramToken" tone="info">Chưa cài Telegram: cảnh báo chỉ được ghi vào Nhật ký. Cài ở Cài đặt → Telegram.</Callout>
+
     <Btn variant="primary" :icon="Save" :action="save">Lưu</Btn>
   </section>
 </template>
@@ -125,6 +154,7 @@ h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 8px; font-s
 .ic.danger { background: var(--danger-soft); color: var(--danger); }
 .rb { flex: 1; min-width: 0; } h4 { font-size: 15.5px; margin-bottom: 4px; letter-spacing: -.01em; } .rb > p { font-size: 14px; margin-bottom: 12px; line-height: 1.6; }
 .inl { display: flex; gap: 10px; align-items: center; } .inl .input { width: 110px; } .lim { max-width: 240px; }
+.alts { display: grid; gap: 10px; margin-bottom: 12px; } .alt { display: flex; gap: 10px; align-items: center; font-size: 14px; } .spk { display: flex; gap: 16px; flex-wrap: wrap; }
 .scope { margin: 2px 0 12px; } .scope .muted { margin: 8px 0 0; font-size: 13.5px; }
 .ameters { display: grid; gap: 12px; margin: -2px 0 6px; } .am .ah { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; font-size: 14px; }
 .meter { margin: -4px 0 4px; } .bar { height: 7px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin-bottom: 6px; }
