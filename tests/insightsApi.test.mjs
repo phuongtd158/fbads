@@ -68,3 +68,31 @@ test('tham số sai bị từ chối 400 kèm lời giải thích, không phải
     assert.match(body.error, re, q)
   }
 })
+
+// ----- Xu hướng theo ngày của một camp (/api/objects/:id/trend) -----
+const trend = async (id, q = '') => { const r = await fetch(`${BASE}/api/objects/${id}/trend${q}`); return { status: r.status, body: await r.json() } }
+
+test('xu hướng: 30 ngày tính tới hôm nay, mỗi ngày một dòng, kèm lần tắt camp làm bằng tay', async () => {
+  const r0 = await fetch(`${BASE}/api/objects/mock_1/status`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ on: false, name: 'Camp 1' }) })
+  assert.equal(r0.status, 200)
+  const { status, body } = await trend('mock_1')
+  assert.equal(status, 200)
+  assert.equal(body.days.length, 30)
+  assert.equal(body.days[0].date, body.since)
+  assert.equal(body.days.at(-1).date, body.until)
+  assert.ok(body.days.every((d) => typeof d.spend === 'number' && d.spend > 0))
+  assert.equal(body.events.length, 1)
+  assert.equal(body.events[0].type, 'off')
+  assert.equal(body.events[0].date, body.until)
+  const again = await trend('mock_1')
+  assert.deepEqual(again.body.days, body.days, 'mở lại thấy cùng số liệu')
+  assert.equal((await trend('mock_2', '?days=7')).body.days.length, 7)
+})
+
+test('xu hướng: số ngày sai hoặc camp không có thì báo lỗi rõ ràng', async () => {
+  assert.equal((await trend('mock_1', '?days=3')).status, 400)
+  assert.equal((await trend('mock_1', '?days=abc')).status, 400)
+  const nf = await trend('khong_co')
+  assert.equal(nf.status, 404)
+  assert.match(nf.body.error, /Không tìm thấy/)
+})

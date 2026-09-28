@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue'
-import { Send, Save, FileText, CheckCircle2, XCircle, Users, Bot } from 'lucide-vue-next'
+import { Send, Save, FileText, CheckCircle2, XCircle, Users, Bot, CalendarDays } from 'lucide-vue-next'
 import { state, saveSettings } from '../../stores/app'
 import { toast } from '../../stores/ui'
 import { api } from '../../lib/api'
@@ -11,7 +11,7 @@ import Badge from '../../components/Badge.vue'
 import Switch from '../../components/Switch.vue'
 import Callout from '../../components/Callout.vue'
 
-const f = reactive({ token: '', chatId: state.settings.telegramChatId || '', reportTime: state.settings.reportTime || '08:00', commands: !!state.settings.telegramCommands })
+const f = reactive({ token: '', chatId: state.settings.telegramChatId || '', reportTime: state.settings.reportTime || '08:00', commands: !!state.settings.telegramCommands, weekly: state.settings.weeklyReport !== false })
 // Trạng thái nhận lệnh (lib/tgbot.js): đang hỏi tin Telegram chưa, lỗi gần nhất (vd có bản tool khác dùng cùng bot)
 const bot = ref(null)
 const loadBot = async () => { try { bot.value = await api('telegram/bot', 'GET', undefined, { bg: true }) } catch { bot.value = null } }
@@ -41,7 +41,7 @@ const show = (k) => (submitted.value || touched[k] ? errs.value[k] : '')
 async function save() {
   submitted.value = true
   if (Object.keys(errs.value).length) { toast('Hãy sửa các mục báo lỗi trước khi lưu', 'error'); return false }
-  await saveSettings({ telegramToken: f.token.trim(), telegramChatId: f.chatId.trim(), reportTime: f.reportTime, telegramCommands: f.commands })
+  await saveSettings({ telegramToken: f.token.trim(), telegramChatId: f.chatId.trim(), reportTime: f.reportTime, telegramCommands: f.commands, weeklyReport: f.weekly })
   f.token = ''
   setTimeout(loadBot, 1500) // bot bắt đầu/ngừng hỏi tin sau vài giây
   f.chatId = state.settings.telegramChatId || '' // server đã chuẩn hoá (bỏ trùng, cách nhau ", ")
@@ -70,6 +70,7 @@ async function run(path, okOne, okMany) {
 }
 const test = () => run('telegram/test', 'Đã gửi tin thử — kiểm tra Telegram', 'Đã gửi tin thử cho {n} người nhận')
 const report = () => run('report', 'Đã gửi báo cáo', 'Đã gửi báo cáo cho {n} người nhận')
+const weekly = () => run('report/weekly', 'Đã gửi báo cáo tuần', 'Đã gửi báo cáo tuần cho {n} người nhận')
 </script>
 
 <template>
@@ -89,6 +90,14 @@ const report = () => run('report', 'Đã gửi báo cáo', 'Đã gửi báo cáo
       </Field>
     </div>
     <div class="cmd">
+      <span class="ic"><CalendarDays :size="20" /></span>
+      <div class="cb">
+        <h4>Báo cáo tuần</h4>
+        <p class="muted">Sáng thứ Hai, cùng giờ với báo cáo hằng ngày: chi tiêu, kết quả, CPA của tuần trước so với tuần liền trước, 3 camp tốt nhất, 3 camp cần xem lại và số lần tool đã tự bật/tắt/đổi ngân sách.</p>
+      </div>
+      <Switch v-model="f.weekly" label="Báo cáo tuần" />
+    </div>
+    <div class="cmd">
       <span class="ic"><Bot :size="20" /></span>
       <div class="cb">
         <h4>Nhận lệnh từ Telegram</h4>
@@ -103,6 +112,7 @@ const report = () => run('report', 'Đã gửi báo cáo', 'Đã gửi báo cáo
       <Btn variant="primary" :icon="Save" :action="save">Lưu</Btn>
       <Btn :icon="Send" :action="test">Gửi tin thử</Btn>
       <Btn :icon="FileText" :action="report">Gửi báo cáo ngay</Btn>
+      <Btn :icon="CalendarDays" :action="weekly">Gửi báo cáo tuần</Btn>
     </div>
     <ul v-if="result" class="res" aria-live="polite">
       <li v-for="r in result" :key="r.id" :class="r.ok ? 'ok' : 'no'">
@@ -129,6 +139,7 @@ h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 20px; font-
 .btns { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 .cmd { display: flex; gap: 16px; align-items: flex-start; padding: 18px 0; margin-bottom: 14px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .cmd .ic { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent); }
+.cmd + .cmd { border-top: 0; margin-top: -14px; }
 .cb { flex: 1; min-width: 0; } .cb h4 { font-size: 15.5px; margin-bottom: 4px; } .cb p { font-size: 14px; line-height: 1.6; margin: 0; }
 .st { display: flex; align-items: center; gap: 6px; margin-top: 8px !important; font-weight: 600; } .st.ok { color: var(--success); } .st.no { color: var(--danger); }
 .res { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 6px; }
