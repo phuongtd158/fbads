@@ -272,6 +272,7 @@ export const TOPICS = [
         ['Rule tắt nhầm camp mới chạy?', 'Hãy tăng **chi tiêu tối thiểu** của rule để camp có đủ dữ liệu trước khi bị xét. Xem Nhật ký để biết rule nào đã tắt, rồi bật lại camp thủ công.'],
         ['Token hết hạn thì sao?', 'Sẽ có thanh cảnh báo khi còn dưới 7 ngày. Vào Cài đặt → Kết nối Facebook → Đổi token để dán token mới. Dùng cách “Người dùng hệ thống” để có token không hết hạn.'],
         ['Quên mật khẩu đăng nhập?', 'Tắt tool, mở file `data.json`, đặt `"passwordHash": ""`, lưu và chạy lại. Sau đó vào Cài đặt → Bảo mật đặt mật khẩu mới.'],
+        ['Cài tool lên điện thoại như app được không?', 'Được. Mở tool qua **https** (vd bản trên Render), vào Cài đặt → Giao diện → **Cài lên điện thoại**. Android (Chrome) có nút **Cài app**; iPhone (Safari) bấm **Chia sẻ** → **Thêm vào MH chính**. App mở toàn màn hình, số liệu vẫn luôn là mới nhất; mất mạng thì hiện trang báo không có kết nối. Lịch và rule vẫn chạy trên server dù bạn không mở app.'],
         ['Dữ liệu của tôi lưu ở đâu?', 'Trong file `data.json` cạnh tool, trên máy bạn. Tool chỉ gửi dữ liệu tới Facebook (và Telegram nếu bạn bật).'],
       ] },
     ],

@@ -35,6 +35,7 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API 
 - `GET /api/health` (không cần đăng nhập): `200` khi vòng lịch/rule vừa chạy xong một lượt trong 5 phút gần nhất, `503` khi bị kẹt hoặc ngừng. Dùng cho UptimeRobot và Health Check của Render.
 - Nhật ký chi tiết: bấm một dòng để xem nguyên nhân lỗi, cách khắc phục, mã lỗi Facebook, yêu cầu đã gửi, trước/sau, điều kiện rule; có nút sao chép và chạy lại. Token không bao giờ được ghi vào nhật ký.
 - Giao diện sáng/tối/theo hệ thống, 5 màu nhấn, thanh lệnh nhanh `Ctrl K`, dùng được trên điện thoại.
+- Cài lên điện thoại như app (Cài đặt → Giao diện): mở toàn màn hình từ màn hình chính, có trang báo khi mất mạng. Cần mở tool qua https (vd Render) hoặc localhost. Không lưu số liệu trên máy nên luôn thấy số mới.
 - Hướng dẫn ngay trong app: trang **Hướng dẫn** (tìm kiếm, FAQ, thuật ngữ), dấu `?` giải thích cạnh các ô khó, thẻ **Bắt đầu nhanh** tự tick theo tiến độ.
 - Đăng nhập bằng mật khẩu (Cài đặt → Bảo mật, hoặc biến môi trường `APP_PASSWORD`).
 
