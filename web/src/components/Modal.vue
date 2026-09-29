@@ -2,7 +2,8 @@
 import { watch, onBeforeUnmount } from 'vue'
 import { X } from 'lucide-vue-next'
 
-const props = defineProps({ modelValue: Boolean, title: String, subtitle: String, width: { type: String, default: '640px' } })
+const props = defineProps({ modelValue: Boolean, title: String, subtitle: String, width: { type: String, default: '640px' }, fill: Boolean })
+// fill: hộp thoại cao gần hết màn hình, phần thân không tự cuộn và không có lề (nội dung tự chia cột, tự cuộn từng phần)
 const emit = defineEmits(['update:modelValue'])
 const close = () => emit('update:modelValue', false)
 const onKey = (e) => { if (e.key === 'Escape') close() }
@@ -18,7 +19,7 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
   <Teleport to="body">
     <Transition name="modal">
       <div v-if="modelValue" class="overlay" @mousedown.self="close">
-        <div class="sheet" :style="{ maxWidth: width }" role="dialog" aria-modal="true">
+        <div class="sheet" :class="{ fill }" :style="{ maxWidth: width }" role="dialog" aria-modal="true">
           <header>
             <div><h3>{{ title }}</h3><p v-if="subtitle" class="faint">{{ subtitle }}</p></div>
             <button class="x" aria-label="Đóng" @click="close"><X :size="18" /></button>
@@ -43,6 +44,10 @@ header p { font-size: 13.5px; margin-top: 2px; }
 .x { border: 0; background: var(--surface-3); color: var(--text-2); width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; transition: .15s; }
 .x:hover { background: var(--danger-soft); color: var(--danger); }
 .body { padding: 4px 26px 22px; overflow: auto; }
+.sheet.fill { height: min(92vh, 940px); max-height: none; }
+.sheet.fill header { padding-bottom: 12px; }
+.sheet.fill .body { flex: 1; min-height: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+@media (max-width: 640px) { .overlay:has(.sheet.fill) { padding: 0; } .sheet.fill { height: 100dvh; border-radius: 0; border: 0; } .sheet.fill header { padding: 14px 16px 8px; } .sheet.fill header p { display: none; } }
 footer { padding: 16px 26px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border); background: var(--surface-2); }
 .modal-enter-active, .modal-leave-active { transition: opacity .2s; }
 .modal-enter-active .sheet, .modal-leave-active .sheet { transition: transform .3s var(--ease), opacity .2s; }
