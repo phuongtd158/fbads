@@ -12,14 +12,14 @@
 //  startOnlySelected : mở ở chế độ "chỉ hiện mục đã chọn" (khi sửa lịch đã có)
 //  hideBudget        : ẩn phần lọc theo ngân sách (lịch bật/tắt không cần)
 //  tagsOf(id)        : nhãn phụ trên từng dòng, vd các lịch khác đang tác động lên mục đó → [{ text, tone }]
-// Các cột số liệu (chi tiêu, kết quả, CPA, ROAS…) và khoảng ngày dùng chung với bảng Tổng quan:
-// đổi cột hay khoảng ngày ở đây thì Tổng quan cũng đổi theo và ngược lại.
+// Khoảng ngày dùng chung với bảng Tổng quan (đổi ở đây thì Tổng quan cũng đổi theo và ngược lại);
+// các cột số liệu thì khung chọn có bộ riêng.
 import { ref, computed, watch, onMounted } from 'vue'
 import { ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, X, Search, SlidersHorizontal, ChevronDown } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { fmt, fmtDec } from '../lib/format'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, todayISO } from '../stores/overview'
-import { colOf, cellValue, cellText } from '../lib/overviewColumns'
+import { colOf, cellValue, cellText, cleanColumns, DEFAULT_COLUMNS } from '../lib/overviewColumns'
 import { CONDS, STATUS_FILTERS, statusOf, readFilter, matchFilter } from '../lib/bulkBudget'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { accountLabel } from '../lib/accounts'
@@ -78,9 +78,15 @@ const dm = computed(() => deliveryMap(state.objs))
 const deliveryOf = (o) => DELIVERY[dm.value[o.id]] || DELIVERY.off
 const collator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' })
 const sort = ref({ key: '', dir: 'asc' })
-// ----- Số liệu (theo khoảng ngày và các cột đang chọn ở Tổng quan) -----
+// ----- Số liệu (theo khoảng ngày đang chọn ở Tổng quan) -----
+// Bộ cột riêng của khung chọn (không dùng chung với Tổng quan, bên đó hay bật rất nhiều cột): mặc định Chi tiêu, Kết quả, CPA, ROAS.
+// Trình duyệt tự nhớ lựa chọn.
+const COLS_KEY = 'fbads.pickerColumns'
+const readCols = () => { try { const v = JSON.parse(localStorage.getItem(COLS_KEY)); return Array.isArray(v) ? cleanColumns(v) : [...DEFAULT_COLUMNS] } catch { return [...DEFAULT_COLUMNS] } }
+const cols = ref(readCols())
+watch(cols, (v) => { try { localStorage.setItem(COLS_KEY, JSON.stringify(v)) } catch { /* chế độ riêng tư */ } })
 // Ngân sách luôn có cột riêng nên bỏ khỏi danh sách cột số liệu
-const mcols = computed(() => ov.columns.filter((k) => k !== 'budget').map(colOf))
+const mcols = computed(() => cols.value.filter((k) => k !== 'budget').map(colOf))
 // Khung hẹp (điện thoại) hiện dạng thẻ: 4 ô số liệu (ngân sách, ngân sách mới nếu có, rồi các cột đầu), còn lại bấm "Xem thêm"
 const mainN = computed(() => 4 - 1 - (props.change ? 1 : 0))
 const extraN = computed(() => Math.max(0, mcols.value.length - mainN.value))
@@ -167,7 +173,8 @@ const pct = (r) => `${r.ch.to > r.o.dailyBudget ? '+' : ''}${Math.round((r.ch.to
 const big = (r) => r.ch.to / r.o.dailyBudget >= 2 || r.ch.to / r.o.dailyBudget <= 0.5
 // Bảng nhiều cột: cột Tên (kèm ô tích) dính bên trái, phần còn lại cuộn ngang. Mọi dòng cùng một khuôn cột nên thẳng hàng.
 // --nm: bề rộng tối thiểu cột Tên; --acw: cột Tài khoản (khung hẹp thì = 0, tên tài khoản hiện dưới tên camp)
-const colW = (c) => c.min || 90
+// cột đủ rộng cho tiêu đề (tiêu đề không xuống dòng, không đè lên cột bên cạnh): ~7,5px mỗi chữ + chỗ cho mũi tên sắp xếp
+const colW = (c) => Math.max(c.min || 90, Math.ceil((c.short || c.label).length * 7.5) + 30)
 const grid = computed(() => {
   const t = ['minmax(var(--nm), 1fr)']
   if (showAcc.value) t.push('var(--acw)')
@@ -235,7 +242,7 @@ const grid = computed(() => {
       <template v-else>
         <div class="mbar">
           <DateRangePicker :model-value="ov.spec" :today="todayISO()" :loading="ov.loading" @update:model-value="setSpec" />
-          <ColumnsMenu v-model="ov.columns" />
+          <ColumnsMenu v-model="cols" />
           <span class="faint mnote">{{ ov.err ? '' : !rangeReady ? 'Đang tải số liệu…' : `Số liệu ${rangeTitle}. Ngân sách và trạng thái là hiện tại.` }}</span>
         </div>
         <p v-if="ov.err" class="ferr">Không tải được số liệu “{{ rangeInfo.title }}”: {{ ov.err }}</p>
@@ -318,7 +325,7 @@ const grid = computed(() => {
 /* bảng: cuộn cả dọc lẫn ngang trong một khung, tiêu đề dính trên, cột Tên dính trái */
 .mbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 .mnote { font-size: 12.5px; }
-.tbl { --nm: 220px; --acw: 130px; border: 1px solid var(--border); border-radius: 14px; overflow: auto; max-height: 400px; }
+.tbl { --nm: 280px; --acw: 130px; border: 1px solid var(--border); border-radius: 14px; overflow: auto; max-height: 400px; }
 .inner { width: 100%; }
 .r { display: grid; gap: 10px; align-items: center; padding: 9px 14px 9px 0; }
 .lead { position: sticky; left: 0; z-index: 1; align-self: stretch; display: flex; align-items: center; gap: 12px; min-width: 0; padding-left: 14px; margin: -9px 0; background: var(--surface); box-shadow: 1px 0 0 var(--border); }
@@ -335,7 +342,8 @@ const grid = computed(() => {
 .mc { white-space: nowrap; font-size: 13.5px; }
 .morelnk { position: sticky; left: 0; display: block; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--border); background: var(--surface-2); color: var(--accent); font: inherit; font-size: 13.5px; font-weight: 650; cursor: pointer; }
 .morelnk small { color: var(--text-3); font-weight: 500; } .morelnk:hover { background: var(--accent-soft); }
-.it { border-bottom: 1px solid var(--border); font-size: 14px; transition: background .12s; cursor: pointer; }
+.it { border-bottom: 1px solid var(--border); font-size: 14px; transition: background .12s; cursor: pointer; padding-top: 12px; padding-bottom: 12px; }
+.it .lead { margin: -12px 0; padding-top: 12px; padding-bottom: 12px; }
 .it.off .nm b { text-decoration: line-through; color: var(--text-3); }
 .it:last-child { border-bottom: 0; }
 .it:hover, .it:hover .lead { background: var(--surface-2); }
@@ -344,9 +352,10 @@ const grid = computed(() => {
 .nm { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 /* tên hiện đủ, dài quá thì xuống tối đa 2 dòng */
 .nm b { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-weight: 600; line-height: 1.35; }
-.dl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; max-width: 100%; }
+/* dòng trạng thái · tài khoản: một dòng, dài quá thì "…" */
+.dl { display: block; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .dl em { font-style: normal; }
-.dl i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); opacity: .6; flex: none; }
+.dl i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; vertical-align: 1px; border-radius: 50%; background: var(--text-3); opacity: .6; }
 .dl.success i { background: var(--success); opacity: 1; } .dl.info i { background: var(--info); opacity: 1; } .dl.warning i { background: var(--warning); opacity: 1; } .dl.danger i { background: var(--danger); opacity: 1; }
 .nw { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .nw small { font-size: 12px; font-weight: 650; color: var(--text-2); } .nw small.bigc { color: var(--warning); } .badc { color: var(--danger); }
@@ -367,7 +376,7 @@ const grid = computed(() => {
 .fact { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
 .lnk:disabled { opacity: .5; cursor: default; }
 @container (max-width: 820px) {
-  .tbl { --nm: 170px; --acw: 0px; }
+  .tbl { --nm: 250px; --acw: 0px; }
   .ac, .h-ac { visibility: hidden; overflow: hidden; } /* giữ ô trong lưới (cột rộng 0) để các cột sau không bị lệch */
   .acc-in { display: inline; }
 }
@@ -383,7 +392,7 @@ const grid = computed(() => {
   .r.it { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px; padding: 11px 12px; margin-bottom: 9px; border: 1px solid var(--border); border-radius: 14px; }
   .it:last-child { border-bottom: 1px solid var(--border); }
   .it.on { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
-  .lead { grid-column: 1 / -1; position: static; margin: 0 0 4px; padding: 0; background: none !important; box-shadow: none; align-items: flex-start; }
+  .lead, .it .lead { grid-column: 1 / -1; position: static; margin: 0 0 4px; padding: 0; background: none !important; box-shadow: none; align-items: flex-start; }
   .lead input[type='checkbox'] { margin-top: 2px; }
   .ac { display: none; }
   .cell { justify-self: stretch; text-align: left; padding: 6px 8px; border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
