@@ -92,7 +92,7 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
 </script>
 
 <template>
-  <Modal :model-value="modelValue" title="Đổi ngân sách hàng loạt" subtitle="Lọc theo điều kiện, chọn chiến dịch, rồi nhập ngân sách mới." width="840px" @update:model-value="(v) => !v && close()">
+  <Modal :model-value="modelValue" title="Đổi ngân sách hàng loạt" subtitle="Lọc theo điều kiện, chọn chiến dịch, rồi nhập ngân sách mới." width="1080px" @update:model-value="(v) => !v && close()">
     <template v-if="!run">
       <!-- Bước 1 + 2: lọc rồi tick chọn -->
       <FilterPicker v-model="selected" v-model:filter="filter" numbered need-budget :change="change" />
