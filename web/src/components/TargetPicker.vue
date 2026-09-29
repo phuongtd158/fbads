@@ -46,7 +46,7 @@ const clear = () => emit('update:modelValue', props.modelValue.filter((id) => !l
       <template v-if="state.objsLoading && !state.objs.length"><div v-for="i in 3" :key="i" class="it"><Skeleton h="16px" /></div></template>
       <button v-for="o in shown" :key="o.id" type="button" class="it" :class="{ on: selected.has(o.id), lock: locked(o) }" :disabled="locked(o)" :title="locked(o) ? 'Mục này không có ngân sách riêng (CBO), không thể đổi ngân sách' : ''" @click="toggle(o.id)">
         <span class="box"><Check :size="13" /></span>
-        <span class="nm">{{ o.name }}</span>
+        <span class="nmw"><span class="nm">{{ o.name }}</span><small v-if="multiAcc && !account" class="ac2">{{ accountLabel(o) }}</small></span>
         <span v-if="multiAcc && !account" class="ac" :title="'Tài khoản quảng cáo ID ' + o.accountId">{{ accountLabel(o) }}</span>
         <span class="tag" :class="{ warn: needBudget && o.dailyBudget == null }">{{ needBudget && o.dailyBudget == null ? (o.level === 'campaign' ? 'Không có ngân sách (ABO)' : 'Không có ngân sách (CBO)') : o.level === 'campaign' ? 'Camp' : 'Nhóm QC' }}</span>
       </button>
@@ -59,18 +59,19 @@ const clear = () => emit('update:modelValue', props.modelValue.filter((id) => !l
 
 <style scoped>
 .pick { border: 1px solid var(--border-strong); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
-.bar { display: flex; gap: 10px; align-items: center; padding: 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
-.search { position: relative; flex: 1; }
+.bar { display: flex; gap: 8px 10px; align-items: center; flex-wrap: wrap; padding: 8px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+.search { position: relative; flex: 1; min-width: 180px; }
 .search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-3); }
 .search .input { padding: 7px 10px 7px 32px; font-size: 14px; }
-.lnk { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 6px; border-radius: 6px; }
+.lnk { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 4px 6px; border-radius: 6px; white-space: nowrap; }
 .lnk.mut { color: var(--text-3); } .lnk:hover { background: var(--surface-3); }
-.list { max-height: 210px; overflow: auto; padding: 4px; }
+.list { max-height: 300px; overflow: auto; padding: 4px; }
 .it { display: flex; width: 100%; align-items: center; gap: 11px; padding: 9px 10px; border: 0; background: none; border-radius: 9px; text-align: left; }
 .it:hover { background: var(--surface-2); }
 .box { width: 19px; height: 19px; border-radius: 6px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; color: transparent; flex: none; transition: .15s; }
 .on .box { background: var(--accent); border-color: var(--accent); color: #fff; }
-.nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14.5px; }
+/* tên hiện đủ, dài quá thì xuống tối đa 2 dòng */
+.nm { flex: 1; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.4; }
 .accsel { width: auto; max-width: 170px; padding: 6px 8px; font-size: 13px; }
 .ac { flex: none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--text-2); }
 .it.lock { opacity: .5; cursor: not-allowed; }
@@ -80,4 +81,7 @@ const clear = () => emit('update:modelValue', props.modelValue.filter((id) => !l
 .tag { font-size: 12px; color: var(--text-3); background: var(--surface-3); padding: 1px 8px; border-radius: 6px; }
 .none { padding: 18px; text-align: center; font-size: 14px; }
 .foot { padding: 7px 14px; font-size: 12.5px; border-top: 1px solid var(--border); background: var(--surface-2); }
+.nmw { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ac2 { display: none; font-size: 12px; color: var(--text-3); }
+@media (max-width: 640px) { .search { flex-basis: 100%; } .accsel { flex: 1; max-width: none; } .tag { flex: none; } .ac { display: none; } .ac2 { display: block; } }
 </style>
