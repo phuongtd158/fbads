@@ -113,7 +113,7 @@ const byCur = computed(() => curGroups.value.map((g) => ({
   budget: budgetOf(g.items.filter((i) => isRunning(i.o))),
 })))
 const avgCpa = computed(() => (mixed.value ? null : T.value.cpa))
-const avgRoas = computed(() => (mixed.value ? null : T.value.roas))
+const avgRoas = computed(() => (mixed.value || !T.value.revenue ? null : T.value.roas)) // không có doanh thu → "–"
 const avgPerDay = computed(() => (!today.value && !mixed.value && rangeInfo.value.days && T.value.spend ? T.value.spend / rangeInfo.value.days : null))
 const top = computed(() => (mixed.value ? [] : [...campItems.value].filter((i) => i.m.spend > 0).sort((a, b) => b.m.spend - a.m.spend).slice(0, 3)))
 const topMax = computed(() => (top.value[0] ? top.value[0].m.spend : 1))
@@ -190,7 +190,7 @@ const tot = computed(() => totals(visible.value.map((i) => ({ m: i.m, budget: i.
 const totCell = (c) => {
   if (c.key === 'budget') return tot.value.budgetRows && !visMixed.value ? money(tot.value.budget, currency.value) : '–'
   if (c.money && visMixed.value) return '–'
-  if (c.key === 'roas') return tot.value.roas == null || visMixed.value ? '–' : fmtDec(tot.value.roas)
+  if (c.key === 'roas') return tot.value.roas == null || !tot.value.revenue || visMixed.value ? '–' : fmtDec(tot.value.roas)
   return cellText(c, tot.value[c.key], visCurs.value[0] ? visCurs.value[0].currency : fallbackCur.value)
 }
 const footSpend = computed(() => visCurs.value.map((g) => ({ currency: g.currency, s: g.items.reduce((t, i) => t + i.m.spend, 0) })))
@@ -270,7 +270,7 @@ const chips = computed(() => {
 })
 const clearAll = () => { clearFilters(); q.value = '' }
 
-const roasTone = (m) => (!m.spend || m.roas == null ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
+const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
 // Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
 const locked = (o) => ['ARCHIVED', 'DELETED', 'DISAPPROVED'].includes(o.effective)

@@ -3,6 +3,7 @@
 import { fmt, fmtDec } from './format'
 import { decimalsOf } from './accounts'
 
+// tiny: nhãn ngắn trên thẻ ở điện thoại (không có thì dùng short / label)
 // money: cột tiền (hiện đúng số lẻ theo loại tiền của tài khoản); first: chiều sắp xếp khi bấm lần đầu (mặc định giảm dần)
 export const COLUMNS = [
   { key: 'budget', label: 'Ngân sách/ngày', short: 'Ngân sách', menu: 'Ngân sách hằng ngày', tip: 'budget', min: 118 },
@@ -10,18 +11,18 @@ export const COLUMNS = [
   { key: 'results', label: 'Kết quả', tip: 'results', min: 78 },
   { key: 'cpa', label: 'CPA', money: true, first: 'asc', tip: 'cpa', min: 92 },
   { key: 'roas', label: 'ROAS', tip: 'roas', min: 78 },
-  { key: 'revenue', label: 'Doanh thu', menu: 'Doanh thu (giá trị chuyển đổi)', money: true, min: 112 },
-  { key: 'impressions', label: 'Lượt hiển thị', min: 112 },
-  { key: 'clicks', label: 'Lượt nhấp', min: 92 },
+  { key: 'revenue', tiny: 'Doanh thu', label: 'Doanh thu', menu: 'Doanh thu (giá trị chuyển đổi)', money: true, min: 112 },
+  { key: 'impressions', tiny: 'Hiển thị', label: 'Lượt hiển thị', min: 112 },
+  { key: 'clicks', tiny: 'Lượt nhấp', label: 'Lượt nhấp', min: 92 },
   { key: 'ctr', label: 'CTR', menu: 'CTR (tỉ lệ nhấp)', min: 76 },
   { key: 'cpc', label: 'CPC', menu: 'CPC (chi phí mỗi nhấp)', money: true, first: 'asc', min: 92 },
   { key: 'cpm', label: 'CPM', menu: 'CPM (chi phí 1000 hiển thị)', money: true, first: 'asc', min: 94 },
-  { key: 'conversations', label: 'Cuộc trò chuyện', menu: 'Lượt bắt đầu cuộc trò chuyện', min: 92 },
-  { key: 'costPerConversation', label: 'Chi phí/trò chuyện', menu: 'Chi phí trên mỗi lượt bắt đầu cuộc trò chuyện', money: true, first: 'asc', min: 98 },
-  { key: 'checkouts', label: 'Bắt đầu thanh toán', menu: 'Lượt bắt đầu thanh toán', min: 92 },
-  { key: 'leads', label: 'KH tiềm năng', menu: 'Khách hàng tiềm năng', min: 92 },
-  { key: 'leadsOnMeta', label: 'KH tiềm năng (Meta)', menu: 'Khách hàng tiềm năng trên Meta', min: 92 },
-  { key: 'comments', label: 'Bình luận', menu: 'Bình luận về bài viết', min: 92 },
+  { key: 'conversations', tiny: 'Trò chuyện', label: 'Cuộc trò chuyện', menu: 'Lượt bắt đầu cuộc trò chuyện', min: 92 },
+  { key: 'costPerConversation', tiny: 'Chi phí/trò chuyện', label: 'Chi phí/trò chuyện', menu: 'Chi phí trên mỗi lượt bắt đầu cuộc trò chuyện', money: true, first: 'asc', min: 98 },
+  { key: 'checkouts', tiny: 'Bắt đầu TT', label: 'Bắt đầu thanh toán', menu: 'Lượt bắt đầu thanh toán', min: 92 },
+  { key: 'leads', tiny: 'KH tiềm năng', label: 'KH tiềm năng', menu: 'Khách hàng tiềm năng', min: 92 },
+  { key: 'leadsOnMeta', tiny: 'KH TN (Meta)', label: 'KH tiềm năng (Meta)', menu: 'Khách hàng tiềm năng trên Meta', min: 92 },
+  { key: 'comments', tiny: 'Bình luận', label: 'Bình luận', menu: 'Bình luận về bài viết', min: 92 },
 ]
 export const COLUMN_KEYS = COLUMNS.map((c) => c.key)
 export const DEFAULT_COLUMNS = ['budget', 'spend', 'results', 'cpa', 'roas']

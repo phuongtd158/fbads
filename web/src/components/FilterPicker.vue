@@ -79,7 +79,7 @@ const sort = ref({ key: '', dir: 'asc' })
 const mcols = computed(() => ov.columns.filter((k) => k !== 'budget').map(colOf))
 const mOf = computed(() => { const m = new Map(); for (const o of state.objs) m.set(o.id, itemOf(o)); return m })
 const curOf = (o) => o.currency || 'VND'
-const roasTone = (m) => (!m.spend || m.roas == null ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
+const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const rangeTitle = computed(() => (rangeInfo.value.today ? 'hôm nay' : rangeInfo.value.title.toLowerCase()))
 onMounted(() => { if (!rangeReady.value) loadRange({ bg: true }) })
 
