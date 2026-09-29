@@ -43,7 +43,7 @@ export function windowIsOn(s, day, minutes) {
     return (days.includes(day) && minutes >= on) || (days.includes((day + 6) % 7) && minutes < off)
 }
 const METRICS = ['cpa', 'roas', 'spend', 'results', 'ctr', 'cpc', 'cpm', 'messages', 'costPerMessage', 'leads', 'costPerLead', 'frequency']
-// Số liệu dạng chi phí (tiền): ngưỡng "lớn hơn" phải > 0, và giao diện nhập được kiểu 150k / 1,5tr
+// Số liệu dạng chi phí (tiền): ngưỡng "lớn hơn" phải > 0, nhập bằng ô tiền tự thêm dấu chấm
 export const COST_METRICS = ['cpa', 'spend', 'cpc', 'cpm', 'costPerMessage', 'costPerLead']
 export const MAX_CONDITIONS = 5 // một rule tối đa 5 điều kiện
 export const TARGET_METRICS = ['cpa', 'roas', 'spend'] // số liệu so được với "mục tiêu" đặt theo tài khoản (Cài đặt → Mục tiêu)

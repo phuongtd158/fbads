@@ -86,7 +86,7 @@ export function nextBudget(cur, { mode, value }) {
 export function readFilter(f) {
   const e = {}
   const x = parseMoney(f.x), y = parseMoney(f.y)
-  if (f.op !== 'any' && !(x >= 0)) e.x = 'Nhập mức ngân sách để so sánh (vd 100000 hoặc 100k)'
+  if (f.op !== 'any' && !(x >= 0)) e.x = 'Nhập mức ngân sách để so sánh (vd 100.000)'
   if (f.op === 'between' && !(y >= 0)) e.y = 'Nhập mức thứ hai của khoảng'
   const status = statusOf(f)
   return { errors: e, filter: { level: f.level, op: f.op, x, y, name: f.name || '', status, onlyRunning: status === 'running', account: f.account || '' } }
@@ -95,7 +95,7 @@ export function readFilter(f) {
 export function readAction(f) {
   const e = {}
   const v = f.mode === 'percent' ? Number(String(f.value ?? '').replace(',', '.') || NaN) : parseMoney(f.value)
-  if (!Number.isFinite(v)) e.value = f.mode === 'percent' ? 'Nhập số % (âm để giảm, vd -20)' : 'Nhập số tiền (vd 500000 hoặc 500k)'
+  if (!Number.isFinite(v)) e.value = f.mode === 'percent' ? 'Nhập số % (âm để giảm, vd -20)' : 'Nhập số tiền (vd 500.000)'
   else if (f.mode === 'set' && v <= 0) e.value = 'Ngân sách mới phải lớn hơn 0'
   else if (f.mode === 'percent' && (v === 0 || v < -LIMITS.rulePctDecreaseMax || v > LIMITS.scheduleSetPctMax)) e.value = `% phải khác 0, từ -${LIMITS.rulePctDecreaseMax} đến +${LIMITS.scheduleSetPctMax}`
   else if (f.mode === 'add' && v === 0) e.value = 'Số tiền cộng/trừ phải khác 0'

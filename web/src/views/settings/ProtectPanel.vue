@@ -100,7 +100,7 @@ async function save() {
         <Callout v-if="multiAcc && mixedCur && f.killScope === 'total'" tone="warning">Các tài khoản dùng <b>nhiều loại tiền</b> khác nhau nên tổng chi tiêu không có nghĩa. Nên chọn “Từng tài khoản”.</Callout>
         <Callout v-if="noLimitAnywhere" tone="warning">Chưa có mức nào (không có mức chung, không tài khoản nào có mức riêng) nên dừng khẩn sẽ không làm gì.</Callout>
         <Field :label="f.killScope === 'account' ? 'Mức chung cho mỗi tài khoản chưa đặt mức riêng' : 'Mức chi tiêu tối đa mỗi ngày'" :error="show('dailySpendLimit')">
-          <input v-model="f.dailySpendLimit" class="input num lim" type="number" min="0" step="10000" placeholder="Ví dụ 3000000" @blur="touched.dailySpendLimit = true" />
+          <MoneyInput v-model="f.dailySpendLimit" class="lim" placeholder="Ví dụ 3.000.000" @blur="touched.dailySpendLimit = true" />
         </Field>
         <div v-if="hasData && f.killScope === 'account' && multiAcc" class="ameters">
           <div v-for="m in accMeters" :key="m.id" class="am">
@@ -135,7 +135,7 @@ async function save() {
             <div class="inl"><input v-model="f.spikePct" class="input num" type="number" min="10" max="1000" step="1" @blur="touched.spikePct = true" /><span class="muted">%</span></div>
           </Field>
           <Field label="và hôm nay đã chi từ" :error="show('spikeMinSpend')" hint="Tránh báo tài khoản mới chi vài chục nghìn.">
-            <MoneyInput v-model="f.spikeMinSpend" class="lim" placeholder="vd 100k" @input="touched.spikeMinSpend = true" />
+            <MoneyInput v-model="f.spikeMinSpend" class="lim" placeholder="vd 100.000" @input="touched.spikeMinSpend = true" />
           </Field>
         </div>
       </div>

@@ -71,8 +71,8 @@ async function create() {
   <Modal :model-value="modelValue" title="Bộ rule theo mục tiêu" subtitle="Nhập chi phí mục tiêu một lần, tool tạo sẵn các rule hay dùng. Sửa từng rule sau cũng được." width="640px" @update:model-value="emit('update:modelValue', $event)">
     <Field label="Chiến dịch của bạn chạy để"><Segmented v-model="goal" :options="goals" block /></Field>
     <div class="two">
-      <Field :label="GOALS[goal].costName"><MoneyInput v-model="target" placeholder="vd 150k" /></Field>
-      <Field label="Trần ngân sách khi tăng"><MoneyInput v-model="cap" placeholder="vd 2tr" /></Field>
+      <Field :label="GOALS[goal].costName"><MoneyInput v-model="target" placeholder="vd 150.000" /></Field>
+      <Field label="Trần ngân sách khi tăng"><MoneyInput v-model="cap" placeholder="vd 2.000.000" /></Field>
     </div>
     <ul class="list">
       <li v-for="x in rules" :key="x.key" :class="{ off: !picked[x.key] }">

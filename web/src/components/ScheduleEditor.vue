@@ -5,7 +5,6 @@ import { api } from '../lib/api'
 import { DAY_LABEL, DAY_ORDER } from '../lib/constants'
 import { validateSchedule, scheduleTimes, scheduleEvents, isTime } from '../lib/validate'
 import { parseMoney, budgetChange, matchFilter } from '../lib/bulkBudget'
-import { fmt } from '../lib/format'
 import { state } from '../stores/app'
 import { toast } from '../stores/ui'
 import Modal from './Modal.vue'
@@ -14,11 +13,12 @@ import Field from './Field.vue'
 import Callout from './Callout.vue'
 import Segmented from './Segmented.vue'
 import FilterPicker from './FilterPicker.vue'
+import MoneyInput from './MoneyInput.vue'
 
 const props = defineProps({ modelValue: Boolean, item: { type: Object, default: null } })
 const emit = defineEmits(['update:modelValue', 'saved'])
 
-// filter.x / filter.y giữ nguyên chữ người gõ (vd "100k"), đổi sang số khi kiểm tra và lưu
+// filter.x / filter.y là số tiền người gõ (có thể còn trống), đổi sang số khi kiểm tra và lưu
 const blankFilter = () => ({ level: 'campaign', op: 'any', x: '', y: '', name: '', status: 'all', onlyRunning: false, account: '' })
 const blankWindow = () => ({ on: '06:00', off: '23:00' })
 const blank = () => ({ name: '', action: 'on', times: ['06:00'], window: blankWindow(), days: [0, 1, 2, 3, 4, 5, 6], targetMode: 'list', targets: [], filter: blankFilter(), exclude: [], mode: 'percent', value: 20, enabled: true })
@@ -60,7 +60,6 @@ const targetModes = [
   { value: 'filter', label: 'Tự động theo điều kiện', desc: 'Mọi mục khớp lúc chạy, kể cả mục mới tạo. Bỏ tích để loại trừ mục không muốn.' },
 ]
 const targetErr = computed(() => (f.value.targetMode === 'list' ? showTargets.value : submitted.value ? check.value.errors.filter || '' : ''))
-const moneyHint = (v) => { const n = parseMoney(v); return v !== '' && v != null && Number.isFinite(n) ? fmt(n) : '' }
 // Cột "Ngân sách mới" trong danh sách khi hành động là đổi ngân sách
 const budgetPreview = computed(() => {
   const v = f.value
@@ -133,7 +132,7 @@ async function save() {
 const actions = [{ value: 'on', label: 'Bật camp' }, { value: 'off', label: 'Tắt camp' }, { value: 'window', label: 'Bật + tắt theo giờ' }, { value: 'budget', label: 'Đổi ngân sách' }]
 const overnight = computed(() => isTime(f.value.window.on) && isTime(f.value.window.off) && f.value.window.off < f.value.window.on)
 const modes = [{ value: 'percent', label: 'Theo %' }, { value: 'set', label: 'Số tiền cố định' }, { value: 'add', label: 'Cộng/trừ số tiền' }]
-const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm để giảm (vd -30).' : f.value.mode === 'add' ? 'Số âm để trừ (vd -50000). ' + (moneyHint(f.value.value) ? `= ${moneyHint(f.value.value)}` : '') : `Đặt ngân sách ngày đúng bằng số này. ${moneyHint(f.value.value) ? `= ${moneyHint(f.value.value)}` : ''}`))
+const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm để giảm (vd -30).' : f.value.mode === 'add' ? 'Gõ dấu - ở đầu để trừ (vd -50.000).' : 'Đặt ngân sách ngày đúng bằng số này.'))
 </script>
 
 <template>
@@ -157,7 +156,7 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
     </Field>
 
     <Field v-if="f.action === 'budget'" label="Đổi ngân sách" tip="scheduleBudget" :error="show('value')" :hint="valueHint">
-      <div class="inl"><Segmented v-model="f.mode" :options="modes" /><input v-model="f.value" type="number" step="any" class="input val" @input="touched.value = true" /></div>
+      <div class="inl"><Segmented v-model="f.mode" :options="modes" /><input v-if="f.mode === 'percent'" v-model="f.value" type="number" step="any" class="input val" @input="touched.value = true" /><MoneyInput v-else v-model="f.value" class="val" :negative="f.mode === 'add'" :placeholder="f.mode === 'add' ? 'vd -50.000' : 'vd 500.000'" aria-label="Số tiền" @input="touched.value = true" /></div>
     </Field>
 
     <Field label="Ngày chạy" :error="show('days')">

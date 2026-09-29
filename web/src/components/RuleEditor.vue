@@ -148,7 +148,7 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
               <select v-model="c.compareRange" class="input cmp" aria-label="Khoảng so sánh" @change="touch('c' + i)"><option v-for="r in compareRanges" :key="r" :value="r">của {{ RANGE_LABEL[r] }}</option></select>
             </template>
             <div v-else-if="c.vs === 'target'" class="with"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input val" aria-label="Phần trăm so với mục tiêu" @input="touch('c' + i)" /><em>%</em></div>
-            <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="val" aria-label="Ngưỡng" placeholder="vd 150k" @input="touch('c' + i)" />
+            <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="val" aria-label="Ngưỡng" placeholder="vd 150.000" @input="touch('c' + i)" />
             <input v-else v-model="c.value" type="number" step="any" min="0" class="input val" aria-label="Ngưỡng" @input="touch('c' + i)" />
             <button v-if="f.conditions.length > 1" type="button" class="rm" :aria-label="'Bỏ điều kiện ' + (i + 1)" @click="removeCond(i)"><X :size="15" /></button>
           </div>
@@ -160,13 +160,13 @@ const scopes = computed(() => [{ value: 'all', label: `Tất cả ${unit.value} 
       </div>
     </Field>
 
-    <Field label="Chỉ xét khi đã chi tiêu tối thiểu" tip="minSpend" :error="show('minSpend')" hint="Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu."><MoneyInput v-model="f.minSpend" style="max-width: 220px" placeholder="vd 300k" @input="touch('minSpend')" /></Field>
+    <Field label="Chỉ xét khi đã chi tiêu tối thiểu" tip="minSpend" :error="show('minSpend')" hint="Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu."><MoneyInput v-model="f.minSpend" style="max-width: 220px" placeholder="vd 300.000" @input="touch('minSpend')" /></Field>
 
     <Field label="Thì" tip="ruleAction">
       <Segmented v-model="f.action" :options="actions" block />
       <div v-if="isBudget" class="adj" :class="{ bad: adjErrors.length }">
         <Segmented v-model="f.budgetMode" :options="budgetModes" size="sm" class="bm" />
-        <label v-if="f.budgetMode === 'amount'"><span>Mỗi lần {{ f.action === 'increase' ? 'cộng' : 'trừ' }}</span><MoneyInput v-model="f.amount" placeholder="vd 200k" @input="touch('amount')" /></label>
+        <label v-if="f.budgetMode === 'amount'"><span>Mỗi lần {{ f.action === 'increase' ? 'cộng' : 'trừ' }}</span><MoneyInput v-model="f.amount" placeholder="vd 200.000" @input="touch('amount')" /></label>
         <label v-else><span>Thay đổi</span><div class="with"><input v-model="f.pct" type="number" min="0" class="input" @input="touch('pct')" /><em>%</em></div></label>
         <label><span>Trần ngân sách</span><MoneyInput v-model="f.maxBudget" placeholder="Không giới hạn" @input="touch('maxBudget')" /></label>
         <label><span>Sàn ngân sách</span><MoneyInput v-model="f.minBudget" placeholder="Không giới hạn" @input="touch('minBudget')" /></label>
