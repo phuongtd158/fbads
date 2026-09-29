@@ -114,7 +114,7 @@ const otherTags = computed(() => {
     const tag = scheduleTag(s)
     const ex = new Set(s.exclude || [])
     const ids = s.targetMode === 'filter' ? matchFilter(state.objs, s.filter || {}).filter((o) => !ex.has(o.id)).map((o) => o.id) : s.targets || []
-    for (const id of ids) (m[id] ||= []).push({ ...tag, text: s.targetMode === 'filter' ? `${tag.text} (điều kiện)` : tag.text })
+    for (const id of ids) (m[id] ||= []).push({ ...tag, text: s.targetMode === 'filter' ? `${tag.text} · tự động` : tag.text })
   }
   return m
 })
