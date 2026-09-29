@@ -1,5 +1,5 @@
 <script setup>
-// Lọc camp / nhóm QC theo điều kiện rồi tick chọn — dùng chung cho "Đổi ngân sách hàng loạt" và Lịch.
+// Lọc camp / nhóm QC theo điều kiện rồi tick chọn (hộp thoại Lịch).
 //  v-model           : mảng id đã chọn
 //  v-model:filter    : điều kiện lọc { level, op, x, y, name, status, account } (x, y là số tiền người gõ;
 //                      name: nhiều từ khoá cách nhau bằng dấu phẩy; status: 'all' | 'running' | 'off')
@@ -9,14 +9,13 @@
 //                      Mặc định bỏ chọn mục không còn khớp (hàng loạt: không đổi mục bạn không nhìn thấy).
 //  needBudget        : hành động là đổi ngân sách → ẩn mục dùng ngân sách cấp khác (CBO)
 //  change(o)         : ngân sách mới của 1 mục { to, kind } cho cột "Ngân sách mới"; null = không hiện cột
-//  numbered          : tiêu đề đánh số "1 Lọc…", "2 Chọn…" (hộp thoại hàng loạt)
 //  startOnlySelected : mở ở chế độ "chỉ hiện mục đã chọn" (khi sửa lịch đã có)
 //  hideBudget        : ẩn phần lọc theo ngân sách (lịch bật/tắt không cần)
 //  tagsOf(id)        : nhãn phụ trên từng dòng, vd các lịch khác đang tác động lên mục đó → [{ text, tone }]
 // Các cột số liệu (chi tiêu, kết quả, CPA, ROAS…) và khoảng ngày dùng chung với bảng Tổng quan:
 // đổi cột hay khoảng ngày ở đây thì Tổng quan cũng đổi theo và ngược lại.
 import { ref, computed, watch, onMounted } from 'vue'
-import { ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, X } from 'lucide-vue-next'
+import { ArrowUp, ArrowDown, ArrowUpDown, RefreshCw, X, Search, SlidersHorizontal, ChevronDown } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { fmt, fmtDec } from '../lib/format'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, todayISO } from '../stores/overview'
@@ -29,13 +28,14 @@ import MoneyInput from './MoneyInput.vue'
 import Badge from './Badge.vue'
 import DateRangePicker from './DateRangePicker.vue'
 import ColumnsMenu from './ColumnsMenu.vue'
+import Popover from './Popover.vue'
 
 const selected = defineModel({ type: Array, default: () => [] })
 const exclude = defineModel('exclude', { type: Array, default: () => [] })
 const flt = defineModel('filter', { type: Object, required: true })
 const props = defineProps({
   auto: Boolean, keepHidden: Boolean, needBudget: Boolean,
-  change: { type: Function, default: null }, numbered: Boolean, startOnlySelected: Boolean,
+  change: { type: Function, default: null }, startOnlySelected: Boolean,
   hideBudget: Boolean, tagsOf: { type: Function, default: null },
 })
 const statusOpts = Object.entries(STATUS_FILTERS).map(([value, label]) => ({ value, label }))
@@ -60,6 +60,10 @@ const reloading = ref(false)
 async function reload() { reloading.value = true; try { await loadObjs(true) } finally { reloading.value = false } }
 const loadedAt = computed(() => (state.objsAt ? state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''))
 const typed = (v) => v != null && v !== ''
+// Bộ lọc phụ (ngân sách, tài khoản) nằm trong nút "Bộ lọc" cho gọn
+const fltOpen = ref(false)
+const fltCount = computed(() => (!props.hideBudget && flt.value.op !== 'any' ? 1 : 0) + (flt.value.account ? 1 : 0))
+const clearFlt = () => { flt.value.op = 'any'; flt.value.x = ''; flt.value.y = ''; flt.value.account = '' }
 
 // ----- Lọc -----
 const fr = computed(() => readFilter(flt.value))
@@ -77,6 +81,11 @@ const sort = ref({ key: '', dir: 'asc' })
 // ----- Số liệu (theo khoảng ngày và các cột đang chọn ở Tổng quan) -----
 // Ngân sách luôn có cột riêng nên bỏ khỏi danh sách cột số liệu
 const mcols = computed(() => ov.columns.filter((k) => k !== 'budget').map(colOf))
+// Khung hẹp (điện thoại) hiện dạng thẻ: 4 ô số liệu (ngân sách, ngân sách mới nếu có, rồi các cột đầu), còn lại bấm "Xem thêm"
+const mainN = computed(() => 4 - 1 - (props.change ? 1 : 0))
+const extraN = computed(() => Math.max(0, mcols.value.length - mainN.value))
+const expanded = ref(new Set())
+const toggleMore = (id) => { const s = new Set(expanded.value); s.has(id) ? s.delete(id) : s.add(id); expanded.value = s }
 const mOf = computed(() => { const m = new Map(); for (const o of state.objs) m.set(o.id, itemOf(o)); return m })
 const curOf = (o) => o.currency || 'VND'
 const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
@@ -172,38 +181,39 @@ const grid = computed(() => {
 
 <template>
   <div class="fp">
-    <section :class="{ st: numbered }">
-      <h4 v-if="numbered"><span class="no">1</span>Lọc theo điều kiện</h4>
-      <div class="box">
-        <div class="inl">
-          <Segmented v-if="hasAdsets" v-model="flt.level" :options="[{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm quảng cáo' }]" size="sm" />
-          <select v-if="multiAcc" v-model="flt.account" class="input accsel" aria-label="Tài khoản quảng cáo"><option value="">Mọi tài khoản ({{ accounts.length }})</option><option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option></select>
-          <span class="grow" />
-          <button type="button" class="lnk rl" :disabled="reloading || state.objsLoading" :title="loadedAt ? 'Danh sách tải lúc ' + loadedAt : ''" @click="reload"><RefreshCw :size="13" :class="{ spin: reloading }" />Tải lại<small v-if="loadedAt" class="faint"> ({{ loadedAt }})</small></button>
-        </div>
-        <div class="inl">
-          <span class="lb">Trạng thái</span>
-          <Segmented v-model="status" :options="statusOpts" size="sm" />
-        </div>
-        <div v-if="!hideBudget" class="inl top">
-          <span class="lb">Ngân sách/ngày</span>
-          <select v-model="flt.op" class="input op" aria-label="Điều kiện ngân sách"><option v-for="(c, k) in CONDS" :key="k" :value="k">{{ c.label }}</option></select>
-          <template v-if="flt.op !== 'any'">
-            <MoneyInput v-model="flt.x" class="mi" placeholder="vd 100.000" aria-label="Mức ngân sách" />
-            <template v-if="flt.op === 'between'"><span class="lb faint">và</span><MoneyInput v-model="flt.y" class="mi" placeholder="vd 300.000" aria-label="Mức thứ hai" /></template>
+    <div class="tb">
+      <Segmented v-if="hasAdsets" v-model="flt.level" class="lv" :options="[{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset', label: 'Nhóm quảng cáo' }]" size="sm" />
+      <label class="search"><Search :size="15" /><input v-model="flt.name" placeholder="Tên chứa… (nhiều từ: sale, lead)" title="Nhiều từ khoá cách nhau bằng dấu phẩy, khớp một từ bất kỳ" aria-label="Tên chứa" /><button v-if="flt.name" type="button" aria-label="Xoá" @click="flt.name = ''"><X :size="14" /></button></label>
+      <Segmented v-model="status" class="stt" :options="statusOpts" size="sm" />
+      <Popover v-model="fltOpen" width="320px" align="right" label="Bộ lọc">
+        <template #trigger="{ toggle: tg }">
+          <button type="button" class="tbtn" :class="{ on: fltOpen || fltCount }" :aria-label="'Bộ lọc' + (fltCount ? ` (${fltCount})` : '')" @click="tg"><SlidersHorizontal :size="15" /><span class="tl">Bộ lọc</span><em v-if="fltCount" class="num">{{ fltCount }}</em></button>
+        </template>
+        <div class="fpop">
+          <template v-if="!hideBudget">
+            <p class="ph">Ngân sách/ngày hiện tại</p>
+            <select v-model="flt.op" class="input" aria-label="Điều kiện ngân sách"><option v-for="(c, k) in CONDS" :key="k" :value="k">{{ c.label }}</option></select>
+            <div v-if="flt.op !== 'any'" class="two">
+              <MoneyInput v-model="flt.x" class="mi" placeholder="vd 100.000" aria-label="Mức ngân sách" />
+              <MoneyInput v-if="flt.op === 'between'" v-model="flt.y" class="mi" placeholder="vd 300.000" aria-label="Mức thứ hai" />
+            </div>
+            <p v-if="fltErr" class="ferr">{{ fltErr }}</p>
           </template>
+          <template v-if="multiAcc">
+            <p class="ph">Tài khoản quảng cáo</p>
+            <select v-model="flt.account" class="input" aria-label="Tài khoản quảng cáo"><option value="">Mọi tài khoản ({{ accounts.length }})</option><option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</option></select>
+          </template>
+          <div class="fact">
+            <button type="button" class="lnk" :disabled="!fltCount" @click="clearFlt">Xoá bộ lọc</button>
+            <button type="button" class="lnk rl" :disabled="reloading || state.objsLoading" @click="reload"><RefreshCw :size="13" :class="{ spin: reloading }" />Tải lại từ Facebook<small v-if="loadedAt" class="faint"> ({{ loadedAt }})</small></button>
+          </div>
         </div>
-        <p v-if="fltErr" class="ferr">{{ fltErr }}</p>
-        <div class="inl">
-          <input v-model="flt.name" class="input nmf" placeholder="Tên chứa… (nhiều từ: sale, lead)" title="Nhiều từ khoá cách nhau bằng dấu phẩy, khớp một từ bất kỳ" aria-label="Tên chứa" />
-        </div>
-      </div>
-    </section>
+      </Popover>
+    </div>
+    <p v-if="fltErr && !fltOpen" class="ferr">{{ fltErr }} <button type="button" class="lnk" @click="fltOpen = true">Sửa bộ lọc</button></p>
 
-    <section :class="{ st: numbered }">
-      <h4 v-if="numbered"><span class="no">2</span>Chọn {{ levelName }}
-        <span v-if="rows.length" class="cnt" :class="{ on: chosenVisible }">Đã chọn {{ chosenVisible }}/{{ rows.length }}</span></h4>
-      <div v-else class="bar2">
+    <section>
+      <div class="bar2">
         <template v-if="auto">
           <span class="cnt" :class="{ on: chosenVisible }">{{ matched ? `Áp dụng cho ${chosenVisible}/${rows.length} mục đang khớp` : 'Chưa đủ điều kiện' }}</span>
           <button v-if="exclude.length" type="button" class="lnk" @click="clearExclude">Bỏ loại trừ ({{ exclude.length }})</button>
@@ -251,18 +261,21 @@ const grid = computed(() => {
                     <span v-if="tagsOf && tagsOf(r.o.id).length" class="otags"><i v-for="t in tagsOf(r.o.id)" :key="t.text" :class="t.tone">{{ t.text }}</i></span></span>
                 </span>
                 <span v-if="showAcc" class="ac" :title="'Tài khoản quảng cáo ID ' + r.o.accountId"><b>{{ accountLabel(r.o) }}</b><small v-if="r.o.currency">{{ r.o.currency }}</small></span>
-                <span class="num ra" :class="{ faint: r.o.dailyBudget == null }" :title="r.o.dailyBudget == null ? 'Dùng ngân sách chiến dịch (CBO)' : ''">{{ r.o.dailyBudget == null ? 'CBO' : fmt(r.o.dailyBudget) }}</span>
-                <span v-if="change" class="num ra nw">
+                <span class="num ra cell" :class="{ faint: r.o.dailyBudget == null }" :title="r.o.dailyBudget == null ? 'Dùng ngân sách chiến dịch (CBO)' : ''"><small class="ml">Ngân sách</small>{{ r.o.dailyBudget == null ? 'CBO' : fmt(r.o.dailyBudget) }}</span>
+                <span v-if="change" class="num ra nw cell">
+                  <small class="ml">Ngân sách mới</small>
                   <span v-if="!r.ch" class="faint">—</span>
                   <template v-else-if="r.ch.kind === 'change'"><b>{{ fmt(r.ch.to) }}</b><small :class="{ bigc: big(r) }">{{ pct(r) }}</small></template>
                   <small v-else-if="r.ch.kind === 'same'" class="faint">giữ nguyên</small>
                   <small v-else class="badc">không hợp lệ</small>
                 </span>
-                <span v-for="c in mcols" :key="c.key" class="ra mc">
+                <span v-for="(c, ci) in mcols" :key="c.key" class="ra mc cell" :class="{ ex: ci >= mainN, show: expanded.has(r.o.id) }">
+                  <small class="ml">{{ c.tiny || c.short || c.label }}</small>
                   <span v-if="!rangeReady" class="faint">…</span>
                   <template v-else-if="c.key === 'roas'"><Badge v-if="roasTone(r.m)" :tone="roasTone(r.m)" class="num">{{ fmtDec(r.m.roas) }}</Badge><span v-else class="faint">–</span></template>
                   <span v-else class="num" :class="{ faint: r.m[c.key] == null || (c.key !== 'spend' && !r.m.spend) }">{{ cellText(c, r.m[c.key], curOf(r.o)) }}</span>
                 </span>
+                <button v-if="extraN" type="button" class="more" @click.prevent.stop="toggleMore(r.o.id)">{{ expanded.has(r.o.id) ? 'Thu gọn' : `Xem thêm ${extraN} chỉ số` }}<ChevronDown :size="14" :class="{ up: expanded.has(r.o.id) }" /></button>
               </label>
             </div>
           </div>
@@ -278,23 +291,11 @@ const grid = computed(() => {
 
 <style scoped>
 .fp { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; container-type: inline-size; }
-.st { margin-bottom: 10px; }
-.st h4 { display: flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 0 0 10px; letter-spacing: -.01em; }
-.no { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-grad); color: #fff; display: grid; place-items: center; font-size: 12.5px; font-weight: 700; flex: none; }
 .cnt { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 99px; background: var(--surface-3); color: var(--text-2); white-space: nowrap; }
-.st h4 .cnt { margin-left: auto; }
 .cnt.on { background: var(--accent-soft); color: var(--accent); }
-.box { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; }
-.inl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.inl.top { align-items: flex-start; }
-.lb { font-size: 14px; color: var(--text-2); height: 40px; display: inline-flex; align-items: center; }
-.op { width: auto; }
 .mi { width: 140px; }
-.nmf { flex: 1; min-width: 180px; }
-.accsel { width: auto; max-width: 260px; padding: 7px 10px; font-size: 13.5px; }
 .chk { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; } .chk input { accent-color: var(--accent); width: 16px; height: 16px; }
 .chk.sm { font-size: 13px; }
-.grow { flex: 1; }
 .rl { display: inline-flex; align-items: center; gap: 5px; } .rl small { font-weight: 500; } .rl:disabled { opacity: .6; cursor: default; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
@@ -341,7 +342,8 @@ const grid = computed(() => {
 .it.on { background: var(--accent-soft); }
 .it.on .lead { background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--surface); }
 .nm { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.nm b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+/* tên hiện đủ, dài quá thì xuống tối đa 2 dòng */
+.nm b { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; font-weight: 600; line-height: 1.35; }
 .dl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; max-width: 100%; }
 .dl em { font-style: normal; }
 .dl i { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); opacity: .6; flex: none; }
@@ -349,9 +351,49 @@ const grid = computed(() => {
 .nw { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
 .nw small { font-size: 12px; font-weight: 650; color: var(--text-2); } .nw small.bigc { color: var(--warning); } .badc { color: var(--danger); }
 /* Theo bề rộng của chính khung chọn (không phải màn hình): khung hẹp thì cột Tên hẹp lại, phần số liệu cuộn ngang */
-@container (max-width: 700px) {
+.ml, .more { display: none; }
+/* thanh lọc gọn */
+.tb { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tb .search { flex: 1; min-width: 180px; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 12px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--surface); color: var(--text-3); }
+.tb .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.tb .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 14px; color: var(--text); }
+.tb .search button { border: 0; background: none; color: var(--text-3); display: grid; place-items: center; padding: 2px; cursor: pointer; }
+.tbtn { height: 36px; display: inline-flex; align-items: center; gap: 7px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 11px; background: var(--surface); color: var(--text-2); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.tbtn:hover, .tbtn.on { border-color: var(--accent); color: var(--accent); }
+.tbtn em { font-style: normal; font-size: 11px; padding: 0 6px; border-radius: 99px; background: var(--accent); color: #fff; }
+.fpop { display: grid; gap: 8px; padding: 14px; }
+.ph { margin: 4px 0 0; font-size: 12.5px; font-weight: 650; color: var(--text-2); }
+.fpop .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .fpop .mi { width: auto; }
+.fact { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.lnk:disabled { opacity: .5; cursor: default; }
+@container (max-width: 820px) {
   .tbl { --nm: 170px; --acw: 0px; }
   .ac, .h-ac { visibility: hidden; overflow: hidden; } /* giữ ô trong lưới (cột rộng 0) để các cột sau không bị lệch */
   .acc-in { display: inline; }
+}
+/* điện thoại: mỗi mục là một thẻ gọn, không cuộn ngang */
+@container (max-width: 560px) {
+  .tb .lv { width: 100%; } .tb .lv :deep(button) { flex: 1; }
+  .tb .search { flex-basis: 100%; }
+  .tb .stt { flex: 1; } .tb .stt :deep(button) { flex: 1; }
+  .tl { display: none; }
+  .tbl { border: 0; border-radius: 0; overflow: visible; max-height: none; }
+  .inner { min-width: 0 !important; }
+  .hd { display: none; }
+  .r.it { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 6px; padding: 11px 12px; margin-bottom: 9px; border: 1px solid var(--border); border-radius: 14px; }
+  .it:last-child { border-bottom: 1px solid var(--border); }
+  .it.on { border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .lead { grid-column: 1 / -1; position: static; margin: 0 0 4px; padding: 0; background: none !important; box-shadow: none; align-items: flex-start; }
+  .lead input[type='checkbox'] { margin-top: 2px; }
+  .ac { display: none; }
+  .cell { justify-self: stretch; text-align: left; padding: 6px 8px; border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .it.on .cell { background: var(--surface); }
+  .nw.cell { display: block; } .nw.cell small:not(.ml) { margin-left: 4px; }
+  .ml { display: block; font-size: 10.5px; font-weight: 600; color: var(--text-3); white-space: normal; line-height: 1.25; }
+  .cell.ex { display: none; } .cell.ex.show { display: block; }
+  .more { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .more svg { transition: transform .2s; } .more svg.up { transform: rotate(180deg); }
+  .morelnk { border: 0; border-radius: 12px; }
+  .mbar :deep(.cols-btn), .mnote { font-size: 12px; }
 }
 </style>
