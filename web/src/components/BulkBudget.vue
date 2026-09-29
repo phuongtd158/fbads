@@ -6,7 +6,7 @@
 // Số liệu và khoảng ngày, bộ cột dùng chung với Tổng quan. Mỗi mục đi qua đúng API đổi ngân sách thủ công
 // nên được kiểm tra, ghi Nhật ký và hoàn tác được như khi sửa từng camp.
 import { ref, reactive, computed, watch } from 'vue'
-import { Check, Square, Wallet, Play, Search, SlidersHorizontal, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, X } from 'lucide-vue-next'
+import { Check, Square, Wallet, Play, Search, SlidersHorizontal, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown, ChevronLeft, ChevronDown, X } from 'lucide-vue-next'
 import { state, loadObjs, setObjBudget } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { fmt, fmtDec } from '../lib/format'
@@ -70,6 +70,12 @@ async function reload() { reloading.value = true; try { await Promise.all([loadO
 const matched = computed(() => (Object.keys(fr.value.errors).length ? null : matchFilter(state.objs, fr.value.filter)))
 const cboHidden = computed(() => (matched.value ? matched.value.filter((o) => o.dailyBudget == null).length : 0))
 const mcols = computed(() => ov.columns.filter((k) => k !== 'budget').map(colOf))
+// Điện thoại: thẻ chỉ hiện 4 ô chính, các cột khác gập vào "Xem thêm" của từng thẻ
+const MAIN = ['spend', 'results', 'cpa', 'roas']
+const mainKeys = computed(() => { const on = mcols.value.filter((c) => MAIN.includes(c.key)); return new Set((on.length ? on : mcols.value.slice(0, 4)).map((c) => c.key)) })
+const extraCount = computed(() => mcols.value.length - mainKeys.value.size)
+const expanded = ref(new Set())
+const toggleMore = (id) => { const s = new Set(expanded.value); if (s.has(id)) s.delete(id); else s.add(id); expanded.value = s }
 const items = computed(() => (matched.value || []).filter((o) => o.dailyBudget != null).map(itemOf))
 const avg = computed(() => (rangeReady.value ? avgCpa(items.value) : null))
 const rangeTitle = computed(() => (rangeInfo.value.today ? 'hôm nay' : rangeInfo.value.title.toLowerCase()))
@@ -122,7 +128,7 @@ const quickOn = (q) => q.ids.length === selected.value.length && q.ids.every((id
 const pickQuick = (q) => { selected.value = quickOn(q) ? [] : [...q.ids] }
 
 // ----- Ô số liệu -----
-const roasTone = (m) => (!m.spend || m.roas == null ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
+const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const curOf = (o) => o.currency || 'VND'
 
 // ----- Ngân sách mới -----
@@ -233,19 +239,20 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
               <span class="mets"><button v-for="c in mcols" :key="c.key" type="button" class="sh ra" :class="{ on: sort.key === c.key }" :title="c.menu || c.label" @click="sortBy(c.key)">{{ c.short || c.label }}<component :is="sortIcon(c.key)" :size="12" /></button></span>
               <button type="button" class="sh ra" :class="{ on: sort.key === 'budget' }" @click="sortBy('budget')">Ngân sách/ngày<component :is="sortIcon('budget')" :size="12" /></button>
             </div>
-            <label v-for="r in shown" :key="r.o.id" class="row it" :class="{ on: sel.has(r.o.id) }">
+            <label v-for="r in shown" :key="r.o.id" class="row it" :class="{ on: sel.has(r.o.id), open: expanded.has(r.o.id) }">
               <input type="checkbox" :checked="sel.has(r.o.id)" @change="toggle(r.o.id)" />
               <span class="nm"><b :title="r.o.name">{{ r.o.name }}</b>
                 <small class="dl" :class="deliveryOf(r.o).tone"><i />{{ deliveryOf(r.o).label }}<template v-if="r.o.level === 'adset' && campName[r.o.campaignId]"> · <span :title="campName[r.o.campaignId]">{{ campName[r.o.campaignId] }}</span></template><template v-if="multiAcc && !filter.account"> · {{ accountLabel(r.o) }}</template></small></span>
               <span class="mets">
-                <span v-for="c in mcols" :key="c.key" class="mc">
-                  <small class="ml">{{ c.short || c.label }}</small>
+                <span v-for="c in mcols" :key="c.key" class="mc" :class="{ ex: !mainKeys.has(c.key) }">
+                  <small class="ml">{{ c.tiny || c.short || c.label }}</small>
                   <span v-if="!rangeReady" class="faint">…</span>
                   <template v-else-if="c.key === 'roas'"><Badge v-if="roasTone(r.m)" :tone="roasTone(r.m)" class="num">{{ fmtDec(r.m.roas) }}</Badge><span v-else class="faint">–</span></template>
                   <span v-else-if="c.key === 'cpa'" class="num cpa" :class="{ faint: r.m.cpa == null }"><i v-if="cpaTone(r.m.cpa, avg)" :class="cpaTone(r.m.cpa, avg)" :title="`CPA trung bình danh sách: ${money(avg, curOf(r.o))}`" />{{ cellText(c, r.m.cpa, curOf(r.o)) }}</span>
                   <span v-else class="num" :class="{ faint: r.m[c.key] == null || (c.key !== 'spend' && !r.m.spend) }">{{ cellText(c, r.m[c.key], curOf(r.o)) }}</span>
                 </span>
               </span>
+              <button v-if="extraCount" type="button" class="more" @click.prevent.stop="toggleMore(r.o.id)">{{ expanded.has(r.o.id) ? 'Thu gọn' : `Xem thêm ${extraCount} chỉ số` }}<ChevronDown :size="14" :class="{ up: expanded.has(r.o.id) }" /></button>
               <span class="bud num">
                 <small class="ml">Ngân sách/ngày</small>
                 <template v-if="sel.has(r.o.id) && changeOf(r.o) && changeOf(r.o).kind === 'change'"><span class="old">{{ fmt(r.o.dailyBudget) }}</span><span class="arr">→</span><b>{{ fmt(changeOf(r.o).to) }}</b><small class="pc" :class="{ up: changeOf(r.o).to > r.o.dailyBudget, bigc: isBig(r.o, changeOf(r.o)) }">{{ pct(r.o, changeOf(r.o)) }}</small></template>
@@ -281,7 +288,7 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
             <div><small>Chi tiêu {{ rangeTitle }}</small><b class="num">{{ chosenCur ? money(chosenSum.spend, chosenCur) : '–' }}</b></div>
             <div><small>Kết quả</small><b class="num">{{ fmt(chosenSum.results) }}</b></div>
             <div><small>CPA trung bình</small><b class="num" :class="cpaTone(chosenSum.cpa, avg)">{{ chosenCur ? money(chosenSum.cpa, chosenCur) : '–' }}</b></div>
-            <div><small>ROAS trung bình</small><b class="num">{{ chosenSum.roas == null || !chosenCur ? '–' : fmtDec(chosenSum.roas) }}</b></div>
+            <div><small>ROAS trung bình</small><b class="num">{{ chosenSum.roas == null || !chosenSum.revenue || !chosenCur ? '–' : fmtDec(chosenSum.roas) }}</b></div>
           </div>
           <p v-else class="card faint emp">Tick chọn {{ levelName }} ở danh sách, hoặc bấm một nút “Chọn nhanh”.</p>
 
@@ -366,6 +373,7 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
 .row { display: grid; grid-template-columns: var(--gt); gap: 14px; align-items: center; padding: 11px 22px; min-width: var(--mw); }
 .mets { display: contents; }
 .ml { display: none; }
+.more { display: none; }
 .hd { position: sticky; top: 0; z-index: 1; padding-top: 9px; padding-bottom: 9px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 650; color: var(--text-3); }
 .row input[type='checkbox'] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; cursor: pointer; }
 .sh { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; padding: 3px 5px; margin: -3px -5px; border-radius: 6px; font: inherit; color: inherit; cursor: pointer; white-space: nowrap; }
@@ -449,7 +457,11 @@ i.good, .cpa i.good { background: var(--success); } .cpa i.mid { background: var
   .mets { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
   .mc { justify-self: stretch; text-align: left; padding: 6px 8px; border-radius: 9px; background: var(--surface-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
   .it.on .mc { background: var(--surface); }
-  .ml { display: block; font-size: 10.5px; font-weight: 600; color: var(--text-3); }
+  .ml { display: block; font-size: 10.5px; font-weight: 600; color: var(--text-3); white-space: normal; line-height: 1.25; overflow-wrap: anywhere; }
+  .mc.ex { display: none; order: 1; }
+  .it.open .mc.ex { display: block; }
+  .more { grid-column: 1 / -1; justify-self: start; display: inline-flex; align-items: center; gap: 4px; margin: -2px 0; padding: 2px 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .more svg { transition: transform .2s; } .more svg.up { transform: rotate(180deg); }
   .bud { grid-column: 1 / -1; justify-self: stretch; font-size: 13px; }
   .bud .ml { display: inline; margin-right: auto; font-size: 12.5px; font-weight: 500; }
   .foot { display: none; }
