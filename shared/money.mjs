@@ -22,3 +22,23 @@ export function parseMoney(input) {
   else return NaN
   return Math.round(n * mult)
 }
+
+// Ô nhập tiền trên giao diện: chỉ nhận chữ số, gõ đến đâu tự thêm dấu chấm hàng nghìn đến đó ("1000000" → "1.000.000").
+// caret = vị trí con trỏ trong chuỗi vừa gõ; trả về { text, caret } để con trỏ vẫn đứng sau đúng chữ số đó.
+// negative: cho gõ dấu - ở đầu (ô cộng/trừ số tiền).
+const MAX_DIGITS = 15 // quá 15 chữ số thì Number mất chính xác
+export const groupThousands = (digits) => digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+
+export function formatMoneyTyping(input, caret, { negative = false } = {}) {
+  const s = String(input ?? '')
+  const at = caret == null ? s.length : caret
+  const neg = negative && /^\s*-/.test(s)
+  const raw = s.replace(/\D/g, '')
+  let digits = raw.replace(/^0+(?=\d)/, '').slice(0, MAX_DIGITS)
+  // số chữ số đứng trước con trỏ, trừ đi các số 0 thừa ở đầu vừa bị bỏ
+  let before = Math.min(Math.max(0, s.slice(0, at).replace(/\D/g, '').length - (raw.length - raw.replace(/^0+(?=\d)/, '').length)), digits.length)
+  const text = (neg ? '-' : '') + groupThousands(digits)
+  let pos = neg ? 1 : 0
+  for (let seen = 0; pos < text.length && seen < before; pos++) if (/\d/.test(text[pos])) seen++
+  return { text, caret: pos }
+}

@@ -10,6 +10,7 @@ import { totals } from '../../lib/metrics'
 import { fmt, fmtDec } from '../../lib/format'
 import Btn from '../../components/Btn.vue'
 import Callout from '../../components/Callout.vue'
+import MoneyInput from '../../components/MoneyInput.vue'
 
 const accounts = computed(() => (state.objsMeta && state.objsMeta.accounts) || [])
 const rows = reactive({}) // { [mã tài khoản]: { cpa, roas, dailySpendLimit } dạng chuỗi để nhập
@@ -29,6 +30,8 @@ const today = (id) => {
   const list = state.objs.filter((o) => o.level === 'campaign' && o.accountId === id)
   return list.length ? totals(list.map((o) => ({ m: o.metrics, budget: null }))) : null
 }
+// Tiền không có số lẻ (VND): dùng ô tự thêm dấu chấm; tài khoản USD… vẫn cần gõ số lẻ nên giữ ô số thường
+const wholeMoney = (a) => !a.currency || a.currency === 'VND'
 const payload = computed(() => Object.fromEntries(accounts.value.map((a) => [a.id, rows[a.id] || {}])))
 const check = computed(() => validateSettings({ accountTargets: payload.value }, state.settings))
 const hasAny = computed(() => Object.values(saved.value).some((t) => t && (t.cpa || t.roas || t.dailySpendLimit)))
@@ -55,9 +58,9 @@ async function save() {
         <small v-if="today(a.id)" class="now faint">Hôm nay: CPA <b class="num">{{ today(a.id).cpa != null ? fmt(today(a.id).cpa) : '–' }}</b> · ROAS <b class="num">{{ today(a.id).roas != null ? fmtDec(today(a.id).roas) : '–' }}</b></small>
       </header>
       <div class="grid" v-if="rows[a.id]">
-        <label><span>CPA mục tiêu (tối đa)</span><input v-model="rows[a.id].cpa" type="number" min="0" step="any" class="input" placeholder="Chưa đặt" :aria-label="'CPA mục tiêu của ' + a.name" /><small class="faint">Rule so “CPA &gt; x% mục tiêu”</small></label>
+        <label><span>CPA mục tiêu (tối đa)</span><MoneyInput v-if="wholeMoney(a)" v-model="rows[a.id].cpa" placeholder="Chưa đặt" :aria-label="'CPA mục tiêu của ' + a.name" /><input v-else v-model="rows[a.id].cpa" type="number" min="0" step="any" class="input" placeholder="Chưa đặt" :aria-label="'CPA mục tiêu của ' + a.name" /><small class="faint">Rule so “CPA &gt; x% mục tiêu”</small></label>
         <label><span>ROAS mục tiêu (tối thiểu)</span><input v-model="rows[a.id].roas" type="number" min="0" step="any" class="input" placeholder="Chưa đặt" :aria-label="'ROAS mục tiêu của ' + a.name" /><small class="faint">Rule so “ROAS &lt; x% mục tiêu”</small></label>
-        <label><span>Mức dừng khẩn riêng / ngày</span><input v-model="rows[a.id].dailySpendLimit" type="number" min="0" step="any" class="input" placeholder="Dùng mức chung" :aria-label="'Mức dừng khẩn của ' + a.name" /><small class="faint">Chỉ áp dụng khi dừng khẩn ở chế độ “Từng tài khoản”</small></label>
+        <label><span>Mức dừng khẩn riêng / ngày</span><MoneyInput v-if="wholeMoney(a)" v-model="rows[a.id].dailySpendLimit" placeholder="Dùng mức chung" :aria-label="'Mức dừng khẩn của ' + a.name" /><input v-else v-model="rows[a.id].dailySpendLimit" type="number" min="0" step="any" class="input" placeholder="Dùng mức chung" :aria-label="'Mức dừng khẩn của ' + a.name" /><small class="faint">Chỉ áp dụng khi dừng khẩn ở chế độ “Từng tài khoản”</small></label>
       </div>
     </div>
 

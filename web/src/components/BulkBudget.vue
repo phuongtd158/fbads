@@ -10,13 +10,14 @@ import { Check, Square, Wallet, Play, Search, SlidersHorizontal, RefreshCw, Arro
 import { state, loadObjs, setObjBudget } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { fmt, fmtDec } from '../lib/format'
-import { CONDS, STATUS_FILTERS, parseMoney, readFilter, readAction, budgetChange, matchFilter } from '../lib/bulkBudget'
+import { CONDS, STATUS_FILTERS, readFilter, readAction, budgetChange, matchFilter } from '../lib/bulkBudget'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { accountLabel } from '../lib/accounts'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, todayISO } from '../stores/overview'
 import { colOf, cellText, money } from '../lib/overviewColumns'
 import { summarize, avgCpa, cpaTone, oneCurrency, QUICK, quickMatches } from '../lib/pick'
 import Modal from './Modal.vue'
+import MoneyInput from './MoneyInput.vue'
 import Btn from './Btn.vue'
 import Badge from './Badge.vue'
 import Callout from './Callout.vue'
@@ -56,7 +57,6 @@ const deliveryOf = (o) => DELIVERY[dm.value[o.id]] || DELIVERY.off
 const statusOpts = Object.entries(STATUS_FILTERS).map(([value, label]) => ({ value, label }))
 const modeOpts = [{ value: 'set', label: 'Đặt bằng' }, { value: 'percent', label: 'Theo %' }, { value: 'add', label: 'Cộng/trừ' }]
 const typed = (v) => v != null && v !== ''
-const moneyHint = (v) => { const n = parseMoney(v); return typed(v) && Number.isFinite(n) ? fmt(n) : '' }
 
 // ----- Bộ lọc (trong nút "Bộ lọc": ngân sách, tài khoản) -----
 const fr = computed(() => readFilter(filter))
@@ -135,7 +135,7 @@ const curOf = (o) => o.currency || 'VND'
 const action = computed(() => readAction(act))
 const actReady = computed(() => !Object.keys(action.value.errors).length)
 const actErr = computed(() => (act.value !== '' ? action.value.errors.value || '' : ''))
-const valueHint = computed(() => (act.mode === 'percent' ? `Số âm để giảm, vd -20${act.value !== '' && !actErr.value ? ` → ${act.value}%` : ''}` : act.mode === 'add' ? `Số âm để trừ, vd -50k${moneyHint(act.value) ? ` → ${moneyHint(act.value)}` : ''}` : `Gõ được 500k, 1,5tr hoặc 500.000${moneyHint(act.value) ? ` → ${moneyHint(act.value)}` : ''}`))
+const valueHint = computed(() => (act.mode === 'percent' ? `Số âm để giảm, vd -20${act.value !== '' && !actErr.value ? ` → ${act.value}%` : ''}` : act.mode === 'add' ? 'Gõ dấu - ở đầu để trừ, vd -50.000' : 'Ngân sách/ngày mới của các mục đã chọn'))
 const changeOf = (o) => (actReady.value ? budgetChange(o, action.value.action) : null)
 const pct = (o, ch) => `${ch.to > o.dailyBudget ? '+' : ''}${Math.round((ch.to / o.dailyBudget - 1) * 100)}%`
 const isBig = (o, ch) => ch.to / o.dailyBudget >= 2 || ch.to / o.dailyBudget <= 0.5
@@ -205,8 +205,8 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
             <p class="ph">Ngân sách/ngày hiện tại</p>
             <select v-model="filter.op" class="input" aria-label="Điều kiện ngân sách"><option v-for="(c, k) in CONDS" :key="k" :value="k">{{ c.label }}</option></select>
             <div v-if="filter.op !== 'any'" class="two">
-              <span class="mi"><input v-model="filter.x" class="input" inputmode="decimal" placeholder="vd 100k" aria-label="Mức ngân sách" /><small class="faint">{{ moneyHint(filter.x) }}</small></span>
-              <span v-if="filter.op === 'between'" class="mi"><input v-model="filter.y" class="input" inputmode="decimal" placeholder="vd 300k" aria-label="Mức thứ hai" /><small class="faint">{{ moneyHint(filter.y) }}</small></span>
+              <MoneyInput v-model="filter.x" class="mi" placeholder="vd 100.000" aria-label="Mức ngân sách" />
+              <MoneyInput v-if="filter.op === 'between'" v-model="filter.y" class="mi" placeholder="vd 300.000" aria-label="Mức thứ hai" />
             </div>
             <p v-if="fltErr" class="ferr">{{ fltErr }}</p>
             <template v-if="multiAcc">
@@ -295,7 +295,8 @@ const close = () => { if (run.value && run.value.running) run.value.stop = true;
           <div class="nb">
             <p class="lbl">Ngân sách mới</p>
             <Segmented v-model="act.mode" block :options="modeOpts" size="sm" />
-            <input v-model="act.value" class="input val" :class="{ bad: actErr }" inputmode="decimal" :placeholder="act.mode === 'percent' ? 'vd 20 hoặc -20' : act.mode === 'add' ? 'vd 50k hoặc -50k' : 'vd 500k'" aria-label="Giá trị" />
+            <input v-if="act.mode === 'percent'" v-model="act.value" class="input val" :class="{ bad: actErr }" inputmode="decimal" placeholder="vd 20 hoặc -20" aria-label="Giá trị" />
+            <MoneyInput v-else v-model="act.value" class="val" :class="{ bad: actErr }" :negative="act.mode === 'add'" :placeholder="act.mode === 'add' ? 'vd 50.000 hoặc -50.000' : 'vd 500.000'" aria-label="Giá trị" />
             <small :class="actErr ? 'ferr' : 'faint'">{{ actErr || valueHint }}</small>
           </div>
 
@@ -415,7 +416,7 @@ i.good, .cpa i.good { background: var(--success); } .cpa i.mid { background: var
 .kp b { font-size: 16px; } .kp b.good { color: var(--success); } .kp b.bad { color: var(--danger); } .kp b.mid { color: var(--warning); }
 .nb { display: grid; gap: 8px; }
 .lbl { margin: 0; font-size: 13px; font-weight: 650; color: var(--text-2); }
-.val { font-weight: 600; } .val.bad { border-color: var(--danger); }
+.val, .val :deep(.input) { font-weight: 600; } .val.bad, .val.bad :deep(.input) { border-color: var(--danger); }
 .nb small { font-size: 12.5px; }
 .tot { display: grid; gap: 4px; font-size: 13px; }
 .tv { font-size: 14px; } .tv b { font-size: 18px; }

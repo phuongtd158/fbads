@@ -1,7 +1,7 @@
 <script setup>
 // Lọc camp / nhóm QC theo điều kiện rồi tick chọn — dùng chung cho "Đổi ngân sách hàng loạt" và Lịch.
 //  v-model           : mảng id đã chọn
-//  v-model:filter    : điều kiện lọc { level, op, x, y, name, status, account } (x, y là chữ người gõ, vd "100k";
+//  v-model:filter    : điều kiện lọc { level, op, x, y, name, status, account } (x, y là số tiền người gõ;
 //                      name: nhiều từ khoá cách nhau bằng dấu phẩy; status: 'all' | 'running' | 'off')
 //  auto              : lịch "tự động theo điều kiện" — mọi mục khớp đều được tích sẵn; bỏ tích = loại trừ mục đó
 //                      (v-model:exclude = mảng id bị loại trừ). Mục mới khớp về sau vẫn được áp dụng.
@@ -21,10 +21,11 @@ import { state, loadObjs } from '../stores/app'
 import { fmt, fmtDec } from '../lib/format'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, todayISO } from '../stores/overview'
 import { colOf, cellValue, cellText } from '../lib/overviewColumns'
-import { CONDS, STATUS_FILTERS, statusOf, parseMoney, readFilter, matchFilter } from '../lib/bulkBudget'
+import { CONDS, STATUS_FILTERS, statusOf, readFilter, matchFilter } from '../lib/bulkBudget'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { accountLabel } from '../lib/accounts'
 import Segmented from './Segmented.vue'
+import MoneyInput from './MoneyInput.vue'
 import Badge from './Badge.vue'
 import DateRangePicker from './DateRangePicker.vue'
 import ColumnsMenu from './ColumnsMenu.vue'
@@ -59,7 +60,6 @@ const reloading = ref(false)
 async function reload() { reloading.value = true; try { await loadObjs(true) } finally { reloading.value = false } }
 const loadedAt = computed(() => (state.objsAt ? state.objsAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : ''))
 const typed = (v) => v != null && v !== ''
-const moneyHint = (v) => { const n = parseMoney(v); return typed(v) && Number.isFinite(n) ? fmt(n) : '' }
 
 // ----- Lọc -----
 const fr = computed(() => readFilter(flt.value))
@@ -189,8 +189,8 @@ const grid = computed(() => {
           <span class="lb">Ngân sách/ngày</span>
           <select v-model="flt.op" class="input op" aria-label="Điều kiện ngân sách"><option v-for="(c, k) in CONDS" :key="k" :value="k">{{ c.label }}</option></select>
           <template v-if="flt.op !== 'any'">
-            <span class="mi"><input v-model="flt.x" class="input" inputmode="decimal" placeholder="vd 100k" aria-label="Mức ngân sách" /><small class="faint">{{ moneyHint(flt.x) }}</small></span>
-            <template v-if="flt.op === 'between'"><span class="lb faint">và</span><span class="mi"><input v-model="flt.y" class="input" inputmode="decimal" placeholder="vd 300k" aria-label="Mức thứ hai" /><small class="faint">{{ moneyHint(flt.y) }}</small></span></template>
+            <MoneyInput v-model="flt.x" class="mi" placeholder="vd 100.000" aria-label="Mức ngân sách" />
+            <template v-if="flt.op === 'between'"><span class="lb faint">và</span><MoneyInput v-model="flt.y" class="mi" placeholder="vd 300.000" aria-label="Mức thứ hai" /></template>
           </template>
         </div>
         <p v-if="fltErr" class="ferr">{{ fltErr }}</p>
@@ -289,7 +289,7 @@ const grid = computed(() => {
 .inl.top { align-items: flex-start; }
 .lb { font-size: 14px; color: var(--text-2); height: 40px; display: inline-flex; align-items: center; }
 .op { width: auto; }
-.mi { display: inline-flex; flex-direction: column; gap: 3px; } .mi .input { width: 140px; } .mi small { font-size: 12px; min-height: 15px; }
+.mi { width: 140px; }
 .nmf { flex: 1; min-width: 180px; }
 .accsel { width: auto; max-width: 260px; padding: 7px 10px; font-size: 13.5px; }
 .chk { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; } .chk input { accent-color: var(--accent); width: 16px; height: 16px; }
