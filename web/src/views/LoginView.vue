@@ -1,30 +1,37 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { TrendingUp, Lock, CalendarClock, Zap, BellRing, Eye, EyeOff } from 'lucide-vue-next'
 import { api } from '../lib/api'
-import { afterLogin } from '../stores/app'
+import { state, afterLogin } from '../stores/app'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import Btn from '../components/Btn.vue'
 
+const username = ref('')
+const name = ref('')
 const pw = ref('')
 const show = ref(false)
 const err = ref('')
 const input = ref(null)
 const busy = ref(false)
+// Đăng ký: chỉ khi server bật ALLOW_SIGNUP. Tài khoản mới có dữ liệu trống của riêng mình.
+const register = ref(false)
+const canSignup = computed(() => !!state.auth.signup)
 
 // Chỉ gửi qua sự kiện submit của form (Enter hoặc bấm nút) — tránh gọi hai lần
 async function submit() {
-  if (!pw.value || busy.value) return
+  if (!pw.value || busy.value || (register.value && !username.value.trim())) return
   err.value = ''; busy.value = true
   try {
-    await api('login', 'POST', { password: pw.value })
+    if (register.value) await api('register', 'POST', { username: username.value.trim(), name: name.value.trim(), password: pw.value })
+    else await api('login', 'POST', { username: username.value.trim(), password: pw.value })
     await afterLogin()
   } catch (e) {
-    err.value = e.message
-    pw.value = ''
+    err.value = e.fields ? Object.values(e.fields).filter(Boolean)[0] || e.message : e.message
+    if (!register.value) pw.value = ''
     input.value && input.value.focus()
   } finally { busy.value = false }
 }
+function toggleMode() { register.value = !register.value; err.value = '' }
 const features = [
   { i: CalendarClock, t: 'Hẹn giờ bật/tắt camp', d: 'Không cần dậy sớm nữa — tool chạy đúng giờ thay bạn.' },
   { i: Zap, t: 'Rule theo hiệu quả', d: 'Tự tắt camp CPA cao, tăng ngân sách camp ROAS tốt.' },
@@ -45,14 +52,17 @@ const features = [
       <div class="theme"><ThemeToggle /></div>
       <form class="card form" @submit.prevent="submit">
         <span class="lock"><Lock :size="22" /></span>
-        <h1>Đăng nhập</h1>
-        <p class="muted">Nhập mật khẩu để tiếp tục</p>
+        <h1>{{ register ? 'Tạo tài khoản' : 'Đăng nhập' }}</h1>
+        <p class="muted">{{ register ? 'Tài khoản mới có dữ liệu, token Facebook và lịch riêng' : 'Nhập tên đăng nhập và mật khẩu để tiếp tục' }}</p>
+        <input v-model="username" class="input user" placeholder="Tên đăng nhập" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus />
+        <input v-if="register" v-model="name" class="input user" placeholder="Tên hiển thị (không bắt buộc)" autocomplete="name" />
         <div class="pw">
-          <input ref="input" v-model="pw" class="input" :type="show ? 'text' : 'password'" placeholder="Mật khẩu" autocomplete="current-password" autofocus />
+          <input ref="input" v-model="pw" class="input" :type="show ? 'text' : 'password'" placeholder="Mật khẩu" :autocomplete="register ? 'new-password' : 'current-password'" />
           <button type="button" class="eye" :aria-label="show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'" @click="show = !show"><component :is="show ? EyeOff : Eye" :size="18" /></button>
         </div>
         <p class="err" :class="{ on: err }" role="alert">{{ err }}</p>
-        <Btn type="submit" variant="primary" size="lg" block :loading="busy">Đăng nhập</Btn>
+        <Btn type="submit" variant="primary" size="lg" block :loading="busy">{{ register ? 'Tạo tài khoản' : 'Đăng nhập' }}</Btn>
+        <button v-if="canSignup" type="button" class="switch" @click="toggleMode">{{ register ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Tạo tài khoản' }}</button>
       </form>
     </main>
   </div>
@@ -77,7 +87,9 @@ main { position: relative; display: grid; place-items: center; padding: 28px; }
 .lock { width: 52px; height: 52px; border-radius: 17px; display: grid; place-items: center; margin: 0 auto 16px; background: var(--accent-soft); color: var(--accent); }
 h1 { font-size: 26px; letter-spacing: -.03em; }
 .form > p.muted { margin: 4px 0 24px; }
+.user { margin-bottom: 10px; padding-top: 12px; padding-bottom: 12px; }
 .pw { position: relative; }
+.switch { margin-top: 14px; border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 14px; }
 .pw .input { padding-right: 46px; padding-top: 12px; padding-bottom: 12px; }
 .eye { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; border: 0; background: none; color: var(--text-3); border-radius: 10px; display: grid; place-items: center; }
 .eye:hover { color: var(--text); background: var(--surface-3); }

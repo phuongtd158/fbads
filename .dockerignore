@@ -7,6 +7,10 @@ web/node_modules
 public
 data.json
 data.json.*
+data-u*.json
+data-u*.json.*
+accounts.json
+accounts.json.*
 ngrok-domain.txt
 *.log
 tests

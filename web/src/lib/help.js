@@ -217,14 +217,15 @@ export const TOPICS = [
     id: 'security', icon: 'Lock', title: 'Bảo mật & chia sẻ', summary: 'Mật khẩu đăng nhập, dữ liệu, cho người khác dùng',
     blocks: [
       { t: 'steps', items: [
-        '**Đặt mật khẩu** tại Cài đặt → Bảo mật (ít nhất 8 ký tự). Từ đó mọi người phải đăng nhập mới dùng được.',
+        '**Đặt mật khẩu** tại Cài đặt → Bảo mật (ít nhất 8 ký tự). Đây là mật khẩu của tài khoản **admin**; từ đó mọi người phải đăng nhập mới dùng được.',
+        '**Nhiều người dùng**: admin tạo tài khoản ở Cài đặt → **Tài khoản**. Mỗi tài khoản có token Facebook, lịch, rule, nhật ký và Telegram riêng, chỉ thấy dữ liệu của mình.',
         'Nhập sai 5 lần, địa chỉ đó bị khoá 15 phút.',
         'Phiên đăng nhập giữ 30 ngày. Bấm **Đăng xuất** ở thanh bên hoặc trong Cài đặt để thoát. Đổi mật khẩu sẽ đăng xuất mọi thiết bị khác.',
       ] },
       { t: 'tips', items: [
         'Toàn bộ dữ liệu (token, lịch, rule, nhật ký) nằm trong file `data.json` cạnh tool. **Sao lưu file này** và không chia sẻ nó.',
         'Mặc định tool chỉ mở trên máy bạn (`127.0.0.1`). Muốn người khác dùng, cần mở ra mạng kèm mật khẩu (biến môi trường `HOST=0.0.0.0` và `APP_PASSWORD`).',
-        'Quên mật khẩu? Tắt tool, mở `data.json`, đặt `"passwordHash": ""` rồi chạy lại.',
+        'Quên mật khẩu? Admin đặt lại cho bạn ở Cài đặt → Tài khoản. Admin quên mật khẩu: đặt biến môi trường `APP_PASSWORD` rồi chạy lại tool.',
       ] },
     ],
   },
@@ -271,7 +272,7 @@ export const TOPICS = [
         ['Số liệu khác với Ads Manager?', 'Tool lấy số liệu **hôm nay** theo múi giờ tài khoản và có thể trễ vài phút. “Kết quả” tính theo loại bạn chọn ở Cài đặt → Chung, có thể khác cột bạn đang xem trong Ads Manager.'],
         ['Rule tắt nhầm camp mới chạy?', 'Hãy tăng **chi tiêu tối thiểu** của rule để camp có đủ dữ liệu trước khi bị xét. Xem Nhật ký để biết rule nào đã tắt, rồi bật lại camp thủ công.'],
         ['Token hết hạn thì sao?', 'Sẽ có thanh cảnh báo khi còn dưới 7 ngày. Vào Cài đặt → Kết nối Facebook → Đổi token để dán token mới. Dùng cách “Người dùng hệ thống” để có token không hết hạn.'],
-        ['Quên mật khẩu đăng nhập?', 'Tắt tool, mở file `data.json`, đặt `"passwordHash": ""`, lưu và chạy lại. Sau đó vào Cài đặt → Bảo mật đặt mật khẩu mới.'],
+        ['Quên mật khẩu đăng nhập?', 'Nhờ admin đặt lại ở Cài đặt → Tài khoản. Nếu chính admin quên: đặt biến môi trường `APP_PASSWORD` (trên Render: Environment) rồi khởi động lại tool, đăng nhập `admin` bằng mật khẩu đó.'],
         ['Cài tool lên điện thoại như app được không?', 'Được. Mở tool qua **https** (vd bản trên Render), vào Cài đặt → Giao diện → **Cài lên điện thoại**. Android (Chrome) có nút **Cài app**; iPhone (Safari) bấm **Chia sẻ** → **Thêm vào MH chính**. App mở toàn màn hình, số liệu vẫn luôn là mới nhất; mất mạng thì hiện trang báo không có kết nối. Lịch và rule vẫn chạy trên server dù bạn không mở app.'],
         ['Dữ liệu của tôi lưu ở đâu?', 'Trong file `data.json` cạnh tool, trên máy bạn. Tool chỉ gửi dữ liệu tới Facebook (và Telegram nếu bạn bật).'],
       ] },

@@ -37,7 +37,16 @@ Chạy `node server.js` ở một cửa sổ khác khi dùng `npm run dev`. API 
 - Giao diện sáng/tối/theo hệ thống, 5 màu nhấn, thanh lệnh nhanh `Ctrl K`, dùng được trên điện thoại.
 - Cài lên điện thoại như app (Cài đặt → Giao diện): mở toàn màn hình từ màn hình chính, có trang báo khi mất mạng. Cần mở tool qua https (vd Render) hoặc localhost. Không lưu số liệu trên máy nên luôn thấy số mới.
 - Hướng dẫn ngay trong app: trang **Hướng dẫn** (tìm kiếm, FAQ, thuật ngữ), dấu `?` giải thích cạnh các ô khó, thẻ **Bắt đầu nhanh** tự tick theo tiến độ.
-- Đăng nhập bằng mật khẩu (Cài đặt → Bảo mật, hoặc biến môi trường `APP_PASSWORD`).
+- Đăng nhập bằng tài khoản. Mật khẩu admin đặt ở Cài đặt → Bảo mật, hoặc bằng biến môi trường `APP_PASSWORD`.
+- Nhiều người dùng: admin tạo tài khoản ở Cài đặt → **Tài khoản** (xem dưới).
+
+## Nhiều người dùng
+- Mỗi tài khoản có **dữ liệu riêng**: token Facebook, tài khoản quảng cáo, lịch, rule, nhật ký, Telegram, cảnh báo. Người này không thấy dữ liệu của người kia. Không có vai trò: ai đăng nhập cũng toàn quyền với dữ liệu của mình.
+- Tài khoản **admin** giữ toàn bộ dữ liệu của bản cũ. Mật khẩu cũ và các phiên đang đăng nhập vẫn dùng được; trang đăng nhập bỏ trống tên thì hiểu là `admin`.
+- Chỉ admin tạo, đặt lại mật khẩu và xoá tài khoản (Cài đặt → Tài khoản). Admin không xem được dữ liệu của người khác. Xoá tài khoản thì file dữ liệu của người đó được đổi tên và giữ lại trên server.
+- Muốn cho người khác tự tạo tài khoản: đặt `ALLOW_SIGNUP=true`.
+- Vòng tự động chạy lần lượt từng tài khoản; một tài khoản lỗi token không làm dừng người khác. Mỗi tài khoản muốn nhận lệnh Telegram cần **bot riêng**.
+- Cho người ngoài kết nối Facebook qua ứng dụng Meta của bạn thì ứng dụng phải qua **App Review** quyền `ads_management` (khi còn ở chế độ Development, chỉ người được thêm vào ứng dụng mới kết nối được).
 
 ## Đăng nhập bằng Facebook (lấy token bằng 1 nút)
 Cài đặt → Kết nối Facebook → chọn **Đăng nhập Facebook**:
@@ -56,7 +65,7 @@ An toàn: file .bat từ chối mở đường hầm nếu đang có một bản
 
 ## Nơi lưu dữ liệu
 Tool có 2 chế độ lưu, chọn bằng biến môi trường:
-- **File `data.json`** (mặc định) trong `DATA_DIR`. Mỗi ngày tự giữ 1 bản sao `data.json.bak-<ngày>` (7 bản gần nhất). Nếu file bị hỏng, tool **không ghi đè**: đổi tên file hỏng thành `data.json.corrupt-<giờ>`, khôi phục từ bản sao gần nhất và ghi một dòng cảnh báo vào Nhật ký.
+- **File** (mặc định) trong `DATA_DIR`: `data.json` (admin), `data-u<số>.json` (từng tài khoản khác), `accounts.json` (tên đăng nhập, mật khẩu đã băm, phiên). Đặt `SECRET_KEY` (chuỗi dài ngẫu nhiên) thì token Facebook, App Secret, token Telegram trong file được **mã hoá AES-256-GCM**; đã đặt thì giữ nguyên mãi, mất khoá phải kết nối lại Facebook/Telegram. Mỗi ngày tự giữ 1 bản sao `data.json.bak-<ngày>` (7 bản gần nhất). Nếu file bị hỏng, tool **không ghi đè**: đổi tên file hỏng thành `data.json.corrupt-<giờ>`, khôi phục từ bản sao gần nhất và ghi một dòng cảnh báo vào Nhật ký.
 - **Upstash Redis** (khi đặt `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` + `DATA_KEY`): dùng khi nơi chạy **không có ổ đĩa bền** (Render gói Free). Toàn bộ dữ liệu được nén và **mã hoá AES-256-GCM bằng `DATA_KEY`** trước khi gửi đi, nên Upstash không đọc được token hay cấu hình. Thay đổi được gộp và ghi sau ~1,5 giây, tự thử lại khi lỗi mạng (giao diện hiện cảnh báo đỏ khi chưa ghi được) và được ghi nốt khi tool bị tắt. Nếu lúc khởi động không đọc được dữ liệu (mạng lỗi, sai `DATA_KEY`) thì tool **dừng lại** thay vì chạy với dữ liệu trống rồi ghi đè.
   - **Lưu `DATA_KEY` ở nơi khác** (trình quản lý mật khẩu). Mất khoá thì không giải mã được dữ liệu trên Upstash (token nhập lại được, lịch/rule phải tạo lại). Đừng đổi `DATA_KEY` khi đã có dữ liệu.
   - Chỉ chạy **một nơi** dùng chung một Upstash: hai bản cùng chạy sẽ ghi đè nhau và làm việc hai lần trên cùng tài khoản Facebook.
@@ -93,6 +102,6 @@ Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) g
 ## An toàn
 - Mặc định ở chế độ dùng thử (dữ liệu giả). Khi kết nối thật, mặc định "Chạy thử" (chỉ ghi log). Tắt sau vài ngày khi thấy log đúng ý.
 - Server mặc định chỉ lắng nghe 127.0.0.1. Mở ra mạng (`HOST=0.0.0.0`) bắt buộc phải có `APP_PASSWORD`.
-- Token lưu trong `data.json` trên máy bạn (đã nằm trong `.gitignore`) — không chia sẻ file này.
-- Quên mật khẩu đặt trong Cài đặt: tắt tool, mở `data.json`, đặt `passwordHash` thành `""`, chạy lại.
+- Token lưu trong các file `data*.json` trên máy bạn (đã nằm trong `.gitignore`), không chia sẻ các file này. Nên đặt `SECRET_KEY` để token được mã hoá.
+- Quên mật khẩu: admin đặt lại ở Cài đặt → Tài khoản. Chính admin quên: đặt `APP_PASSWORD` rồi chạy lại tool, đăng nhập `admin` bằng mật khẩu đó.
 - Nếu camp dùng CBO (ngân sách ở cấp camp), chỉnh ngân sách ở cấp camp; nhóm QC sẽ không có ngân sách riêng.

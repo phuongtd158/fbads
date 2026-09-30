@@ -47,11 +47,12 @@ async function doLogout() { try { await logout() } catch (e) { toastError(e) } }
       <i class="dot" />
       <div><b>{{ status.title }}</b><small>{{ status.sub }}</small></div>
     </RouterLink>
-    <button v-if="state.auth.required" class="item out" @click="doLogout"><LogOut :size="18" /><span>Đăng xuất</span></button>
+    <button v-if="state.auth.required" class="item out" :title="state.auth.user ? 'Đang đăng nhập: ' + state.auth.user.username : ''" @click="doLogout"><LogOut :size="18" /><span>Đăng xuất<small v-if="state.auth.user" class="who">{{ state.auth.user.name || state.auth.user.username }}</small></span></button>
   </aside>
 </template>
 
 <style scoped>
+.out .who { display: block; font-size: 12px; font-weight: 500; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 aside {
   position: sticky; top: 14px; height: calc(100vh - 28px); margin: 14px 0 14px 14px; padding: 18px 12px 12px; display: flex; flex-direction: column; gap: 4px;
   background: var(--glass); backdrop-filter: blur(18px) saturate(1.4); border: 1px solid var(--border); border-radius: var(--r-xl);

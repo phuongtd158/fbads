@@ -70,13 +70,14 @@ async function shutdown(sig) {
   try { await Promise.race([store.flush(), new Promise((r) => setTimeout(r, 8000))]); } catch { /* đã ghi log lỗi */ }
   process.exit(0);
 }
-for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
-
-(async () => {
+async function main() {
+  for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
   let shared;
   try { shared = { V: await import('./shared/validate.mjs'), D: await import('./shared/dates.mjs') }; } catch (e) { return fatal(`Không nạp được module dùng chung (shared/): ${e.message}`); }
   // Nạp dữ liệu TRƯỚC khi kiểm tra mật khẩu: mật khẩu đặt trong Cài đặt nằm trong dữ liệu (nhất là khi lưu ở Upstash)
   try { await store.init(); } catch (e) { return fatal(e.message); }
+  auth.migrateLegacy(); // bản cũ 1 mật khẩu → tài khoản admin
+  if (auth.envManaged()) auth.ensureAdmin();
   // Mặc định chỉ lắng nghe trên máy bạn (127.0.0.1). Mở ra mạng mà không có mật khẩu thì từ chối chạy.
   if (!['127.0.0.1', 'localhost', '::1'].includes(HOST) && !auth.enabled()) {
     return fatal('HOST mở ra mạng nhưng chưa có mật khẩu.\n  Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự) rồi chạy lại.');
@@ -90,8 +91,12 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
   });
   server.listen(PORT, HOST, () => {
     const st = store.status();
-    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : 'file data.json'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
+    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : `file trong ${process.env.DATA_DIR || 'thư mục tool'}${process.env.SECRET_KEY ? ' (token mã hoá bằng SECRET_KEY)' : ''}`}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
     engine.start();
     require('./lib/tgbot').start(); // chỉ hỏi tin Telegram khi đã bật "Nhận lệnh từ Telegram"
   });
-})();
+}
+
+if (require.main === module) main();
+module.exports = { createApp };
+

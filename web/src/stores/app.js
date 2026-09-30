@@ -3,7 +3,7 @@ import { api, onUnauthorized } from '../lib/api'
 
 export const state = reactive({
   ready: false,
-  auth: { required: false, authed: true, envManaged: false },
+  auth: { required: false, authed: true, envManaged: false, signup: false, user: null }, // user: { id, username, name, admin }
   settings: {},
   schedules: [],
   rules: [],

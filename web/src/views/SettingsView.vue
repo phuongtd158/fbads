@@ -1,7 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target, Users } from 'lucide-vue-next'
+import { state } from '../stores/app'
 import ConnectionPanel from './settings/ConnectionPanel.vue'
 import ModePanel from './settings/ModePanel.vue'
 import ProtectPanel from './settings/ProtectPanel.vue'
@@ -10,10 +11,11 @@ import TelegramPanel from './settings/TelegramPanel.vue'
 import GeneralPanel from './settings/GeneralPanel.vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
 import SecurityPanel from './settings/SecurityPanel.vue'
+import AccountsPanel from './settings/AccountsPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
-const tabs = [
+const all = [
   { v: 'connection', label: 'Kết nối Facebook', icon: KeyRound, comp: ConnectionPanel },
   { v: 'mode', label: 'Chế độ hoạt động', icon: ShieldCheck, comp: ModePanel },
   { v: 'protect', label: 'Bảo vệ ngân sách', icon: ShieldAlert, comp: ProtectPanel },
@@ -22,8 +24,11 @@ const tabs = [
   { v: 'general', label: 'Chung', icon: SlidersHorizontal, comp: GeneralPanel },
   { v: 'appearance', label: 'Giao diện', icon: Palette, comp: AppearancePanel },
   { v: 'security', label: 'Bảo mật', icon: Lock, comp: SecurityPanel },
+  { v: 'accounts', label: 'Tài khoản', icon: Users, comp: AccountsPanel, admin: true },
 ]
-const tab = computed(() => tabs.find((t) => t.v === route.params.tab) || tabs[0])
+// Tab Tài khoản chỉ dành cho admin
+const tabs = computed(() => all.filter((t) => !t.admin || state.auth.user?.admin))
+const tab = computed(() => tabs.value.find((t) => t.v === route.params.tab) || tabs.value[0])
 const go = (v) => router.replace('/settings/' + v)
 </script>
 

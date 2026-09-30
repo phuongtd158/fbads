@@ -11,7 +11,11 @@ import Field from '../../components/Field.vue'
 const f = reactive({ cur: '', next: '', again: '' })
 const submitted = ref(false)
 const touched = reactive({})
-const has = computed(() => !!state.settings.has_passwordHash)
+// has: đã bật đăng nhập (có tài khoản). Chưa bật: form này đặt mật khẩu cho admin.
+const has = computed(() => !!state.auth.required)
+const me = computed(() => state.auth.user || {})
+// Mật khẩu admin đặt bằng APP_PASSWORD thì không đổi ở đây; tài khoản khác vẫn tự đổi được
+const envLocked = computed(() => state.auth.envManaged && me.value.admin)
 
 const errs = computed(() => {
   const e = {}
@@ -52,10 +56,10 @@ async function save() {
     <h3>Bảo mật</h3>
     <p class="muted sub">Mật khẩu đăng nhập bảo vệ token Facebook và quyền điều khiển quảng cáo của bạn.</p>
 
-    <div v-if="state.auth.envManaged" class="note inf"><ShieldCheck :size="20" /><div>Mật khẩu được đặt bằng biến môi trường <code>APP_PASSWORD</code> trên server. Muốn đổi, sửa biến đó rồi khởi động lại tool.</div></div>
+    <div v-if="envLocked" class="note inf"><ShieldCheck :size="20" /><div>Mật khẩu của <b>admin</b> được đặt bằng biến môi trường <code>APP_PASSWORD</code> trên server. Muốn đổi, sửa biến đó rồi khởi động lại tool.</div></div>
     <template v-else>
-      <div v-if="!has" class="note warn"><ShieldAlert :size="20" /><div><b>Chưa đặt mật khẩu.</b> Ai mở được địa chỉ này đều điều khiển được quảng cáo của bạn. Bắt buộc phải đặt khi đưa tool lên mạng.</div></div>
-      <div v-else class="note ok"><ShieldCheck :size="20" /><div>Đã bật đăng nhập bằng mật khẩu.</div></div>
+      <div v-if="!has" class="note warn"><ShieldAlert :size="20" /><div><b>Chưa đặt mật khẩu.</b> Ai mở được địa chỉ này đều điều khiển được quảng cáo của bạn. Bắt buộc phải đặt khi đưa tool lên mạng. Mật khẩu này dành cho tài khoản <b>admin</b>.</div></div>
+      <div v-else class="note ok"><ShieldCheck :size="20" /><div>Đang đăng nhập bằng tài khoản <b>{{ me.username }}</b>.</div></div>
       <div class="grid">
         <Field v-if="has" label="Mật khẩu hiện tại" :error="show('cur')"><input v-model="f.cur" class="input" type="password" autocomplete="current-password" @blur="touched.cur = true" /></Field>
         <Field label="Mật khẩu mới" :error="show('next')" hint="Ít nhất 8 ký tự, không chỉ gồm chữ số.">
