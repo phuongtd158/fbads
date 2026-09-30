@@ -37,30 +37,7 @@ public final class Json {
         return Double.NaN;
     }
 
-    /** String(v ?? '') */
-    public static String str(JsonNode n) {
-        if (n == null || n.isNull() || n.isMissingNode()) return "";
-        if (n.isString()) return n.stringValue();
-        if (n.isNumber()) return Fmt.num(n.doubleValue());
-        if (n.isBoolean()) return Boolean.toString(n.booleanValue());
-        return n.toString();
-    }
-
-    /** Có khoá này trong object không (hasOwnProperty) */
-    public static boolean has(JsonNode obj, String key) {
-        return obj != null && obj.isObject() && obj.has(key);
-    }
-
-    /** Giá trị "truthy" của JS */
-    public static boolean truthy(JsonNode n) {
-        if (n == null || n.isNull() || n.isMissingNode()) return false;
-        if (n.isBoolean()) return n.booleanValue();
-        if (n.isNumber()) return n.doubleValue() != 0 && !Double.isNaN(n.doubleValue());
-        if (n.isString()) return !n.stringValue().isEmpty();
-        return true;
-    }
-
-    // ----- Cùng các hàm trên nhưng cho trường của DTO (record request): null = không gửi / ô trống
+    // ----- Hai hàm trên dùng khi Jackson đọc trường @JsNumber. Các hàm dưới dùng trên trường của DTO: null = không gửi / ô trống
 
     /** Trường @JsNumber: null (ô trống) → NaN */
     public static double num(Double d) { return d == null ? Double.NaN : d; }
@@ -74,13 +51,6 @@ public final class Json {
     public static List<String> strings(List<String> list) {
         List<String> out = new ArrayList<>();
         if (list != null) for (String x : list) out.add(str(x));
-        return out;
-    }
-
-    /** Mảng → danh sách chuỗi; không phải mảng → danh sách rỗng */
-    public static List<String> strings(JsonNode n) {
-        List<String> out = new ArrayList<>();
-        if (n != null && n.isArray()) for (JsonNode x : n) out.add(str(x));
         return out;
     }
 }

@@ -1,5 +1,6 @@
 package com.fbads.controller;
 
+import com.fbads.dto.SettingsPatch;
 import com.fbads.service.FacebookService;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
@@ -13,8 +14,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,9 +65,8 @@ public class SettingsController {
     Map<String, Object> storageStatus() { return storage(); }
 
     @PostMapping("/settings")
-    ResponseEntity<?> save(@RequestBody(required = false) JsonNode body) {
-        JsonNode patch = body == null || !body.isObject() ? JsonNodeFactory.instance.objectNode() : body;
-        Result<Map<String, Object>> r = SettingsValidator.validate(patch, settings.get());
+    ResponseEntity<?> save(@RequestBody(required = false) SettingsPatch body) {
+        Result<Map<String, Object>> r = SettingsValidator.validate(body == null ? new SettingsPatch() : body, settings.get());
         if (!r.ok()) return ApiExceptionHandler.bad(r);
         // chỉ ghi các khoá đã được kiểm tra (r.value) — không bao giờ ghi trực tiếp từ dữ liệu client
         settings.apply(r.value());

@@ -187,6 +187,21 @@ class ApiIntegrationTest {
         Api.Res preview = api.post("/api/rules/preview", Map.of("metric", "cpa", "op", ">", "value", "abc"));
         assertThat(preview.body().get("errors").get("value").asString()).isEqualTo("Nhập ngưỡng so sánh");
         assertThat(api.postRaw("/api/rules/preview", "").body().get("errors").has("action")).isTrue();
+
+        // Cài đặt (PATCH): gửi null là xoá, không gửi là giữ nguyên. Cuối test trả lại như cũ (cài đặt workspace 1 dùng chung giữa các test).
+        JsonNode before = api.get("/api/state").body().get("settings");
+        assertThat(api.post("/api/settings", Map.of("reportTime", "08:00")).body().get("reportTime").asString()).isEqualTo("08:00");
+        int interval = before.get("ruleIntervalMin").asInt();
+        assertThat(api.post("/api/settings", Map.of("ruleIntervalMin", interval)).body().get("reportTime").asString()).isEqualTo("08:00");
+        java.util.Map<String, Object> clear = new java.util.HashMap<>();
+        clear.put("reportTime", null);
+        assertThat(api.post("/api/settings", clear).body().get("reportTime").asString()).isEmpty();
+        assertThat(api.post("/api/settings", Map.of("ruleIntervalMin", "abc")).body().get("errors").has("ruleIntervalMin")).isTrue();
+        assertThat(api.post("/api/settings", Map.of("accountTargets", 5)).body().get("errors").get("accountTargets").asString()).isEqualTo("Sai kiểu dữ liệu");
+        Api.Res targets = api.post("/api/settings", Map.of("accountTargets", Map.of("act_1", Map.of("cpa", "50000", "roas", ""))));
+        assertThat(targets.body().get("accountTargets").get("act_1").get("cpa").asLong()).isEqualTo(50000);
+        assertThat(targets.body().get("accountTargets").get("act_1").has("roas")).isFalse();
+        assertThat(api.post("/api/settings", Map.of("reportTime", before.get("reportTime").asString(), "accountTargets", Api.JSON.convertValue(before.get("accountTargets"), Map.class))).status()).isEqualTo(200);
     }
 
     /** Bỏ khoá null (bản Java không ghi khoá rỗng) */

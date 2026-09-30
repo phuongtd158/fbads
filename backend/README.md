@@ -167,7 +167,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `FacebookService`, `TelegramService`, `UndoService`, `ReportService`, `DataImporter` |
 | `repository/` | Spring Data JPA, mỗi bảng 1 interface |
 | `entity/` | Class ánh xạ bảng (`@Entity`) |
-| `dto/` | Dữ liệu vào/ra không phải bảng: request, `AdObject`, `Metrics`, `Condition`, `Saved` |
+| `dto/` | Dữ liệu vào/ra không phải bảng: body của request (`Requests`, `ScheduleRequest`, `RuleRequest`, `SettingsPatch`), `AdObject`, `Metrics`, `Condition`, `Saved` |
 | `client/` | Gọi dịch vụ ngoài: `GraphClient` (Facebook), giới hạn gọi API, dữ liệu giả |
 | `engine/` | Logic chạy lịch/rule mỗi 30 giây (`EngineTicker`, `ScheduleRunner`, `RuleRunner`…) |
 | `event/` | Sự kiện: `EventBus`, bản Kafka (`KafkaEvents`, `KafkaEventListeners`) và bản Spring events (`LocalEvents`) |
@@ -182,6 +182,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 |---|---|---|
 | `data.json` / Upstash (`lib/store.js`) | MySQL + Spring Data JPA (`*Repository`), Flyway | Entity, repository, migration, `@Version` |
 | `express.Router` (`lib/routes/*`) | `@RestController` (`controller/`) | Mapping, `@RequestBody`, `ResponseEntity` |
+| `req.body` (object tuỳ ý) | Body đọc thẳng vào record/class trong `dto/`; số dạng chữ đọc như `Number()` của JS nhờ `@JsNumber`; sai kiểu → 400 `"Sai kiểu dữ liệu"` kèm tên trường | DTO, record, deserializer tự viết, PATCH phân biệt "không gửi" với "gửi null" (`SettingsPatch`) |
 | Middleware tự viết (`lib/middleware.js`, `lib/auth.js`) | Spring Security + Spring Session Data Redis, filter `ApiFilters` (`security/`) | SecurityFilterChain, phiên lưu ở Redis |
 | `shared/validate.mjs` (chạy cả ở giao diện) | `validation/*Validator` (bản Java của `frontend/src/shared/validate.mjs`) + Bean Validation (`@Valid`, `@StrongPassword`) | Ràng buộc tự viết |
 | `setInterval` trong `lib/engine.js` | `@Scheduled` + `@SchedulerLock` (ShedLock trên Redis) (`EngineTicker`, `EngineLock`) | Lập lịch, khoá phân tán, virtual threads |
