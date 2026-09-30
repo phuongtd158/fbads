@@ -179,6 +179,14 @@ class ApiIntegrationTest {
         Api.Res empty = api.postRaw("/api/setup", "");
         assertThat(empty.status()).isEqualTo(400);
         assertThat(empty.body().get("errors").has("username")).isTrue(); // service vẫn báo lỗi từng trường như gửi {}
+
+        Api.Res rule = api.post("/api/rules", Map.of("conditions", List.of(Map.of("metric", List.of("cpa")))));
+        assertThat(rule.body().get("errors").get("conditions[0].metric").asString()).isEqualTo("Sai kiểu dữ liệu");
+        assertThat(api.post("/api/schedules", Map.of("days", "abc")).body().get("errors").has("days")).isTrue();
+        // số gửi dạng chữ vẫn đọc như bản Node: "abc" là ngưỡng chưa nhập đúng, không phải sai kiểu
+        Api.Res preview = api.post("/api/rules/preview", Map.of("metric", "cpa", "op", ">", "value", "abc"));
+        assertThat(preview.body().get("errors").get("value").asString()).isEqualTo("Nhập ngưỡng so sánh");
+        assertThat(api.postRaw("/api/rules/preview", "").body().get("errors").has("action")).isTrue();
     }
 
     /** Bỏ khoá null (bản Java không ghi khoá rỗng) */

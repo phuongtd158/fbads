@@ -60,6 +60,23 @@ public final class Json {
         return true;
     }
 
+    // ----- Cùng các hàm trên nhưng cho trường của DTO (record request): null = không gửi / ô trống
+
+    /** Trường @JsNumber: null (ô trống) → NaN */
+    public static double num(Double d) { return d == null ? Double.NaN : d; }
+
+    /** String(v ?? '') */
+    public static String str(String s) { return s == null ? "" : s; }
+
+    public static boolean truthy(String s) { return s != null && !s.isEmpty(); }
+
+    /** Danh sách chuỗi, phần tử null → ""; không gửi → danh sách rỗng */
+    public static List<String> strings(List<String> list) {
+        List<String> out = new ArrayList<>();
+        if (list != null) for (String x : list) out.add(str(x));
+        return out;
+    }
+
     /** Mảng → danh sách chuỗi; không phải mảng → danh sách rỗng */
     public static List<String> strings(JsonNode n) {
         List<String> out = new ArrayList<>();

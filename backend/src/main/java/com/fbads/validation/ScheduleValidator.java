@@ -3,9 +3,9 @@ package com.fbads.validation;
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
 import com.fbads.dto.AdObject;
+import com.fbads.dto.ScheduleRequest;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.Schedule;
-import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -46,19 +46,19 @@ public final class ScheduleValidator {
     }
 
     /** Lọc theo điều kiện: { level, op, x, y, name, status, account } → (lỗi, giá trị đã chuẩn hoá) */
-    static Map<String, Object> checkFilter(JsonNode f, Map<String, String> e) {
-        if (f == null || !f.isObject()) f = tools.jackson.databind.node.JsonNodeFactory.instance.objectNode();
-        String level = "adset".equals(Json.str(f.get("level"))) ? "adset" : "campaign";
-        String op = FILTER_OPS.contains(Json.str(f.get("op"))) ? Json.str(f.get("op")) : "any";
-        double x = Json.num(f.get("x")), y = Json.num(f.get("y"));
+    static Map<String, Object> checkFilter(ScheduleRequest.Filter f, Map<String, String> e) {
+        if (f == null) f = ScheduleRequest.Filter.EMPTY;
+        String level = "adset".equals(f.level()) ? "adset" : "campaign";
+        String op = FILTER_OPS.contains(Json.str(f.op())) ? f.op() : "any";
+        double x = Json.num(f.x()), y = Json.num(f.y());
         if (!op.equals("any") && !(x >= 0)) e.put("x", "Nhập mức ngân sách để so sánh");
         if (op.equals("between") && !(y >= 0)) e.put("y", "Nhập mức thứ hai của khoảng");
-        String name = Json.str(f.get("name")).trim();
+        String name = Json.str(f.name()).trim();
         if (name.length() > 100) e.put("name", "Cụm tên tối đa 100 ký tự");
-        String account = Json.str(f.get("account")).trim();
+        String account = Json.str(f.account()).trim();
         if (account.length() > 40) account = account.substring(0, 40);
-        String st = Json.str(f.get("status"));
-        String status = FILTER_STATUSES.contains(st) ? st : Json.truthy(f.get("onlyRunning")) ? "running" : "all";
+        String st = Json.str(f.status());
+        String status = FILTER_STATUSES.contains(st) ? st : Boolean.TRUE.equals(f.onlyRunning()) ? "running" : "all";
         Map<String, Object> v = new LinkedHashMap<>();
         v.put("level", level);
         v.put("op", op);
@@ -99,21 +99,22 @@ public final class ScheduleValidator {
         return w;
     }
 
-    public static Result<Schedule> validate(JsonNode input, List<AdObject> objs, List<Schedule> schedules) {
+    public static Result<Schedule> validate(ScheduleRequest input, List<AdObject> objs, List<Schedule> schedules) {
         Result.Collector c = new Result.Collector();
         Map<String, String> e = c.e;
-        String name = Json.str(input.get("name")).trim();
+        if (input == null) input = ScheduleRequest.EMPTY;
+        String name = Json.str(input.name()).trim();
         if (name.length() > Checks.NAME_MAX) e.put("name", "Tên tối đa " + Checks.NAME_MAX + " ký tự");
 
-        String action = input.path("action").isString() ? input.get("action").stringValue() : null;
-        if (!ACTIONS.contains(action)) e.put("action", "Hành động không hợp lệ");
+        String action = input.action();
+        if (!ACTIONS.contains(Json.str(action))) e.put("action", "Hành động không hợp lệ");
 
         // Khung giờ: bật lúc window.on, tắt lúc window.off (cùng danh sách camp)
         Map<String, Object> win = null;
         List<String> times;
         if ("window".equals(action)) {
-            JsonNode iw = input.path("window");
-            String on = Json.str(iw.get("on")), off = Json.str(iw.get("off"));
+            ScheduleRequest.Window iw = input.window() == null ? new ScheduleRequest.Window(null, null) : input.window();
+            String on = Json.str(iw.on()), off = Json.str(iw.off());
             win = new LinkedHashMap<>();
             win.put("on", on);
             win.put("off", off);
@@ -122,8 +123,8 @@ public final class ScheduleValidator {
             times = e.containsKey("time") ? List.of() : new ArrayList<>(new TreeSet<>(List.of(on, off)));
             if (!e.containsKey("time") && off.compareTo(on) < 0) c.warn("Giờ tắt " + off + " sớm hơn giờ bật nên camp tắt vào " + off + " sáng hôm sau.");
         } else {
-            List<String> rawTimes = input.path("times").isArray() ? Json.strings(input.get("times"))
-                    : Json.truthy(input.get("time")) ? List.of(Json.str(input.get("time"))) : List.of();
+            List<String> rawTimes = input.times() != null ? Json.strings(input.times())
+                    : Json.truthy(input.time()) ? List.of(input.time()) : List.of();
             times = new ArrayList<>(new TreeSet<>(rawTimes));
             if (rawTimes.isEmpty()) e.put("time", "Hãy thêm ít nhất 1 giờ chạy");
             else if (rawTimes.stream().anyMatch(t -> !Checks.isTime(t))) e.put("time", "Giờ chạy không hợp lệ (dạng HH:MM, ví dụ 06:00)");
@@ -131,7 +132,7 @@ public final class ScheduleValidator {
         }
 
         TreeSet<Integer> daySet = new TreeSet<>();
-        if (input.path("days").isArray()) for (JsonNode d : input.get("days")) {
+        if (input.days() != null) for (Double d : input.days()) {
             double n = Json.num(d);
             if (n == Math.rint(n) && n >= 0 && n <= 6) daySet.add((int) n);
         }
@@ -139,19 +140,19 @@ public final class ScheduleValidator {
         if (days.isEmpty()) e.put("days", "Hãy chọn ít nhất 1 ngày trong tuần");
 
         // Áp dụng cho: danh sách cố định (list) hoặc theo điều kiện (filter, lọc lại mỗi lần chạy)
-        String targetMode = "filter".equals(Json.str(input.get("targetMode"))) ? "filter" : "list";
+        String targetMode = "filter".equals(input.targetMode()) ? "filter" : "list";
         List<String> targets = new ArrayList<>(), exclude = new ArrayList<>();
         Map<String, Object> filter = null;
         if (targetMode.equals("filter")) {
             Map<String, String> fe = new LinkedHashMap<>();
-            filter = checkFilter(input.get("filter"), fe);
+            filter = checkFilter(input.filter(), fe);
             if (!fe.isEmpty()) e.put("filter", fe.values().iterator().next());
-            exclude = uniq(Json.strings(input.get("exclude")));
+            exclude = uniq(Json.strings(input.exclude()));
             if (exclude.size() > 2000) exclude = exclude.subList(0, 2000);
             if (!e.containsKey("filter") && "any".equals(filter.get("op")) && "".equals(filter.get("name")) && "all".equals(filter.get("status")))
                 c.warn("Điều kiện đang khớp " + ("adset".equals(filter.get("level")) ? "mọi nhóm QC" : "mọi chiến dịch") + " trên tài khoản.");
         } else {
-            targets = uniq(Json.strings(input.get("targets")));
+            targets = uniq(Json.strings(input.targets()));
             if (targets.isEmpty()) e.put("targets", "Hãy chọn ít nhất 1 chiến dịch hoặc nhóm QC");
             else if (objs != null) {
                 List<String> unknown = targets.stream().filter(id -> objs.stream().noneMatch(o -> o.id.equals(id))).toList();
@@ -159,9 +160,9 @@ public final class ScheduleValidator {
             }
         }
 
-        String im = Json.str(input.get("mode"));
+        String im = Json.str(input.mode());
         String mode = im.equals("set") || im.equals("add") ? im : "percent";
-        double value = Json.num(input.get("value"));
+        double value = Json.num(input.value());
         if ("budget".equals(action)) {
             if (!Double.isFinite(value)) e.put("value", "Nhập giá trị đổi ngân sách");
             else if (mode.equals("add")) {
@@ -207,8 +208,8 @@ public final class ScheduleValidator {
         if (targetMode.equals("list") && objs != null && !e.containsKey("targets")) targetWarnings(targets, objs, turnsOn).forEach(c::warn);
 
         // Xung đột với các lịch đang bật (so từng lần chạy); lịch theo điều kiện không có danh sách cố định nên không so được
-        boolean enabled = !(input.path("enabled").isBoolean() && !input.get("enabled").booleanValue());
-        String inputId = Json.truthy(input.get("id")) ? Json.str(input.get("id")) : null;
+        boolean enabled = !Boolean.FALSE.equals(input.enabled());
+        String inputId = Json.truthy(input.id()) ? input.id() : null;
         if (enabled && targetMode.equals("list") && !e.containsKey("time") && !e.containsKey("days") && !e.containsKey("targets") && !e.containsKey("action")) {
             Schedule mineS = new Schedule();
             mineS.setAction(action);
@@ -259,7 +260,7 @@ public final class ScheduleValidator {
         s.setMode(mode);
         s.setValue(Double.isFinite(value) ? value : 0);
         s.setEnabled(enabled);
-        double max = Json.num(input.get("max")), min = Json.num(input.get("min"));
+        double max = Json.num(input.max()), min = Json.num(input.min());
         s.setMax(max > 0 ? max : null);
         s.setMin(min > 0 ? min : null);
         return c.done(s);

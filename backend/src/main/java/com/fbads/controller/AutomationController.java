@@ -1,6 +1,8 @@
 package com.fbads.controller;
 
+import com.fbads.dto.RuleRequest;
 import com.fbads.dto.Saved;
+import com.fbads.dto.ScheduleRequest;
 import com.fbads.service.ReportService;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
@@ -13,9 +15,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.Map;
@@ -38,8 +38,6 @@ public class AutomationController {
         this.mapper = mapper;
     }
 
-    private static ObjectNode body(JsonNode b) { return b instanceof ObjectNode o ? o : JsonNodeFactory.instance.objectNode(); }
-
     /** Trả mục đã lưu kèm cảnh báo: { ...mục, warnings } như bản Node */
     private ObjectNode withWarnings(Saved<?> saved) {
         ObjectNode out = mapper.valueToTree(saved.item());
@@ -49,7 +47,7 @@ public class AutomationController {
 
     // ----- Lịch -----
     @PostMapping("/schedules")
-    ObjectNode saveSchedule(@RequestBody(required = false) JsonNode b) { return withWarnings(schedules.save(body(b))); }
+    ObjectNode saveSchedule(@RequestBody(required = false) ScheduleRequest b) { return withWarnings(schedules.save(b)); }
 
     @DeleteMapping("/schedules/{id}")
     Map<String, Object> deleteSchedule(@PathVariable String id) {
@@ -74,10 +72,10 @@ public class AutomationController {
     }
 
     @PostMapping("/rules/preview")
-    Map<String, Object> preview(@RequestBody(required = false) JsonNode b) { return rules.preview(body(b)); }
+    Map<String, Object> preview(@RequestBody(required = false) RuleRequest b) { return rules.preview(b); }
 
     @PostMapping("/rules")
-    ObjectNode saveRule(@RequestBody(required = false) JsonNode b) { return withWarnings(rules.save(body(b))); }
+    ObjectNode saveRule(@RequestBody(required = false) RuleRequest b) { return withWarnings(rules.save(b)); }
 
     @DeleteMapping("/rules/{id}")
     Map<String, Object> deleteRule(@PathVariable String id) {

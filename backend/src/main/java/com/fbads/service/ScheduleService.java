@@ -4,6 +4,7 @@ import com.fbads.common.ApiException;
 import com.fbads.common.Ids;
 import com.fbads.common.ValidationException;
 import com.fbads.dto.Saved;
+import com.fbads.dto.ScheduleRequest;
 import com.fbads.engine.EngineLock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.Schedule;
@@ -11,7 +12,6 @@ import com.fbads.repository.ScheduleRepository;
 import com.fbads.validation.Result;
 import com.fbads.validation.ScheduleValidator;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
@@ -35,7 +35,7 @@ public class ScheduleService {
     public List<Schedule> findAll() { return repo.findAllByOrderBySeqAsc(); }
 
     /** Thêm mới (chưa có id) hoặc thay thế lịch cùng id */
-    public Saved<Schedule> save(JsonNode input) {
+    public Saved<Schedule> save(ScheduleRequest input) {
         List<Schedule> all = findAll();
         Result<Schedule> r = ScheduleValidator.validate(input, fb.objectsForValidation(), all);
         if (!r.ok()) throw new ValidationException(r);

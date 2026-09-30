@@ -2,6 +2,7 @@ package com.fbads.service;
 
 import com.fbads.common.Ids;
 import com.fbads.common.ValidationException;
+import com.fbads.dto.RuleRequest;
 import com.fbads.dto.Saved;
 import com.fbads.engine.EngineLock;
 import com.fbads.engine.RuleRunner;
@@ -10,8 +11,6 @@ import com.fbads.repository.RuleRepository;
 import com.fbads.validation.Result;
 import com.fbads.validation.RuleValidator;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.node.ObjectNode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,7 +35,7 @@ public class RuleService {
 
     public List<Rule> findAll() { return repo.findAllByOrderBySeqAsc(); }
 
-    private Result<Rule> validate(JsonNode input, List<Rule> existing) {
+    private Result<Rule> validate(RuleRequest input, List<Rule> existing) {
         List<RuleValidator.Account> accounts = fb.accounts().stream()
                 .map(a -> new RuleValidator.Account((String) a.get("id"), (String) a.get("name"))).toList();
         Result<Rule> r = RuleValidator.validate(input, fb.objectsForValidation(), existing, settings.get().getAccountTargets(), accounts);
@@ -45,7 +44,7 @@ public class RuleService {
     }
 
     /** Thêm mới (chưa có id) hoặc thay thế rule cùng id */
-    public Saved<Rule> save(JsonNode input) {
+    public Saved<Rule> save(RuleRequest input) {
         List<Rule> all = findAll();
         Result<Rule> r = validate(input, all);
         Rule item = r.value();
@@ -62,10 +61,8 @@ public class RuleService {
     public void runNow() { lock.run(() -> { runner.runRules(); return null; }); }
 
     /** Xem trước: rule (chưa lưu) đang khớp camp nào ngay bây giờ — không thay đổi gì */
-    public Map<String, Object> preview(ObjectNode input) {
-        ObjectNode copy = input.deepCopy();
-        copy.put("enabled", true);
-        Result<Rule> r = validate(copy, List.of());
+    public Map<String, Object> preview(RuleRequest input) {
+        Result<Rule> r = validate((input == null ? RuleRequest.EMPTY : input).enabledCopy(), List.of());
         Map<String, Object> out = new LinkedHashMap<>(runner.preview(r.value()));
         out.put("warnings", r.warnings());
         return out;
