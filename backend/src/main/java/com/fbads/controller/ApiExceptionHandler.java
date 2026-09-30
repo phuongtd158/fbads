@@ -12,6 +12,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -58,9 +60,30 @@ public class ApiExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    /**
+     * JSON hỏng → báo JSON không hợp lệ. JSON đúng nhưng sai kiểu so với DTO (vd. "on": "abc", "conditions": 5)
+     * → 400 { error, errors: { trường: "Sai kiểu dữ liệu" } }; trường lồng ghi dạng conditions[0].value.
+     */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<Map<String, Object>> unreadable(HttpMessageNotReadableException e) {
-        return error(400, "Dữ liệu gửi lên không đọc được (JSON không hợp lệ).");
+        if (!(e.getMostSpecificCause() instanceof MismatchedInputException m)) return error(400, "Dữ liệu gửi lên không đọc được (JSON không hợp lệ).");
+        String field = fieldPath(m);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", field.isEmpty() ? WRONG_TYPE : field + ": " + WRONG_TYPE);
+        body.put("errors", field.isEmpty() ? Map.of() : Map.of(field, WRONG_TYPE));
+        return ResponseEntity.badRequest().body(body);
+    }
+
+    static final String WRONG_TYPE = "Sai kiểu dữ liệu";
+
+    /** Đường dẫn trường bị lỗi, vd. "conditions[0].value"; "" khi cả body sai kiểu (vd. gửi mảng thay vì object) */
+    static String fieldPath(JacksonException e) {
+        StringBuilder sb = new StringBuilder();
+        for (JacksonException.Reference r : e.getPath()) {
+            if (r.getPropertyName() != null) sb.append(sb.isEmpty() ? "" : ".").append(r.getPropertyName());
+            else if (r.getIndex() >= 0) sb.append('[').append(r.getIndex()).append(']');
+        }
+        return sb.toString();
     }
 
     @ExceptionHandler(RuntimeException.class)

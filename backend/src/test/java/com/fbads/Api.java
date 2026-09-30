@@ -24,6 +24,9 @@ final class Api {
 
     Res post(String path, Object body) { return send(json(path, body).POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body)))); }
 
+    /** Gửi body nguyên văn (JSON hỏng, body rỗng) */
+    Res postRaw(String path, String body) { return send(json(path, null).POST(HttpRequest.BodyPublishers.ofString(body))); }
+
     Res delete(String path) { return send(json(path, null).DELETE()); }
 
     private HttpRequest.Builder json(String path, Object body) {

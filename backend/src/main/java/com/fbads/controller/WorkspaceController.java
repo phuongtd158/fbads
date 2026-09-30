@@ -1,6 +1,7 @@
 package com.fbads.controller;
 
 import com.fbads.common.ApiException;
+import com.fbads.dto.Requests;
 import com.fbads.entity.Role;
 import com.fbads.entity.Workspace;
 import com.fbads.security.WorkspaceContext;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 import java.util.Map;
@@ -33,8 +33,6 @@ public class WorkspaceController {
 
     public WorkspaceController(AuthService auth) { this.auth = auth; }
 
-    private static String str(JsonNode b, String k) { return b == null ? "" : b.path(k).asString(""); }
-
     private static long signedInUser(HttpServletRequest req) {
         Long uid = WorkspaceFilter.userId(req);
         if (uid == null) throw new ApiException(400, "Chưa có tài khoản nào. Hãy tạo tài khoản trước (Cài đặt → Bảo mật).");
@@ -43,9 +41,9 @@ public class WorkspaceController {
 
     /** Chọn workspace làm việc (lưu trong phiên đăng nhập) */
     @PostMapping("/workspaces/switch")
-    Map<String, Object> switchTo(@RequestBody(required = false) JsonNode b, HttpServletRequest req) {
+    Map<String, Object> switchTo(@RequestBody(required = false) Requests.WorkspaceSwitch b, HttpServletRequest req) {
         long uid = signedInUser(req);
-        long id = b == null ? 0 : b.path("id").asLong(0);
+        long id = (b == null ? Requests.WorkspaceSwitch.EMPTY : b).id();
         if (auth.role(id, uid) == null) throw new ApiException(403, "Bạn không thuộc workspace này");
         req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, id);
         return OK;
@@ -53,17 +51,17 @@ public class WorkspaceController {
 
     /** Tạo workspace mới (vd. cho một khách hàng khác): người tạo là chủ, chuyển sang workspace đó luôn */
     @PostMapping("/workspaces")
-    AuthService.Membership create(@RequestBody(required = false) JsonNode b, HttpServletRequest req) {
+    AuthService.Membership create(@RequestBody(required = false) Requests.WorkspaceName b, HttpServletRequest req) {
         long uid = signedInUser(req);
-        Workspace w = auth.createWorkspace(uid, str(b, "name"));
+        Workspace w = auth.createWorkspace(uid, (b == null ? Requests.WorkspaceName.EMPTY : b).name());
         req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, w.getId());
         return new AuthService.Membership(w.getId(), w.getName(), Role.OWNER);
     }
 
     /** Đổi tên workspace đang chọn */
     @PostMapping("/workspace")
-    Map<String, Object> rename(@RequestBody(required = false) JsonNode b) {
-        auth.renameWorkspace(WorkspaceContext.require(), str(b, "name"));
+    Map<String, Object> rename(@RequestBody(required = false) Requests.WorkspaceName b) {
+        auth.renameWorkspace(WorkspaceContext.require(), (b == null ? Requests.WorkspaceName.EMPTY : b).name());
         return OK;
     }
 
@@ -72,14 +70,15 @@ public class WorkspaceController {
 
     /** { username, name?, password? (khi tạo tài khoản mới), role } */
     @PostMapping("/members")
-    AuthService.Member add(@RequestBody(required = false) JsonNode b, HttpServletRequest req) {
+    AuthService.Member add(@RequestBody(required = false) Requests.MemberAdd body, HttpServletRequest req) {
         signedInUser(req);
-        return auth.addMember(WorkspaceContext.require(), str(b, "username"), str(b, "name"), str(b, "password"), Role.parse(str(b, "role")));
+        Requests.MemberAdd b = body == null ? Requests.MemberAdd.EMPTY : body;
+        return auth.addMember(WorkspaceContext.require(), b.username(), b.name(), b.password(), Role.parse(b.role()));
     }
 
     @PostMapping("/members/{userId}/role")
-    Map<String, Object> role(@PathVariable long userId, @RequestBody(required = false) JsonNode b) {
-        auth.setRole(WorkspaceContext.require(), userId, Role.parse(str(b, "role")));
+    Map<String, Object> role(@PathVariable long userId, @RequestBody(required = false) Requests.RoleChange b) {
+        auth.setRole(WorkspaceContext.require(), userId, Role.parse((b == null ? Requests.RoleChange.EMPTY : b).role()));
         return OK;
     }
 

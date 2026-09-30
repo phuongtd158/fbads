@@ -167,6 +167,20 @@ class ApiIntegrationTest {
         assertThat(diffs).isEmpty();
     }
 
+    /** Body đọc thẳng vào DTO: sai kiểu → 400 kèm tên trường; JSON hỏng → báo JSON không hợp lệ; body trống = gửi {} */
+    @Test
+    void requestBodiesAreTyped() {
+        Api.Res status = api.post("/api/objects/mock_1/status", Map.of("on", Map.of("x", 1)));
+        assertThat(status.status()).isEqualTo(400);
+        assertThat(status.body().get("error").asString()).isEqualTo("on: Sai kiểu dữ liệu");
+        assertThat(status.body().get("errors").get("on").asString()).isEqualTo("Sai kiểu dữ liệu");
+        assertThat(api.post("/api/workspaces/switch", Map.of("id", "abc")).body().get("errors").has("id")).isTrue();
+        assertThat(api.postRaw("/api/logs/x/undo", "{\"force\":").body().get("error").asString()).contains("JSON không hợp lệ");
+        Api.Res empty = api.postRaw("/api/setup", "");
+        assertThat(empty.status()).isEqualTo(400);
+        assertThat(empty.body().get("errors").has("username")).isTrue(); // service vẫn báo lỗi từng trường như gửi {}
+    }
+
     /** Bỏ khoá null (bản Java không ghi khoá rỗng) */
     private static JsonNode normalize(JsonNode n) {
         if (n == null) return null;

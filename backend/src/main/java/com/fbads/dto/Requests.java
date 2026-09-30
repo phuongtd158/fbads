@@ -6,11 +6,18 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 
 /**
- * Các request đơn giản kiểm tra bằng Bean Validation (chú thích trên từng trường, controller dùng @Valid).
- * Lỗi được ApiExceptionHandler đổi thành { error, errors: { trường: câu báo } } như bản Node.
+ * Body của các request đơn giản. Jackson đọc JSON thẳng vào record; gửi sai kiểu (vd. "on": "abc")
+ * thì ApiExceptionHandler trả 400 { error, errors: { trường: "Sai kiểu dữ liệu" } }.
+ * Trường chữ không gửi = "" (constructor gọn bên dưới), như `req.body.x || ''` của bản Node.
+ * Body bỏ trống: controller dùng hằng EMPTY của từng record, giống gửi {}.
+ * Luật kiểm tra nằm ở chú thích Bean Validation (controller dùng @Valid) hoặc ở service.
  */
 public final class Requests {
     private Requests() {}
+
+    static String text(String s) { return s == null ? "" : s; }
+
+    static String trimmed(String s) { return s == null ? "" : s.trim(); }
 
     /** Đặt ngân sách tay cho 1 camp */
     public record Budget(
@@ -22,4 +29,77 @@ public final class Requests {
 
     /** Đổi mật khẩu đăng nhập */
     public record PasswordChange(String currentPassword, @StrongPassword String newPassword) {}
+
+    /** Đăng nhập. Bỏ trống username = "admin" (giao diện cũ chỉ gửi mật khẩu). */
+    public record Login(String username, String password) {
+        public static final Login EMPTY = new Login(null, null);
+
+        public Login { username = text(username); password = text(password); }
+    }
+
+    /** Tạo tài khoản đầu tiên (/setup) hoặc tự đăng ký (/register, thêm tên workspace) */
+    public record Signup(String username, String name, String password, String workspaceName) {
+        public static final Signup EMPTY = new Signup(null, null, null, null);
+
+        public Signup { username = text(username); name = text(name); password = text(password); workspaceName = text(workspaceName); }
+    }
+
+    /** Chọn workspace làm việc */
+    public record WorkspaceSwitch(Long id) {
+        public static final WorkspaceSwitch EMPTY = new WorkspaceSwitch(null);
+
+        public WorkspaceSwitch { id = id == null ? 0L : id; }
+    }
+
+    /** Tạo hoặc đổi tên workspace */
+    public record WorkspaceName(String name) {
+        public static final WorkspaceName EMPTY = new WorkspaceName(null);
+
+        public WorkspaceName { name = text(name); }
+    }
+
+    /** Thêm thành viên: password chỉ cần khi tạo tài khoản mới. role sai thì Role.parse trả null, service báo lỗi. */
+    public record MemberAdd(String username, String name, String password, String role) {
+        public static final MemberAdd EMPTY = new MemberAdd(null, null, null, null);
+
+        public MemberAdd { username = text(username); name = text(name); password = text(password); role = text(role); }
+    }
+
+    /** Đổi vai trò thành viên */
+    public record RoleChange(String role) {
+        public static final RoleChange EMPTY = new RoleChange(null);
+
+        public RoleChange { role = text(role); }
+    }
+
+    /** Bật/tắt 1 camp hoặc nhóm QC. name chỉ để ghi nhật ký, có thể null. */
+    public record StatusChange(Boolean on, String name) {
+        public static final StatusChange EMPTY = new StatusChange(null, null);
+
+        public StatusChange { on = Boolean.TRUE.equals(on); }
+    }
+
+    /** Hoàn tác 1 dòng nhật ký; force = hoàn tác dù camp đã bị đổi tay sau đó */
+    public record Undo(Boolean force) {
+        public static final Undo EMPTY = new Undo(null);
+
+        public Undo { force = Boolean.TRUE.equals(force); }
+    }
+
+    /** Token Facebook (bỏ trống = token đã lưu) + App ID/Secret khi gia hạn token */
+    public record FbToken(String token, String appId, String appSecret) {
+        public static final FbToken EMPTY = new FbToken(null, null, null);
+
+        public FbToken { token = trimmed(token); appId = trimmed(appId); appSecret = trimmed(appSecret); }
+    }
+
+    /**
+     * Bắt đầu đăng nhập bằng Facebook. appId/appSecret bỏ trống = dùng cái đã lưu.
+     * configId: null = không gửi (dùng cái đã lưu), "" = bỏ Configuration ID.
+     */
+    public record OauthStart(String appId, String appSecret, String configId) {
+        public static final OauthStart EMPTY = new OauthStart(null, null, null);
+
+        public OauthStart { appId = trimmed(appId); appSecret = trimmed(appSecret); configId = configId == null ? null : configId.trim(); }
+    }
 }

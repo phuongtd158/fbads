@@ -1,6 +1,7 @@
 package com.fbads.controller;
 
 import com.fbads.config.AppProperties;
+import com.fbads.dto.Requests;
 import com.fbads.entity.AppSettings;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.FacebookService;
@@ -16,8 +17,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.node.JsonNodeFactory;
 
 import java.security.SecureRandom;
 import java.util.HexFormat;
@@ -51,13 +50,6 @@ public class FacebookController {
         this.settings = settings;
         this.props = props;
     }
-
-    private static String str(JsonNode b, String k) {
-        JsonNode v = b == null ? null : b.get(k);
-        return v == null || v.isNull() ? "" : v.asString("").trim();
-    }
-
-    private static JsonNode body(JsonNode b) { return b == null || !b.isObject() ? JsonNodeFactory.instance.objectNode() : b; }
 
     private static String firstError(String... msgs) {
         for (String m : msgs) if (m != null && !m.isEmpty()) return m;
@@ -122,8 +114,8 @@ public class FacebookController {
 
     /** Liệt kê tài khoản quảng cáo từ token (token mới dán chưa cần lưu) */
     @PostMapping("/fb/accounts")
-    ResponseEntity<?> accounts(@RequestBody(required = false) JsonNode b) {
-        String token = str(b, "token");
+    ResponseEntity<?> accounts(@RequestBody(required = false) Requests.FbToken b) {
+        String token = (b == null ? Requests.FbToken.EMPTY : b).token();
         if (token.isEmpty()) token = settings.get().getAccessToken();
         String tm = Checks.checkToken(token);
         if (!tm.isEmpty()) return ApiExceptionHandler.error(400, tm);
@@ -132,10 +124,11 @@ public class FacebookController {
 
     /** Đổi token ngắn hạn thành ~60 ngày. App ID/Secret chỉ dùng 1 lần, không lưu. */
     @PostMapping("/fb/extend")
-    ResponseEntity<?> extend(@RequestBody(required = false) JsonNode b) {
-        String token = str(b, "token");
+    ResponseEntity<?> extend(@RequestBody(required = false) Requests.FbToken body) {
+        Requests.FbToken b = body == null ? Requests.FbToken.EMPTY : body;
+        String token = b.token();
         if (token.isEmpty()) token = settings.get().getAccessToken();
-        String appId = str(b, "appId"), appSecret = str(b, "appSecret");
+        String appId = b.appId(), appSecret = b.appSecret();
         String em = firstError(Checks.checkToken(token), Checks.checkAppId(appId), Checks.checkAppSecret(appSecret));
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
         String longToken = fb.extendToken(appId, appSecret, token);
@@ -157,14 +150,14 @@ public class FacebookController {
 
     /** Bắt đầu đăng nhập bằng Facebook: lưu App ID/Secret (để lần sau chỉ cần bấm 1 nút) rồi trả về địa chỉ trang đăng nhập */
     @PostMapping("/fb/oauth/start")
-    ResponseEntity<?> oauthStart(@RequestBody(required = false) JsonNode raw, HttpServletRequest req) {
-        JsonNode b = body(raw);
+    ResponseEntity<?> oauthStart(@RequestBody(required = false) Requests.OauthStart body, HttpServletRequest req) {
+        Requests.OauthStart b = body == null ? Requests.OauthStart.EMPTY : body;
         AppSettings s = settings.get();
-        String appId = str(b, "appId");
+        String appId = b.appId();
         if (appId.isEmpty()) appId = s.getFbAppId() == null ? "" : s.getFbAppId();
-        String appSecret = str(b, "appSecret");
+        String appSecret = b.appSecret();
         if (appSecret.isEmpty()) appSecret = appId.equals(s.getFbAppId()) && s.getFbAppSecret() != null ? s.getFbAppSecret() : ""; // đổi ứng dụng thì phải nhập secret mới
-        String configId = b.has("configId") ? str(b, "configId") : (s.getFbConfigId() == null ? "" : s.getFbConfigId());
+        String configId = b.configId() != null ? b.configId() : (s.getFbConfigId() == null ? "" : s.getFbConfigId());
         String em = firstError(Checks.checkAppId(appId), appSecret.isEmpty() ? "Hãy nhập App Secret" : Checks.checkAppSecret(appSecret), Checks.checkConfigId(configId));
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
         String fAppId = appId, fSecret = appSecret, fConfig = configId;

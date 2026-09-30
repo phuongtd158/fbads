@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,8 +41,9 @@ public class ObjectsController {
     Map<String, Object> insights(@RequestParam Map<String, String> q) { return objects.insights(q); }
 
     @PostMapping("/objects/{id}/status")
-    Map<String, Object> status(@PathVariable String id, @RequestBody(required = false) JsonNode b) {
-        objects.setStatus(id, b != null && b.path("on").asBoolean(false), b == null ? null : b.path("name").asString(null));
+    Map<String, Object> status(@PathVariable String id, @RequestBody(required = false) Requests.StatusChange body) {
+        Requests.StatusChange b = body == null ? Requests.StatusChange.EMPTY : body;
+        objects.setStatus(id, b.on(), b.name());
         return OK;
     }
 
@@ -58,8 +58,8 @@ public class ObjectsController {
     List<LogEntry> logs() { return logs.recent(300); }
 
     @PostMapping("/logs/{id}/undo")
-    Map<String, Object> undo(@PathVariable String id, @RequestBody(required = false) JsonNode b) {
-        LogEntry entry = undo.undo(id, b != null && b.path("force").asBoolean(false));
+    Map<String, Object> undo(@PathVariable String id, @RequestBody(required = false) Requests.Undo b) {
+        LogEntry entry = undo.undo(id, (b == null ? Requests.Undo.EMPTY : b).force());
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", true);
         m.put("entry", entry);

@@ -26,7 +26,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import tools.jackson.databind.JsonNode;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -53,8 +52,6 @@ public class AuthController {
         this.contextRepo = contextRepo;
         this.sessions = sessions;
     }
-
-    private static String str(JsonNode b, String k) { return b == null ? "" : b.path(k).asString(""); }
 
     /**
      * Trạng thái đăng nhập cho giao diện:
@@ -95,13 +92,14 @@ public class AuthController {
 
     /** { username, password }. Bỏ trống username = "admin" (giao diện cũ chỉ gửi mật khẩu). */
     @PostMapping("/login")
-    ResponseEntity<?> login(@RequestBody(required = false) JsonNode body, HttpServletRequest req, HttpServletResponse res) throws InterruptedException {
+    ResponseEntity<?> login(@RequestBody(required = false) Requests.Login body, HttpServletRequest req, HttpServletResponse res) throws InterruptedException {
+        Requests.Login b = body == null ? Requests.Login.EMPTY : body;
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) return ApiExceptionHandler.error(429, "Nhập sai quá nhiều lần. Thử lại sau " + wait + " phút.");
         if (auth.openMode()) return ResponseEntity.ok(OK);
-        String username = str(body, "username").isBlank() ? AuthService.ADMIN : str(body, "username");
+        String username = b.username().isBlank() ? AuthService.ADMIN : b.username();
         try {
-            Authentication a = authManager.authenticate(UsernamePasswordAuthenticationToken.unauthenticated(AuthService.normalize(username), str(body, "password")));
+            Authentication a = authManager.authenticate(UsernamePasswordAuthenticationToken.unauthenticated(AuthService.normalize(username), b.password()));
             attempts.clear(req);
             signIn(a, req, res);
             return ResponseEntity.ok(OK);
@@ -122,18 +120,20 @@ public class AuthController {
 
     /** Tạo tài khoản đầu tiên (chỉ khi chưa có tài khoản nào): chủ workspace 1, đăng nhập luôn */
     @PostMapping("/setup")
-    Map<String, Object> setup(@RequestBody(required = false) JsonNode b, HttpServletRequest req, HttpServletResponse res) {
-        User u = auth.setup(str(b, "username"), str(b, "name"), str(b, "password"));
+    Map<String, Object> setup(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
+        Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
+        User u = auth.setup(b.username(), b.name(), b.password());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
         return OK;
     }
 
     /** Tự đăng ký (ALLOW_SIGNUP=true): tài khoản + workspace riêng, đăng nhập luôn */
     @PostMapping("/register")
-    Map<String, Object> register(@RequestBody(required = false) JsonNode b, HttpServletRequest req, HttpServletResponse res) {
+    Map<String, Object> register(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) throw new com.fbads.common.ApiException(429, "Thử quá nhiều lần. Thử lại sau " + wait + " phút.");
-        User u = auth.register(str(b, "username"), str(b, "name"), str(b, "password"), str(b, "workspaceName"));
+        Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
+        User u = auth.register(b.username(), b.name(), b.password(), b.workspaceName());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
         return OK;
     }
