@@ -53,7 +53,7 @@ const accNames = (r) => {
   const list = (state.objsMeta && state.objsMeta.accounts) || []
   return r.accountIds.map((id) => (list.find((a) => a.id === id) || { name: id }).name).join(', ')
 }
-const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
+const actTone = (r) => (r.action === 'pause' ? 'bad' : r.action === 'increase' || r.action === 'ladder' ? 'ok' : r.action === 'notify' ? 'inf' : 'acc')
 const unitOf = (r) => (r.level === 'adset' ? 'nhóm QC' : 'camp')
 const actText = (r) => (r.action === 'pause' ? `tắt ${unitOf(r)}` : r.action === 'notify' ? `gửi cảnh báo (không đổi ${unitOf(r)})` : `${r.action === 'increase' ? 'tăng' : 'giảm'} ${r.budgetMode === 'amount' ? fmt(r.amount) : r.pct + '%'} ngân sách ${unitOf(r)}`)
 
@@ -100,7 +100,8 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     <div v-if="state.rules.length" class="grid stagger">
       <article v-for="r in state.rules" :key="r.id" class="card it" :class="{ off: !r.enabled }">
         <div class="hd"><h4>{{ r.name }}</h4><Switch :model-value="r.enabled" :loading="busy[r.id]" :label="'Bật/tắt rule ' + r.name" @update:model-value="(v) => setEnabled(r, v)" /></div>
-        <p class="sentence">Nếu <template v-for="(c, i) in conds(r)" :key="i"><span v-if="i" class="mw">{{ matchWord(r.match) }}</span> <b>{{ METRIC_SHORT[c.metric] || c.metric }}</b><span v-if="conds(r).length === 1 || i === conds(r).length - 1" class="rg"> {{ RANGE_LABEL[r.range || 'today'] }}</span> {{ opText(c.op) }} <b :class="{ acc: c.vs === 'target' }">{{ rhs(c) }}</b> </template><template v-if="r.minSpend">(đã chi ≥ {{ fmt(r.minSpend) }})</template>
+        <p v-if="r.action === 'ladder'" class="sentence">Tăng ngân sách {{ unitOf(r) }} theo bậc <b>{{ METRIC_SHORT[r.ladderMetric] || 'Kết quả' }}</b><span class="rg"> hôm nay</span><template v-if="r.minSpend"> (đã chi ≥ {{ fmt(r.minSpend) }})</template>: <template v-for="(t, i) in r.steps || []" :key="i"><template v-if="i">, </template>từ <b>{{ t.count }}</b> thì <b class="ok">+{{ t.mode === 'amount' ? fmt(t.value) : t.value + '%' }}</b><template v-if="t.everyHours"> rồi cứ {{ t.everyHours }} giờ lặp lại</template></template>, tối đa {{ fmt(r.maxBudget) }}.</p>
+        <p v-else class="sentence">Nếu <template v-for="(c, i) in conds(r)" :key="i"><span v-if="i" class="mw">{{ matchWord(r.match) }}</span> <b>{{ METRIC_SHORT[c.metric] || c.metric }}</b><span v-if="conds(r).length === 1 || i === conds(r).length - 1" class="rg"> {{ RANGE_LABEL[r.range || 'today'] }}</span> {{ opText(c.op) }} <b :class="{ acc: c.vs === 'target' }">{{ rhs(c) }}</b> </template><template v-if="r.minSpend">(đã chi ≥ {{ fmt(r.minSpend) }})</template>
           thì <b :class="actTone(r)">{{ actText(r) }}</b><template v-if="r.maxBudget">, tối đa {{ fmt(r.maxBudget) }}</template><template v-if="r.minBudget">, tối thiểu {{ fmt(r.minBudget) }}</template>.</p>
         <div class="tags">
           <span v-if="r.allActive" class="tag">Tất cả {{ unitOf(r) }} đang chạy<i v-if="accNames(r)" class="tac"> · {{ accNames(r) }}</i></span>

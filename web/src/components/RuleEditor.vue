@@ -1,9 +1,9 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick } from 'vue'
-import { Check, Eye, Plus, X, Sparkles, CircleOff, TrendingUp, TrendingDown, Bell, ChevronDown } from 'lucide-vue-next'
+import { Check, Eye, Plus, X, Sparkles, CircleOff, TrendingUp, TrendingDown, Bell, ChevronDown, ChartNoAxesColumnIncreasing } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { METRICS, METRIC_SHORT, RANGES, RANGE_LABEL } from '../lib/constants'
-import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS, TOTAL_METRICS, MAX_TIERS } from '../lib/validate'
+import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS, TOTAL_METRICS, MAX_TIERS, MAX_STEPS } from '../lib/validate'
 import { describeRule } from '../lib/ruleText'
 import { ruleName } from '../lib/names'
 import { state } from '../stores/app'
@@ -137,9 +137,44 @@ const levels = [{ value: 'campaign', label: 'Chiến dịch' }, { value: 'adset'
 const unit = computed(() => (f.value.level === 'adset' ? 'nhóm QC' : 'camp'))
 function setLevel(v) { if (v !== f.value.level) { f.value.level = v; f.value.targets = [] } }
 const isBudget = computed(() => f.value.action === 'increase' || f.value.action === 'decrease')
+// Tăng theo bậc kết quả: không có điều kiện, số liệu luôn tính hôm nay; vẫn cần mục có ngân sách riêng
+const isLadder = computed(() => f.value.action === 'ladder')
+const needBudget = computed(() => isBudget.value || isLadder.value)
+const ladderMetrics = [{ value: 'results', label: 'Số kết quả' }, { value: 'leads', label: 'Số lead' }, { value: 'messages', label: 'Số tin nhắn' }]
+const stepUnit = computed(() => ({ results: 'kết quả', leads: 'lead', messages: 'tin nhắn' })[f.value.ladderMetric] || 'kết quả')
+const stepModes = [{ value: 'percent', label: '%' }, { value: 'amount', label: 'đ' }]
+const defaultSteps = () => [{ count: 1, mode: 'percent', value: 50 }, { count: 2, mode: 'percent', value: 50 }, { count: 3, mode: 'percent', value: 50, everyHours: 3 }]
+watch(isLadder, (on) => {
+  if (!on) return
+  if (!(f.value.steps || []).length) f.value.steps = defaultSteps()
+  if (!f.value.ladderMetric) f.value.ladderMetric = 'results'
+  if (f.value.includeLearning === undefined) f.value.includeLearning = true
+})
+// Chỉ bậc cuối được lặp lại: thêm bậc thì chuyển "lặp lại" sang bậc mới
+function addStep() {
+  const st = f.value.steps
+  if (st.length >= MAX_STEPS) return
+  const last = st[st.length - 1] || { count: 0, mode: 'percent', value: 50 }
+  const every = last.everyHours; delete last.everyHours
+  st.push({ count: (Number(last.count) || 0) + 1, mode: last.mode, value: last.value, ...(every ? { everyHours: every } : {}) })
+}
+function removeStep(i) {
+  const st = f.value.steps
+  if (st.length <= 1) return
+  const every = st[i].everyHours
+  st.splice(i, 1)
+  if (every && i === st.length) st[st.length - 1].everyHours = every
+}
+const repeatOn = computed({
+  get: () => Number((f.value.steps || []).slice(-1)[0]?.everyHours) > 0,
+  set: (v) => { const t = f.value.steps.slice(-1)[0]; if (v) t.everyHours = 3; else delete t.everyHours },
+})
+const sErr = (i) => (submitted.value || touched.steps ? check.value.errors[`s${i}`] : '')
+const ladderErrors = computed(() => [show('ladderMetric'), submitted.value || touched.steps ? check.value.errors.steps : '', show('maxBudget')].filter(Boolean))
 const actions = computed(() => [
   { value: 'pause', label: `Tắt ${unit.value}`, icon: CircleOff },
   { value: 'increase', label: 'Tăng ngân sách', icon: TrendingUp },
+  { value: 'ladder', label: 'Tăng theo bậc kết quả', icon: ChartNoAxesColumnIncreasing },
   { value: 'decrease', label: 'Giảm ngân sách', icon: TrendingDown },
   { value: 'notify', label: 'Chỉ thông báo', icon: Bell },
 ])
@@ -153,6 +188,7 @@ const advErr = computed(() => !!(show('cooldownHours') || show('window')))
 watch(advErr, (v) => { if (v) advOpen.value = true })
 const advSummary = computed(() => {
   const h = Number(f.value.cooldownHours)
+  if (isLadder.value) return f.value.from && f.value.to ? `Chỉ chạy ${f.value.from}–${f.value.to}` : 'Chạy cả ngày'
   return [h > 0 ? `Không lặp lại ${h} giờ` : 'Có thể lặp lại mỗi lần kiểm tra', f.value.from && f.value.to ? `Chỉ chạy ${f.value.from}–${f.value.to}` : 'Chạy cả ngày'].join(' · ')
 })
 </script>
@@ -164,10 +200,11 @@ const advSummary = computed(() => {
 
       <section class="card2">
         <h4><span class="no">1</span>Khi nào</h4>
-        <Field label="Số liệu tính trong" tip="range" :error="show('range')">
+        <p v-if="isLadder" class="th lnote">Rule tăng theo bậc tính số kết quả trong <b>hôm nay</b> và không cần điều kiện: bậc nào đạt thì tăng theo bậc đó (đặt ở phần 2).</p>
+        <Field v-if="!isLadder" label="Số liệu tính trong" tip="range" :error="show('range')">
           <Segmented v-model="f.range" :options="RANGES" block />
         </Field>
-        <Field label="Nếu" :error="condsError">
+        <Field v-if="!isLadder" label="Nếu" :error="condsError">
           <div class="conds">
             <div v-if="f.conditions.length > 1" class="mrow"><span>Rule chạy khi</span><Segmented v-model="f.match" :options="matchOptions" size="sm" /></div>
             <div v-for="(c, i) in f.conditions" :key="i" class="crow" :class="{ bad: cErrors(i).length }">
@@ -200,7 +237,7 @@ const advSummary = computed(() => {
             <button v-if="f.conditions.length < MAX_CONDITIONS" type="button" class="addc" @click="addCond"><Plus :size="14" />Thêm điều kiện</button>
           </div>
         </Field>
-        <Field tip="minSpend" :error="show('minSpend')" hint="Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu." class="last">
+        <Field tip="minSpend" :error="show('minSpend')" :hint="isLadder ? 'Vd 100.000: chỉ tăng khi đã chi từ 100.000 hôm nay.' : 'Tránh tắt nhầm khi camp mới chạy, chưa đủ dữ liệu.'" class="last">
           <div class="msp"><span>Chỉ xét khi đã chi tối thiểu</span><MoneyInput v-model="f.minSpend" class="msi" placeholder="vd 300.000" aria-label="Chi tiêu tối thiểu" @input="touch('minSpend')" /></div>
         </Field>
       </section>
@@ -220,6 +257,24 @@ const advSummary = computed(() => {
           <label><span>Sàn ngân sách</span><MoneyInput v-model="f.minBudget" placeholder="Không giới hạn" @input="touch('minBudget')" /></label>
           <p v-for="m in adjErrors" :key="m" class="e">{{ m }}</p>
         </div>
+        <div v-if="isLadder" class="ladder" :class="{ bad: ladderErrors.length }">
+          <div class="lhd"><span>Đếm theo</span><select v-model="f.ladderMetric" class="input" aria-label="Loại kết quả để tính bậc" @change="touch('steps')"><option v-for="m in ladderMetrics" :key="m.value" :value="m.value">{{ m.label }}</option></select></div>
+          <div v-for="(t, i) in f.steps" :key="i" class="lrow" :class="{ bad: sErr(i) }">
+            <b class="lno">Bậc {{ i + 1 }}</b>
+            <span>Khi có từ</span><input v-model.number="t.count" type="number" min="1" step="1" class="input lc" :aria-label="'Số ' + stepUnit + ' của bậc ' + (i + 1)" @input="touch('steps')" />
+            <span>{{ stepUnit }} thì tăng</span>
+            <MoneyInput v-if="t.mode === 'amount'" v-model="t.value" class="lv" :aria-label="'Số tiền tăng ở bậc ' + (i + 1)" placeholder="vd 50.000" @input="touch('steps')" />
+            <input v-else v-model.number="t.value" type="number" min="1" max="100" class="input lv" :aria-label="'Phần trăm tăng ở bậc ' + (i + 1)" @input="touch('steps')" />
+            <Segmented v-model="t.mode" :options="stepModes" size="sm" />
+            <button v-if="f.steps.length > 1" type="button" class="rm" :aria-label="'Bỏ bậc ' + (i + 1)" @click="removeStep(i)"><X :size="15" /></button>
+            <label v-if="i === f.steps.length - 1" class="ck lrep"><input v-model="repeatOn" type="checkbox" /> Sau đó cứ mỗi <input v-model.number="t.everyHours" type="number" min="1" max="24" class="input lh" :disabled="!repeatOn" aria-label="Lặp lại mỗi mấy giờ" @input="touch('steps')" /> giờ tăng lại</label>
+          </div>
+          <button v-if="f.steps.length < MAX_STEPS" type="button" class="addc" @click="addStep"><Plus :size="14" />Thêm bậc</button>
+          <div class="lcap"><span>Trần ngân sách</span><MoneyInput v-model="f.maxBudget" class="msi" placeholder="Bắt buộc, vd 2.000.000" aria-label="Trần ngân sách" @input="touch('maxBudget')" /></div>
+          <label class="ck"><input v-model="f.includeLearning" type="checkbox" /> Áp dụng cả {{ unit }} đang trong giai đoạn học</label>
+          <p class="th">Mỗi bậc chạy 1 lần mỗi ngày, sang ngày mới tính lại từ đầu. Nhảy nhiều bậc cùng lúc thì chỉ tăng theo bậc cao nhất. Rule này không bị giới hạn % thay đổi mỗi ngày ở Cài đặt → Bảo vệ, nên bắt buộc có trần.</p>
+          <p v-for="m in ladderErrors" :key="m" class="e">{{ m }}</p>
+        </div>
         <div v-if="f.action === 'pause'" class="resume" :class="{ bad: show('resumeAt') }">
           <label class="ck"><input v-model="resumeOn" type="checkbox" /> Tự bật lại sáng hôm sau lúc</label>
           <input v-model="f.resumeAt" type="time" class="input" :disabled="!resumeOn" aria-label="Giờ bật lại" @input="touch('resumeAt')" />
@@ -237,8 +292,8 @@ const advSummary = computed(() => {
               <span class="rd" /><span class="mt"><b>{{ m.label }}</b><small>{{ m.desc }}</small></span>
             </button>
           </div>
-          <p v-if="isBudget" class="th">Ngân sách chỉ nằm ở một cấp: chiến dịch <b>CBO</b> giữ ngân sách ở chiến dịch, chiến dịch <b>ABO</b> giữ ở từng nhóm QC. {{ f.level === 'adset' ? 'Nhóm QC' : 'Chiến dịch' }} không có ngân sách riêng sẽ được bỏ qua.</p>
-          <div v-if="scope === 'pick'" style="margin-top: 12px"><TargetPicker v-model="f.targets" :level="f.level" :need-budget="isBudget" /></div>
+          <p v-if="needBudget" class="th">Ngân sách chỉ nằm ở một cấp: chiến dịch <b>CBO</b> giữ ngân sách ở chiến dịch, chiến dịch <b>ABO</b> giữ ở từng nhóm QC. {{ f.level === 'adset' ? 'Nhóm QC' : 'Chiến dịch' }} không có ngân sách riêng sẽ được bỏ qua.</p>
+          <div v-if="scope === 'pick'" style="margin-top: 12px"><TargetPicker v-model="f.targets" :level="f.level" :need-budget="needBudget" /></div>
           <div v-else-if="multiAcc" class="accs">
             <span class="lb">Trong tài khoản</span>
             <button type="button" class="chip" :class="{ on: !f.accountIds.length }" @click="f.accountIds = []">Tất cả</button>
@@ -250,7 +305,7 @@ const advSummary = computed(() => {
       <section class="adv" :class="{ open: advOpen, bad: advErr }">
         <button type="button" class="advh" :aria-expanded="advOpen" @click="advOpen = !advOpen"><b>Tuỳ chọn thêm</b><small>{{ advSummary }}</small><ChevronDown :size="17" class="chev" /></button>
         <div v-if="advOpen" class="advb">
-          <Field :label="`Không lặp lại cho cùng ${unit} trong`" tip="cooldown" :error="show('cooldownHours')"><div class="with"><input v-model="f.cooldownHours" type="number" min="0" class="input" @input="touch('cooldownHours')" /><em>giờ</em></div></Field>
+          <Field v-if="!isLadder" :label="`Không lặp lại cho cùng ${unit} trong`" tip="cooldown" :error="show('cooldownHours')"><div class="with"><input v-model="f.cooldownHours" type="number" min="0" class="input" @input="touch('cooldownHours')" /><em>giờ</em></div></Field>
           <Field label="Chỉ chạy trong khung giờ" tip="window" :error="show('window')" hint="Để trống là chạy cả ngày.">
             <div class="tw"><input v-model="f.from" type="time" class="input" aria-label="Từ giờ" @input="touch('window')" /><span class="faint">→</span><input v-model="f.to" type="time" class="input" aria-label="Đến giờ" @input="touch('window')" /></div>
           </Field>
@@ -311,7 +366,20 @@ const advSummary = computed(() => {
 .tiers .th { margin: 0; }
 .msp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--text-2); }
 .msi { width: 170px; }
-.acts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.acts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.lnote { margin: 0 0 12px; }
+.ladder { display: grid; gap: 10px; margin-top: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.ladder.bad { box-shadow: inset 0 0 0 1px var(--danger); }
+.lhd, .lrow, .lcap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-2); }
+.lhd { font-weight: 600; }
+.lrow { padding: 8px 10px; border-radius: 11px; background: var(--surface); }
+.lrow.bad { box-shadow: inset 0 0 0 1px var(--danger); }
+.lno { color: var(--text); font-size: 13px; min-width: 46px; }
+.ladder .input { padding-top: 7px; padding-bottom: 7px; font-size: 14px; width: auto; }
+.ladder .lc { width: 64px; } .ladder .lv { width: 110px; } .ladder .lh { width: 58px; margin: 0 4px; }
+.lrep { flex-basis: 100%; padding-left: 54px; }
+.ladder .ck { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.ladder .th, .ladder .e { margin: 0; } .ladder .e { color: var(--danger); font-size: 13px; }
 .act { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 11px 8px; border: 1.5px solid var(--border); border-radius: 13px; background: var(--surface); color: inherit; font: inherit; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
 .act:hover { border-color: var(--border-strong); }
 .act .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--surface-3); color: var(--text-2); flex: none; transition: .15s; }
@@ -368,7 +436,8 @@ const advSummary = computed(() => {
   .rm { grid-column: 3; grid-row: 1; }
   .c-op { grid-column: 1; } .c-val { grid-column: 2 / -1; }
   .c-vs, .c-cmp { grid-column: 1 / -1; }
-  .acts { grid-template-columns: 1fr 1fr; }
+  .acts { grid-template-columns: 1fr 1fr; } .act:last-child { grid-column: 1 / -1; }
+  .lrep { padding-left: 0; }
   .mrow :deep(.seg) { display: flex; width: 100%; } .mrow :deep(.seg button) { flex: 1; padding-left: 6px; padding-right: 6px; }
   .resume { grid-template-columns: 1fr 120px; }
   .act { flex-direction: row; justify-content: flex-start; text-align: left; padding: 10px; }

@@ -20,7 +20,10 @@ const shown = computed(() => (showMiss.value ? items.value : items.value.filter(
 const val = (i) => (i.inf ? '∞' : i.value == null ? '–' : props.rule && props.rule.metric === 'roas' ? fmtDec(i.value) : fmt(i.value))
 // Từng điều kiện với giá trị thực tế: "CPA 250.000 > 150.000 ✓ VÀ ROAS 2,00 < 1,50 ✗" (? = tài khoản chưa đặt mục tiêu)
 const line = (i) => {
+  if ((!i.conds || !i.conds.length) && props.rule && props.rule.action === 'ladder') return `Đã chi ${fmt(i.spend || 0)}`
   if (!i.conds || !i.conds.length) return `${METRICS[props.rule.metric]} = ${val(i)}`
+  const lc = i.conds[0]
+  if (lc.ladderNeed) return `${METRIC_SHORT[lc.metric]} ${fmt(lc.actual || 0)}${lc.ladderStep ? ` · đạt bậc ${lc.ladderStep}` : ` · bậc 1 cần từ ${lc.ladderNeed}`}`
   return i.conds.map((c) => {
     const e = evaluated(c)
     return `${METRIC_SHORT[c.metric]} ${e.actual} ${e.op} ${e.threshold}${e.target ? ` (${e.target})` : ''} ${e.unknown ? '?' : e.hit ? '✓' : '✗'}`

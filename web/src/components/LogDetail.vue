@@ -82,6 +82,7 @@ const condHead = computed(() => {
 const cond = computed(() => {
   const c = l.value.condition
   if (!c) return null
+  if (c.ladder) return `Bậc ${c.ladder.step}/${c.ladder.total}: ${METRICS[c.ladder.metric] || c.ladder.metric} hôm nay = ${fmt(c.ladder.count)} (bậc này cần từ ${fmt(c.ladder.need)})` + spendTail(c)
   if (condLines.value.length) return condHead.value + spendTail(c)
   const val = c.actualInf ? '∞ (chưa có kết quả)' : c.actual == null ? '–' : c.metric === 'roas' ? fmtDec(c.actual) : fmt(c.actual)
   const th = c.metric === 'roas' ? c.threshold : fmt(c.threshold)

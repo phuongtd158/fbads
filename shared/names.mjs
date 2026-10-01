@@ -77,6 +77,7 @@ function condText(c) {
 // "Tắt camp CPA > 150.000", "Tăng NS nhóm QC ROAS > 2", "Báo khi CPA > 120% mục tiêu"
 export function ruleName(r = {}) {
   const unit = r.level === 'adset' ? 'nhóm QC' : 'camp'
+  if (r.action === 'ladder') return clip(`Tăng NS ${unit} theo bậc ${(M[r.ladderMetric] || 'kết quả').toLowerCase()}`)
   const head = r.action === 'increase' ? `Tăng NS ${unit}` : r.action === 'decrease' ? `Giảm NS ${unit}` : r.action === 'notify' ? 'Báo khi' : `Tắt ${unit}`
   const cs = conditionsOf(r).map(condText).join(r.match === 'any' ? ' hoặc ' : ' & ')
   return clip(cs ? `${head} ${cs}` : head)
