@@ -45,6 +45,7 @@ const METRIC_TXT = { cpa: 'CPA', roas: 'ROAS', spend: 'chi tiêu', results: 's�
 export function describeRule(r, { accounts = [] } = {}) {
   const unit = r.level === 'adset' ? 'nhóm QC' : 'camp'
   const cs = conditionsOf(r)
+  if (r.action === 'ladder') return describeLadder(r, unit, accounts)
   const cond = cs.map((c) => `${METRIC_TXT[c.metric] || c.metric} ${opText(c.op)} ${rhs(c)}`).join(` ${matchWord(r.match).toLowerCase()} `)
   const act = r.action === 'pause' ? `tắt ${unit} đó`
     : r.action === 'notify' ? 'gửi cảnh báo (không đổi gì)'
@@ -58,5 +59,17 @@ export function describeRule(r, { accounts = [] } = {}) {
   if (Number(r.cooldownHours) > 0) extra.push(`không lặp lại cho cùng ${unit} trong ${r.cooldownHours} giờ`)
   if (r.from && r.to) extra.push(`chỉ chạy ${r.from}–${r.to}`)
   if (extra.length) out.push(extra.join(', ').replace(/^./, (x) => x.toUpperCase()) + '.')
+  return out
+}
+
+// Rule tăng theo bậc kết quả: "Bậc 1: có từ 1 kết quả → tăng 50%" …
+export const stepText = (t, metric) => `có từ ${t.count} ${TIER_TXT[metric] || 'kết quả'} thì tăng ${t.mode === 'amount' ? fmt(t.value || 0) : `${t.value || 0}%`}${Number(t.everyHours) > 0 ? `, rồi cứ ${t.everyHours} giờ tăng lại` : ''}`
+function describeLadder(r, unit, accounts) {
+  const scope = r.allActive === false
+    ? `${(r.targets || []).length} ${unit} đã chọn`
+    : `mọi ${unit} đang chạy${(r.accountIds || []).length ? ` trong ${r.accountIds.map((id) => (accounts.find((a) => a.id === id) || { name: id }).name).join(', ')}` : ''}`
+  const steps = (r.steps || []).map((t, i) => `bậc ${i + 1} ${stepText(t, r.ladderMetric)}`).join('; ')
+  const out = [`Với ${scope}${Number(r.minSpend) > 0 ? `, khi đã chi từ ${fmt(r.minSpend)} hôm nay` : ''}: ${steps || '…'}${Number(r.maxBudget) > 0 ? `. Tối đa ${fmt(r.maxBudget)}` : ''}.`]
+  out.push(`Mỗi bậc chạy 1 lần mỗi ngày, nhảy nhiều bậc thì chỉ chạy bậc cao nhất${r.includeLearning === false ? '' : ', áp dụng cả ' + unit + ' đang học'}.`)
   return out
 }

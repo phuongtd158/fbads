@@ -321,6 +321,33 @@ export function spendTierOf(c, count) {
     return pick ? {value: Number(pick.value), tier: pick} : {value: Number(c.value), tier: null}
 }
 
+// Rule "tăng theo bậc kết quả" (action 'ladder'): vd có 1 kết quả thì +50%, kết quả thứ 2 +50%, từ kết quả thứ 3 cứ 3 giờ +50%.
+// Mỗi bậc chạy 1 lần mỗi ngày; bậc cuối có thể lặp lại mỗi everyHours giờ. Số kết quả tính trong hôm nay.
+export const LADDER_METRICS = ['results', 'leads', 'messages']
+export const MAX_STEPS = 5
+function ladderOf(input, e) {
+    const ladderMetric = LADDER_METRICS.includes(input.ladderMetric) ? input.ladderMetric : null
+    if (!ladderMetric) e.ladderMetric = 'Chọn loại kết quả để tính bậc'
+    const raw = Array.isArray(input.steps) ? input.steps : []
+    if (!raw.length) e.steps = 'Thêm ít nhất 1 bậc'
+    else if (raw.length > MAX_STEPS) e.steps = `Tối đa ${MAX_STEPS} bậc`
+    const steps = raw.slice(0, MAX_STEPS).map((t0, i, all) => {
+        const t = t0 || {}
+        const count = num(t.count), value = num(t.value), mode = t.mode === 'amount' ? 'amount' : 'percent'
+        const last = i === all.length - 1
+        const every = last && !isBlank(t.everyHours) && t.everyHours !== 0 ? num(t.everyHours) : 0
+        const put = (msg) => { if (!e[`s${i}`]) e[`s${i}`] = msg; if (!e.steps) e.steps = msg }
+        if (!Number.isInteger(count) || count < 1) put(`Bậc ${i + 1}: số kết quả là số nguyên từ 1 trở lên`)
+        else if (i > 0 && count <= num((all[i - 1] || {}).count)) put(`Bậc ${i + 1}: số kết quả phải lớn hơn bậc trước`)
+        if (!Number.isFinite(value) || value <= 0) put(`Bậc ${i + 1}: nhập mức tăng lớn hơn 0`)
+        else if (mode === 'percent' && value > LIMITS.rulePctIncreaseMax) put(`Bậc ${i + 1}: tăng tối đa ${LIMITS.rulePctIncreaseMax}% mỗi lần`)
+        else if (mode === 'amount' && value > LIMITS.budgetMax) put(`Bậc ${i + 1}: số tiền quá lớn, hãy kiểm tra lại số 0`)
+        if (!Number.isFinite(every) || every < 0 || (every > 0 && (every < 1 || every > 24))) put(`Bậc ${i + 1}: lặp lại mỗi 1 đến 24 giờ`)
+        return {count: Number.isFinite(count) ? count : 0, mode, value: Number.isFinite(value) ? (mode === 'amount' ? Math.round(value) : value) : 0, ...(every > 0 && Number.isFinite(every) ? {everyHours: every} : {})}
+    })
+    return {ladderMetric: ladderMetric || 'results', steps, includeLearning: input.includeLearning !== false}
+}
+
 export function validateRule(input = {}, ctx = {}) {
     const {objs = null, rules = [], accountTargets = null, accounts = null} = ctx
     const e = {}, w = []
@@ -328,7 +355,9 @@ export function validateRule(input = {}, ctx = {}) {
     if (name.length > LIMITS.nameMax) e.name = `Tên tối đa ${LIMITS.nameMax} ký tự`
 
     // ----- Điều kiện (1..5), gộp bằng VÀ / HOẶC. Lỗi của điều kiện thứ i nằm ở khoá `c{i}.{trường}`; điều kiện đầu còn ghi ra khoá cũ (metric/op/value).
-    const rawConds = Array.isArray(input.conditions) && input.conditions.length ? input.conditions : [{metric: input.metric, op: input.op, value: input.value}]
+    // Rule "tăng theo bậc kết quả" không có điều kiện: bậc nào đạt thì tăng theo bậc đó (xem ladderOf)
+    const isLadder = input.action === 'ladder'
+    const rawConds = isLadder ? [] : Array.isArray(input.conditions) && input.conditions.length ? input.conditions : [{metric: input.metric, op: input.op, value: input.value}]
     if (rawConds.length > MAX_CONDITIONS) e.conditions = `Tối đa ${MAX_CONDITIONS} điều kiện cho mỗi rule`
     const put = (i, field, msg) => { e[`c${i}.${field}`] = msg; if (i === 0) e[field] = msg }
     const conds = rawConds.slice(0, MAX_CONDITIONS).map((c0, i) => {
@@ -374,7 +403,7 @@ export function validateRule(input = {}, ctx = {}) {
         }
     }
 
-    const range = isBlank(input.range) ? 'today' : RANGES.includes(input.range) ? input.range : null
+    const range = isLadder ? 'today' : isBlank(input.range) ? 'today' : RANGES.includes(input.range) ? input.range : null
     if (!range) e.range = 'Khoảng thời gian không hợp lệ'
 
     const hasDataMetric = conds.some((c) => c.metric && c.metric !== 'spend')
@@ -383,7 +412,8 @@ export function validateRule(input = {}, ctx = {}) {
     else if (hasDataMetric && minSpend <= 0) e.minSpend = 'Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu.'
 
     const action = input.action
-    if (!['pause', 'increase', 'decrease', 'notify'].includes(action)) e.action = 'Hành động không hợp lệ'
+    if (!['pause', 'increase', 'decrease', 'notify', 'ladder'].includes(action)) e.action = 'Hành động không hợp lệ'
+    const ladder = isLadder ? ladderOf(input, e) : null
     if (range === 'today' && conds.some((c) => c.vs === 'range' && TOTAL_METRICS.includes(c.metric))) w.push('Số liệu hôm nay mới tính đến giờ hiện tại, còn khoảng so sánh là trung bình cả ngày, nên chi tiêu/số kết quả hôm nay thường thấp hơn vào buổi sáng. Nên so CPA, ROAS hoặc CTR, hoặc dùng khung giờ cuối ngày.')
     if (range === 'today' && hasDataMetric && (action === 'pause' || action === 'decrease')) w.push('Rule đang chỉ dựa trên số liệu hôm nay. Chuyển đổi thường về trễ nên dễ tắt/giảm oan; nên dùng “3 ngày gần nhất” hoặc dài hơn.')
     // Đổi ngân sách theo % (mặc định) hoặc theo số tiền cố định mỗi lần (amount)
@@ -408,10 +438,11 @@ export function validateRule(input = {}, ctx = {}) {
     if (!Number.isFinite(maxBudget) || maxBudget < 0) e.maxBudget = 'Trần ngân sách phải là số không âm'
     if (!Number.isFinite(minBudget) || minBudget < 0) e.minBudget = 'Sàn ngân sách phải là số không âm'
     if (!e.maxBudget && !e.minBudget && maxBudget > 0 && minBudget > 0 && maxBudget < minBudget) e.maxBudget = 'Trần ngân sách phải lớn hơn hoặc bằng sàn'
+    if (isLadder && !e.maxBudget && maxBudget <= 0) e.maxBudget = 'Rule tăng theo bậc cần đặt trần ngân sách (không bị giới hạn % mỗi ngày nên phải có trần)'
     if (action === 'increase' && !e.maxBudget && maxBudget <= 0) w.push('Chưa đặt trần ngân sách: ngân sách có thể tăng mãi qua nhiều ngày. Nên đặt trần.')
     if (action === 'decrease' && !e.minBudget && minBudget <= 0) w.push('Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn.')
 
-    const cooldown = isBlank(input.cooldownHours) ? 0 : num(input.cooldownHours)
+    const cooldown = isLadder ? 0 : isBlank(input.cooldownHours) ? 0 : num(input.cooldownHours) // bậc tự giữ nhịp, không dùng thời gian nghỉ
     if (!Number.isFinite(cooldown) || cooldown < 0 || cooldown > LIMITS.cooldownMax) e.cooldownHours = `Thời gian nghỉ từ 0 đến ${LIMITS.cooldownMax} giờ`
     else if ((action === 'increase' || action === 'decrease') && cooldown < 1) e.cooldownHours = 'Rule đổi ngân sách cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không ngân sách sẽ thay đổi liên tục mỗi lần kiểm tra.'
     else if (action === 'notify' && cooldown < 1) e.cooldownHours = 'Rule chỉ thông báo cần nghỉ ít nhất 1 giờ giữa hai lần, nếu không bạn sẽ nhận thông báo lặp lại mỗi lần kiểm tra.'
@@ -499,11 +530,12 @@ export function validateRule(input = {}, ctx = {}) {
         ...(input.id ? {id: String(input.id)} : {}),
         name: name || 'Rule mới',
         // 3 trường cũ (metric/op/value) = điều kiện đầu tiên, để phần đọc kiểu cũ vẫn chạy
-        metric,
-        op,
+        metric: isLadder ? '' : metric,
+        op: isLadder ? '' : op,
         value: Number.isFinite(value) ? value : 0,
         conditions: conds,
         match,
+        ...(ladder ? ladder : {}),
         range: range || 'today',
         minSpend: Number.isFinite(minSpend) ? minSpend : 0,
         action,
