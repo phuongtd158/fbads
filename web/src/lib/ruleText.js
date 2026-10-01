@@ -21,7 +21,10 @@ function vsText(c) {
   return ''
 }
 // Vế phải của điều kiện: "150.000", "120% mục tiêu" hoặc "130% của 7 ngày gần nhất"
-export const rhs = (c) => (c.vs ? vsText(c) : fmtMetric(c.metric, Number(c.value)))
+export const rhs = (c) => (c.vs ? vsText(c) : fmtMetric(c.metric, Number(c.value)) + tiersText(c))
+// Bậc nâng ngưỡng chi tiêu theo số kết quả: " (từ 2 lead: 200.000; từ 4 lead: 300.000)"
+const TIER_TXT = { leads: 'lead', results: 'kết quả', messages: 'tin nhắn' }
+export const tiersText = (c) => ((c.tiers || []).length ? ` (${c.tiers.map((t) => `từ ${t.count} ${TIER_TXT[c.tierMetric] || c.tierMetric}: ${fmt(t.value)}`).join('; ')})` : '')
 
 export const conditionsOfRule = conditionsOf
 export const matchWord = (m) => (m === 'any' ? 'HOẶC' : 'VÀ')
@@ -30,7 +33,9 @@ export const matchWord = (m) => (m === 'any' ? 'HOẶC' : 'VÀ')
 export function evaluated(c) {
   const actual = c.inf || c.actualInf ? Infinity : c.actual
   const th = c.threshold == null ? (c.vs === 'range' ? 'chưa có số liệu để so' : 'chưa có mục tiêu') : fmtMetric(c.metric, c.threshold)
-  return { actual: fmtMetric(c.metric, actual), op: c.op === '>' ? '>' : '<', threshold: th, target: vsText(c), hit: !!c.hit, unknown: !!c.unknown }
+  // Ngưỡng nâng theo kết quả: ghi số kết quả đã có để biết vì sao dùng ngưỡng này
+  const tier = c.tierMetric ? `đã có ${fmt(c.tierCount || 0)} ${TIER_TXT[c.tierMetric] || c.tierMetric}` : ''
+  return { actual: fmtMetric(c.metric, actual), op: c.op === '>' ? '>' : '<', threshold: th, target: vsText(c) || tier, hit: !!c.hit, unknown: !!c.unknown }
 }
 
 // Câu mô tả đầy đủ một rule (trình soạn hiện ngay khi sửa). Trả về các câu ngắn, câu đầu là "Nếu … thì …".

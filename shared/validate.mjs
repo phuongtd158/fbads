@@ -293,6 +293,34 @@ function condOverlap(a, b) {
     return lo < hi
 }
 
+// Ngưỡng chi tiêu nâng theo số kết quả (chỉ cho điều kiện "Chi tiêu lớn hơn" số cụ thể): vd ngưỡng gốc 150.000,
+// "từ 2 Lead thì 200.000". Ngưỡng dùng = ngưỡng của bậc cao nhất đã đạt (xem spendTierOf). Không có bậc → null.
+export const TIER_METRICS = ['leads', 'results', 'messages']
+export const MAX_TIERS = 3
+function spendTiersOf(c, i, metric, op, value, put) {
+    if (!Array.isArray(c.tiers) || !c.tiers.length) return null
+    if (metric !== 'spend' || op !== '>') { put(i, 'tiers', 'Nâng ngưỡng theo kết quả chỉ dùng cho điều kiện "Chi tiêu lớn hơn"'); return null }
+    const tierMetric = TIER_METRICS.includes(c.tierMetric) ? c.tierMetric : null
+    if (!tierMetric) put(i, 'tiers', 'Chọn loại kết quả để nâng ngưỡng')
+    if (c.tiers.length > MAX_TIERS) put(i, 'tiers', `Tối đa ${MAX_TIERS} bậc`)
+    const tiers = c.tiers.slice(0, MAX_TIERS).map((t0) => ({count: num((t0 || {}).count), value: num((t0 || {}).value)}))
+    let prev = {count: 0, value: Number.isFinite(value) ? value : 0}
+    for (const t of tiers) {
+        if (!Number.isInteger(t.count) || t.count < 1) { put(i, 'tiers', 'Số kết quả của mỗi bậc là số nguyên từ 1 trở lên'); break }
+        if (!Number.isFinite(t.value) || t.value <= 0) { put(i, 'tiers', 'Nhập ngưỡng chi tiêu cho mỗi bậc'); break }
+        if (t.count <= prev.count) { put(i, 'tiers', 'Số kết quả của bậc sau phải lớn hơn bậc trước'); break }
+        if (t.value <= prev.value) { put(i, 'tiers', 'Ngưỡng của bậc sau phải lớn hơn ngưỡng trước đó'); break }
+        prev = t
+    }
+    return {tierMetric: tierMetric || 'leads', tiers: tiers.map((t) => ({count: Number.isFinite(t.count) ? t.count : 0, value: Number.isFinite(t.value) ? t.value : 0}))}
+}
+// Ngưỡng chi tiêu đang áp dụng cho một camp: { value, tier } (tier = bậc đã đạt, null = ngưỡng gốc). count = số kết quả hiện có.
+export function spendTierOf(c, count) {
+    let pick = null
+    for (const t of c.tiers || []) if (count >= t.count && (!pick || t.count > pick.count)) pick = t
+    return pick ? {value: Number(pick.value), tier: pick} : {value: Number(c.value), tier: null}
+}
+
 export function validateRule(input = {}, ctx = {}) {
     const {objs = null, rules = [], accountTargets = null, accounts = null} = ctx
     const e = {}, w = []
@@ -330,7 +358,8 @@ export function validateRule(input = {}, ctx = {}) {
         else if (metric === 'roas' && value > 100) put(i, 'value', 'ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại')
         else if (metric === 'ctr' && value > 100) put(i, 'value', 'CTR là phần trăm, tối đa 100')
         else if (metric === 'frequency' && value > 50) put(i, 'value', 'Tần suất lớn hơn 50 là bất thường, hãy kiểm tra lại')
-        return {metric, op, value: Number.isFinite(value) ? value : 0}
+        const tiers = spendTiersOf(c, i, metric, op, value, put)
+        return {metric, op, value: Number.isFinite(value) ? value : 0, ...(tiers ? tiers : {})}
     })
     const first = conds[0] || {}
     const metric = first.metric, op = first.op, value = first.value
