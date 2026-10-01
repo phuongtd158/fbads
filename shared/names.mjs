@@ -70,7 +70,9 @@ function condText(c) {
   const rhs = c.vs === 'target' ? `${c.factor || 100}% mục tiêu`
     : c.vs === 'range' ? `${c.factor || 100}% ${R[c.compareRange] || ''}`.trim()
       : COST.includes(c.metric) ? money(c.value) : String(c.value ?? '')
-  return `${M[c.metric] || c.metric} ${c.op === '<' ? '<' : '>'} ${rhs}`
+  // Ngưỡng chi tiêu nâng theo số kết quả: "Chi tiêu > 150.000, 2 Lead: 200.000"
+  const tiers = (c.tiers || []).map((t) => `, ${t.count} ${M[c.tierMetric] || c.tierMetric}: ${money(t.value)}`).join('')
+  return `${M[c.metric] || c.metric} ${c.op === '<' ? '<' : '>'} ${rhs}${c.vs ? '' : tiers}`
 }
 // "Tắt camp CPA > 150.000", "Tăng NS nhóm QC ROAS > 2", "Báo khi CPA > 120% mục tiêu"
 export function ruleName(r = {}) {

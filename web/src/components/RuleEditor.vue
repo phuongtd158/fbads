@@ -3,7 +3,7 @@ import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { Check, Eye, Plus, X, Sparkles, CircleOff, TrendingUp, TrendingDown, Bell, ChevronDown } from 'lucide-vue-next'
 import { api } from '../lib/api'
 import { METRICS, METRIC_SHORT, RANGES, RANGE_LABEL } from '../lib/constants'
-import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS, TOTAL_METRICS } from '../lib/validate'
+import { validateRule, MAX_CONDITIONS, TARGET_METRICS, COST_METRICS, TOTAL_METRICS, MAX_TIERS } from '../lib/validate'
 import { describeRule } from '../lib/ruleText'
 import { ruleName } from '../lib/names'
 import { state } from '../stores/app'
@@ -63,20 +63,33 @@ const show = (k) => (submitted.value || touched[k] ? check.value.errors[k] : '')
 
 // ----- Điều kiện -----
 const cErr = (i, field) => (submitted.value || touched[`c${i}`] ? check.value.errors[`c${i}.${field}`] : '')
-const cErrors = (i) => ['metric', 'op', 'value'].map((k) => cErr(i, k)).filter(Boolean)
+const cErrors = (i) => ['metric', 'op', 'value', 'tiers'].map((k) => cErr(i, k)).filter(Boolean)
 const condsError = computed(() => (submitted.value ? check.value.errors.conditions : ''))
 const canTarget = (c) => TARGET_METRICS.includes(c.metric)
 function addCond() {
   if (f.value.conditions.length < MAX_CONDITIONS) f.value.conditions.push({ metric: 'roas', op: '<', vs: '', value: 1.5 })
 }
 const removeCond = (i) => { if (f.value.conditions.length > 1) f.value.conditions.splice(i, 1) }
-function onMetric(c) { if (c.vs === 'target' && !canTarget(c)) { c.vs = ''; delete c.factor } } // chỉ CPA/ROAS/chi tiêu so được với mục tiêu
+function onMetric(c) { if (c.vs === 'target' && !canTarget(c)) { c.vs = ''; delete c.factor } dropTiers(c) } // chỉ CPA/ROAS/chi tiêu so được với mục tiêu
+// Nâng ngưỡng chi tiêu theo số kết quả: chỉ cho "Chi tiêu lớn hơn <số cụ thể>". Vd ngưỡng 150.000, từ 2 lead thì 200.000.
+const canTier = (c) => c.metric === 'spend' && c.op === '>' && !c.vs
+const tierMetrics = [{ value: 'leads', label: 'Lead' }, { value: 'results', label: 'Kết quả' }, { value: 'messages', label: 'Tin nhắn' }]
+const tierUnit = (c) => (tierMetrics.find((m) => m.value === c.tierMetric) || tierMetrics[0]).label.toLowerCase()
+function addTier(c) {
+  const ts = c.tiers || (c.tiers = [])
+  if (!c.tierMetric) c.tierMetric = 'leads'
+  const last = ts[ts.length - 1] || { count: 0, value: Number(c.value) || 0 }
+  if (ts.length < MAX_TIERS) ts.push({ count: last.count + (ts.length ? 1 : 2), value: (Number(last.value) || 0) + 50000 })
+}
+const removeTier = (c, j) => { c.tiers.splice(j, 1); if (!c.tiers.length) { delete c.tiers; delete c.tierMetric } }
+function dropTiers(c) { if (!canTier(c)) { delete c.tiers; delete c.tierMetric } }
 // Khoảng so sánh mặc định: khoảng dài hơn khoảng của rule (hôm nay → 7 ngày), khác khoảng của rule
 const defaultCompare = () => (f.value.range === 'last_7d' ? 'last_3d' : 'last_7d')
 function onMode(c) {
   if (c.vs === 'target') { c.factor = c.factor || 100; delete c.compareRange }
   else if (c.vs === 'range') { c.factor = c.factor || 130; c.compareRange = c.compareRange || defaultCompare() }
   else { c.vs = ''; delete c.factor; delete c.compareRange }
+  dropTiers(c)
 }
 const modesFor = (c) => [
   { value: '', label: 'So với: số cụ thể' },
@@ -161,7 +174,7 @@ const advSummary = computed(() => {
               <span v-if="i > 0" class="join">{{ f.match === 'any' ? 'HOẶC' : 'VÀ' }}</span>
               <div class="cg" :class="{ one: f.conditions.length === 1 }">
                 <select v-model="c.metric" class="input c-met" :aria-label="'Số liệu điều kiện ' + (i + 1)" @change="onMetric(c); touch('c' + i)"><option v-for="(l, k) in METRICS" :key="k" :value="k">{{ l }}</option></select>
-                <select v-model="c.op" class="input c-op" aria-label="Lớn hơn hay nhỏ hơn" @change="touch('c' + i)"><option v-for="o in ops" :key="o.value" :value="o.value">{{ o.label }}</option></select>
+                <select v-model="c.op" class="input c-op" aria-label="Lớn hơn hay nhỏ hơn" @change="dropTiers(c); touch('c' + i)"><option v-for="o in ops" :key="o.value" :value="o.value">{{ o.label }}</option></select>
                 <div v-if="c.vs" class="with c-val"><input v-model="c.factor" type="number" step="any" min="1" max="1000" class="input" :aria-label="c.vs === 'range' ? 'Phần trăm so với khoảng khác' : 'Phần trăm so với mục tiêu'" @input="touch('c' + i)" /><em>%</em></div>
                 <MoneyInput v-else-if="isCost(c)" v-model="c.value" class="c-val" aria-label="Ngưỡng" placeholder="vd 150.000" @input="touch('c' + i)" />
                 <input v-else v-model="c.value" type="number" step="any" min="0" class="input c-val" aria-label="Ngưỡng" @input="touch('c' + i)" />
@@ -171,6 +184,17 @@ const advSummary = computed(() => {
               </div>
               <p v-if="c.vs === 'target'" class="th">Ngưỡng = <b>{{ c.metric === 'roas' ? 'ROAS' : 'CPA' }} mục tiêu</b> của từng tài khoản × {{ c.factor || 100 }}%<template v-if="c.metric === 'spend'"> (vd 200% = đã chi gấp đôi CPA mục tiêu; thêm điều kiện “Số kết quả nhỏ hơn 1” để cắt lỗ camp chưa ra đơn)</template>. Đặt mục tiêu ở <RouterLink to="/settings/targets">Cài đặt → Mục tiêu</RouterLink>.</p>
               <p v-if="c.vs === 'range'" class="th">Ngưỡng = <b>{{ METRIC_SHORT[c.metric] }} của chính {{ unit }} đó</b> trong khoảng so sánh × {{ c.factor || 100 }}%<template v-if="TOTAL_METRICS.includes(c.metric)"> (tính trung bình mỗi ngày, để so được hai khoảng dài ngắn khác nhau)</template>. Vd “CPA hôm nay lớn hơn 130% của 7 ngày gần nhất” = CPA hôm nay cao hơn 30% so với bình thường. {{ unit === 'camp' ? 'Camp' : 'Nhóm QC' }} chưa chi tiêu trong khoảng so sánh thì được bỏ qua.</p>
+              <div v-if="canTier(c) && (c.tiers || []).length" class="tiers">
+                <div class="thd"><span>Nâng ngưỡng khi đã có</span><select v-model="c.tierMetric" class="input" aria-label="Loại kết quả để nâng ngưỡng" @change="touch('c' + i)"><option v-for="m in tierMetrics" :key="m.value" :value="m.value">{{ m.label }}</option></select></div>
+                <div v-for="(t, j) in c.tiers" :key="j" class="trow">
+                  <span>Từ</span><input v-model.number="t.count" type="number" min="1" step="1" class="input tc" :aria-label="'Số ' + tierUnit(c) + ' của bậc ' + (j + 1)" @input="touch('c' + i)" />
+                  <span>{{ tierUnit(c) }} thì ngưỡng là</span><MoneyInput v-model="t.value" class="tv" :aria-label="'Ngưỡng chi tiêu của bậc ' + (j + 1)" placeholder="vd 200.000" @input="touch('c' + i)" />
+                  <button type="button" class="rm" :aria-label="'Bỏ bậc ' + (j + 1)" @click="removeTier(c, j)"><X :size="15" /></button>
+                </div>
+                <button v-if="c.tiers.length < MAX_TIERS" type="button" class="addc" @click="addTier(c)"><Plus :size="14" />Thêm bậc</button>
+                <p class="th">Chưa đạt bậc nào thì dùng ngưỡng {{ Number(c.value || 0).toLocaleString('vi-VN') }}. Đạt nhiều bậc thì dùng bậc cao nhất. Số {{ tierUnit(c) }} tính trong cùng khoảng của rule.</p>
+              </div>
+              <button v-else-if="canTier(c)" type="button" class="addc tadd" @click="addTier(c); touch('c' + i)"><Plus :size="14" />Nâng ngưỡng khi có kết quả</button>
               <p v-for="m in cErrors(i)" :key="m" class="e">{{ m }}</p>
             </div>
             <button v-if="f.conditions.length < MAX_CONDITIONS" type="button" class="addc" @click="addCond"><Plus :size="14" />Thêm điều kiện</button>
@@ -277,6 +301,14 @@ const advSummary = computed(() => {
 .crow .e { margin: 8px 0 0; color: var(--danger); font-size: 13px; line-height: 1.45; }
 .th { margin: 8px 0 0; font-size: 13px; color: var(--text-3); line-height: 1.5; } .th b { color: var(--text-2); }
 .addc { justify-self: start; display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; font-size: 13.5px; padding: 2px; cursor: pointer; }
+.tadd { margin-top: 8px; font-size: 13px; }
+.tiers { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: var(--r-md); border: 1px dashed var(--border-strong); background: var(--surface); }
+.thd, .trow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-2); }
+.thd { font-weight: 600; }
+.tiers .input { padding-top: 7px; padding-bottom: 7px; font-size: 14px; width: auto; }
+.tiers .tc { width: 72px; }
+.tiers .tv { width: 150px; }
+.tiers .th { margin: 0; }
 .msp { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--text-2); }
 .msi { width: 170px; }
 .acts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
