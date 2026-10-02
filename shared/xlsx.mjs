@@ -3,6 +3,7 @@
 // cố định hàng tiêu đề và nút lọc trên tiêu đề. Dùng chung cho giao diện và kiểm thử.
 //
 // sheets: [{ name, cols: [{ width }], rows: [[cell…]], header: true (hàng đầu là tiêu đề), filter: true }]
+// border: true → kẻ viền mảnh mọi ô của bảng (kể cả ô trống)
 // cell: null/'' (trống) | số | chữ | { v, fmt: 'int' | 'dec2' | 'ratio' | 'pct', bold }
 
 const enc = new TextEncoder()
@@ -25,9 +26,9 @@ export const sheetName = (s, i) => String(s || '').replace(/[:\\/?*[\]]/g, ' ').
 function styles() {
   const list = [{}] // kiểu 0: mặc định
   const ids = new Map([['|', 0]])
-  const get = (fmt = '', bold = false, head = false) => {
-    const k = `${fmt}|${bold ? 'b' : ''}${head ? 'h' : ''}`
-    if (!ids.has(k)) { ids.set(k, list.length); list.push({ fmt, bold, head }) }
+  const get = (fmt = '', bold = false, head = false, border = false) => {
+    const k = `${fmt}|${bold ? 'b' : ''}${head ? 'h' : ''}${border ? 'g' : ''}`
+    if (!ids.has(k)) { ids.set(k, list.length); list.push({ fmt, bold, head, border }) }
     return ids.get(k)
   }
   const xml = () => {
@@ -35,9 +36,9 @@ function styles() {
       const numFmtId = s.fmt ? FMT[s.fmt].id : 0
       const fontId = s.bold || s.head ? 1 : 0
       const fillId = s.head ? 2 : 0
-      const borderId = s.head ? 1 : 0
+      const borderId = s.border ? 2 : s.head ? 1 : 0
       return `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}" xfId="0"`
-        + `${numFmtId ? ' applyNumberFormat="1"' : ''}${fontId ? ' applyFont="1"' : ''}${fillId ? ' applyFill="1" applyBorder="1"' : ''}`
+        + `${numFmtId ? ' applyNumberFormat="1"' : ''}${fontId ? ' applyFont="1"' : ''}${fillId ? ' applyFill="1"' : ''}${borderId ? ' applyBorder="1"' : ''}`
         + `${s.head ? '><alignment vertical="center" wrapText="1"/></xf>' : '/>'}`
     })
     const custom = Object.values(FMT).filter((f) => f.code)
@@ -47,8 +48,9 @@ function styles() {
       + '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
       + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
       + '<fill><patternFill patternType="solid"><fgColor rgb="FFE8EEF7"/><bgColor indexed="64"/></patternFill></fill></fills>'
-      + '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'
-      + '<border><left/><right/><top/><bottom style="thin"><color rgb="FFB4C0D3"/></bottom><diagonal/></border></borders>'
+      + '<borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border>'
+      + '<border><left/><right/><top/><bottom style="thin"><color rgb="FFB4C0D3"/></bottom><diagonal/></border>'
+      + `<border>${['left', 'right', 'top', 'bottom'].map((x) => `<${x} style="thin"><color rgb="FFB4C0D3"/></${x}>`).join('')}<diagonal/></border></borders>`
       + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
       + `<cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs>`
       + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
@@ -68,19 +70,22 @@ function sheetXml(sh, st) {
   rows.forEach((row, r) => {
     const head = sh.header && r === 0
     const cells = []
-    row.forEach((cell, c) => {
+    const grid = !!sh.border
+    // có viền: ô trống cuối hàng cũng phải ghi ra để có viền
+    const full = grid && row.length < width ? [...row, ...Array(width - row.length).fill(null)] : row
+    full.forEach((cell, c) => {
       const o = cell != null && typeof cell === 'object' ? cell : { v: cell }
       const v = o.v
       if (v == null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) {
-        if (head) cells.push(`<c r="${colName(c)}${r + 1}" s="${st.get('', false, true)}"/>`)
+        if (head || grid) cells.push(`<c r="${colName(c)}${r + 1}" s="${st.get('', !!o.bold, head, grid)}"/>`)
         return
       }
       const ref = `${colName(c)}${r + 1}`
       if (typeof v === 'number') {
-        const s = st.get(o.fmt || '', !!o.bold, head)
+        const s = st.get(o.fmt || '', !!o.bold, head, grid)
         cells.push(`<c r="${ref}"${s ? ` s="${s}"` : ''}><v>${v}</v></c>`)
       } else {
-        const s = st.get('', !!o.bold, head)
+        const s = st.get('', !!o.bold, head, grid)
         cells.push(`<c r="${ref}"${s ? ` s="${s}"` : ''} t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`)
       }
     })

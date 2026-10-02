@@ -61,12 +61,13 @@ export function overviewSheets({ items, cols, level, showAcc, deliveryLabel, cur
     name: level === 'adset' ? 'Nhóm QC' : 'Chiến dịch',
     header: true,
     filter: true,
+    border: true,
     cols: [...lead.map((c) => ({ width: c.w })), ...cols.map((c) => ({ width: Math.max(12, Math.min(24, c.label.length + 4)) }))],
     // nút lọc của Excel chỉ phủ các dòng dữ liệu, không phủ dòng Tổng
     rows: out,
     filterRows: rows.length + 1,
   }
   const sheets = [main]
-  if (info.length) sheets.push({ name: 'Thông tin', cols: [{ width: 22 }, { width: 60 }], rows: info.map(([k, v]) => [{ v: k, bold: true }, v]) })
+  if (info.length) sheets.push({ name: 'Thông tin', cols: [{ width: 22 }, { width: 60 }], border: true, rows: info.map(([k, v]) => [{ v: k, bold: true }, v]) })
   return sheets
 }

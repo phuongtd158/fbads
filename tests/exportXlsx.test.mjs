@@ -75,7 +75,12 @@ test('bảng tổng quan: tiêu đề, số thật, định dạng theo loại t
   assert.equal(info.name, 'Thông tin')
   // ghi ra file được
   const f = unzip(buildXlsx([sh, info]))
-  assert.match(f['xl/worksheets/sheet1.xml'], /<autoFilter ref="A1:I3"\/>/)
+  const s1 = f['xl/worksheets/sheet1.xml']
+  assert.match(s1, /<autoFilter ref="A1:I3"\/>/)
+  // có viền: ô trống (ROAS dòng 2) vẫn được ghi kèm kiểu có viền
+  assert.match(s1, /<c r="H2" s="\d+"\/>/)
+  assert.match(f['xl/styles.xml'], /<borders count="3">/)
+  assert.match(f['xl/styles.xml'], /borderId="2"/)
   assert.match(f['xl/workbook.xml'], /'Chiến dịch'!\$A\$1:\$I\$3/)
 })
 
