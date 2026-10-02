@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX, ChartLine as LineChart } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX, FileSpreadsheet, ChartLine as LineChart } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO, MAX_COL_W } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
@@ -10,7 +10,7 @@ import { fmt, fmtDec, fmtCompact } from '../lib/format'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
 import { totals, runningBudget } from '../lib/metrics'
-import { isToday } from '../lib/dates'
+import { isToday, resolveRange } from '../lib/dates'
 import { colOf, cellValue, cellText, money } from '../lib/overviewColumns'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
@@ -270,6 +270,34 @@ const chips = computed(() => {
 })
 const clearAll = () => { clearFilters(); q.value = '' }
 
+// ----- Xuất Excel: đúng như bảng đang xem (cấp, bộ lọc, thứ tự, cột, khoảng ngày) nhưng đủ mọi dòng -----
+const exporting = ref(false)
+async function exportXlsx() {
+  if (!visible.value.length) return toast(`Không có ${levelName.value} nào để xuất`)
+  exporting.value = true
+  try {
+    const { overviewSheets, exportFileName, downloadXlsx } = await import('../lib/exportXlsx')
+    const r = resolveRange(ov.spec, todayISO()), now = new Date()
+    const camps = new Map(state.objs.filter((o) => o.level === 'campaign').map((o) => [o.id, o.name]))
+    const sorted = sortKey.value ? `${sortMeta(sortKey.value).label}: ${dirText(sortKey.value, ov.sort.dir)}` : 'Mặc định (như Facebook)'
+    const info = [
+      ['Cấp', ov.level === 'adset' ? 'Nhóm quảng cáo' : 'Chiến dịch'],
+      ['Khoảng ngày', `${rangeInfo.value.title} (${rangeInfo.value.dates})`],
+      ...chips.value.map((c) => [c.k, c.v]),
+      ['Sắp xếp', sorted],
+      ['Số dòng', `${visible.value.length} / ${inLevel.value.length} ${levelName.value}`],
+      ['Xuất lúc', `${now.toLocaleDateString('vi-VN')} ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`],
+      ['Ghi chú', 'Chi tiêu, kết quả, CPA, ROAS… theo khoảng ngày ở trên. Ngân sách và Phân phối là hiện tại.'],
+    ]
+    const sheets = overviewSheets({
+      items: visible.value, cols: cols.value, level: ov.level, showAcc: showAccCol.value, mixed: visMixed.value, total: tot.value, info,
+      deliveryLabel: (o) => deliveryOf(o).label, currencyOf: cur, campaignName: (o) => camps.get(o.campaignId) || '',
+    })
+    downloadXlsx(sheets, exportFileName(ov.level, r.since, r.until))
+    toast(`Đã xuất ${visible.value.length} ${levelName.value} ra file Excel`)
+  } catch (e) { toastError(e) } finally { exporting.value = false }
+}
+
 const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
 // Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
@@ -367,6 +395,9 @@ async function bulk(on) {
         <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" :placeholder="`Tìm ${levelName}${multiAcc ? ' hoặc tài khoản' : ''}…`" aria-label="Tìm kiếm" /><kbd>/</kbd></div>
         <span class="sp" />
         <ColumnsMenu v-model="ov.columns" :has-widths="hasWidths" @reset-widths="resetWidths" />
+        <button type="button" class="acb xb" aria-label="Xuất Excel" :disabled="!state.objsLoaded || exporting" title="Tải bảng đang xem về file Excel (.xlsx): đủ mọi dòng đã lọc, đúng các cột và khoảng ngày" @click="exportXlsx">
+          <FileSpreadsheet :size="16" /><span class="lb">Xuất Excel</span>
+        </button>
         <Popover v-model="actOpen" align="right" width="320px" label="Hành động hàng loạt">
           <template #trigger="{ toggle: tg }">
             <button type="button" class="acb" :class="{ on: actOpen }" :disabled="!state.objsLoaded" aria-haspopup="menu" :aria-expanded="actOpen" @click="tg">
@@ -646,6 +677,7 @@ async function bulk(on) {
   .gbar { position: static; margin: 0 0 14px; padding: 0; background: none; backdrop-filter: none; }
   .search { max-width: none; flex: 1 1 100%; }
   .fbar .sp { display: none; }
+  .xb .lb { display: none; }
   .chips .cnt { margin-left: 0; width: 100%; }
   /* các lựa chọn Chiến dịch/Nhóm QC và Tất cả/Đang chạy/Không chạy trải hết chiều ngang */
   .frow { gap: 8px; }
