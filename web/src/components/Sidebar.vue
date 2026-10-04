@@ -1,20 +1,14 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, TrendingUp, LogOut, Search, BookOpen, Building2 } from 'lucide-vue-next'
+import { TrendingUp, LogOut, Search } from 'lucide-vue-next'
+import { PAGES } from '../lib/nav'
 import { state, logout } from '../stores/app'
 import { palette, toastError } from '../stores/ui'
 
 const route = useRoute()
-const nav = computed(() => [
-  { to: '/', name: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
-  { to: '/schedules', name: 'schedules', label: 'Lịch tự động', icon: CalendarClock, count: state.schedules.length },
-  { to: '/rules', name: 'rules', label: 'Rule hiệu quả', icon: Zap, count: state.rules.length },
-  { to: '/logs', name: 'logs', label: 'Nhật ký', icon: ScrollText },
-  { to: '/company', name: 'company', label: 'Báo cáo công ty', icon: Building2 },
-  { to: '/settings', name: 'settings', label: 'Cài đặt', icon: Settings },
-  { to: '/help', name: 'help', label: 'Hướng dẫn', icon: BookOpen },
-])
+const counts = computed(() => ({ schedules: state.schedules.length, rules: state.rules.length }))
+const nav = computed(() => PAGES.map((p) => ({ ...p, name: p.id, count: counts.value[p.id] })))
 
 // Trạng thái kết nối ở chân sidebar
 const status = computed(() => {
