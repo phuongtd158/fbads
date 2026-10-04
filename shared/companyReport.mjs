@@ -1,0 +1,184 @@
+// Báo cáo lên hệ thống nội bộ của công ty (form "Nhập báo cáo"): luật dùng chung cho server và giao diện.
+// Server: lib/companyReport.js (gom số, lịch các mốc), lib/companyApi.js (gọi API công ty).
+// Mỗi báo cáo = 1 Team công ty × 1 ngày × 1 mốc. Mốc 9h chốt số cả ngày hôm qua; 12h, 17h, 22h là lũy kế hôm nay.
+
+export const SLOTS = [9, 12, 17, 22]
+export const SLOT_LABEL = {9: '9h · chốt hôm qua', 12: '12h', 17: '17h', 22: '22h · cuối ngày'}
+export const MODES = ['preview', 'approve'] // Chỉ xem (không gửi lên công ty) | Duyệt trước (bấm Gửi mới gửi)
+export const MODE_LABEL = {preview: 'Chỉ xem', approve: 'Duyệt trước khi gửi'}
+export const DEFAULT_BASE_URL = 'https://mkt.companyos.site'
+export const MAX_TEAMS = 30
+export const MAX_TEXT = 2000 // ghi chú / vấn đề / hướng xử lý (giới hạn của form công ty)
+export const MAX_NUMBER = 1e14 // giới hạn của form công ty
+
+// 7 số của form, đúng tên trường API công ty. fb = lấy được từ Facebook; còn lại Phuong nhập tay.
+export const METRICS = [
+    {key: 'spend', label: 'Chi tiêu Ads', money: true, fb: true},
+    {key: 'messages', label: 'Tin nhắn', fb: true},
+    {key: 'phones', label: 'Số điện thoại', fb: true},
+    {key: 'orders', label: 'Số đơn hàng', fb: false},
+    {key: 'dso_after', label: 'DSO sau VAT', money: true, fb: false},
+    {key: 'impressions', label: 'Lượt hiển thị', fb: true},
+    {key: 'clicks', label: 'Lượt nhấp', fb: true},
+]
+export const METRIC_KEYS = METRICS.map((m) => m.key)
+export const MANUAL_KEYS = METRICS.filter((m) => !m.fb).map((m) => m.key)
+export const TEXT_KEYS = ['notes', 'issue', 'resolution']
+
+const isBlank = (v) => v === '' || v === null || v === undefined
+const uniq = (a) => [...new Set(a)]
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10)
+
+// Ngày của báo cáo: mốc 9h báo số hôm qua
+export const reportDate = (slot, today) => (Number(slot) === 9 ? addDays(today, -1) : today)
+// Khoảng số liệu Facebook của mốc
+export const rangeOf = (slot) => (Number(slot) === 9 ? 'yesterday' : 'today')
+
+// Từ khoá tên chiến dịch: "CT01, hoạt huyết" → ['ct01', 'hoạt huyết']
+export const matchWords = (s) => uniq(String(s ?? '').split(/[,;\n]+/).map((w) => w.trim().toLowerCase()).filter(Boolean))
+
+// Chiến dịch thuộc một Team: đúng tài khoản QC (nếu có chọn) VÀ tên chứa một trong các từ khoá (nếu có nhập).
+// Team chưa chọn gì thì không có chiến dịch nào (tránh lỡ cộng cả tài khoản vào một Team).
+export function teamCampaigns(team, objs) {
+    const accs = (team && team.accountIds) || [], words = matchWords(team && team.match)
+    if (!accs.length && !words.length) return []
+    return (objs || []).filter((o) => o.level === 'campaign'
+        && (!accs.length || accs.includes(String(o.accountId || '')))
+        && (!words.length || words.some((w) => String(o.name || '').toLowerCase().includes(w))))
+}
+
+// Cộng số Facebook của các chiến dịch → các số của form. Tin nhắn = cuộc trò chuyện bắt đầu, SĐT = khách hàng tiềm năng.
+export function sumMetrics(camps, data) {
+    const t = {spend: 0, messages: 0, phones: 0, impressions: 0, clicks: 0}
+    for (const o of camps) {
+        const m = (data && data[o.id]) || null
+        if (!m) continue
+        t.spend += Number(m.spend) || 0
+        t.messages += Number(m.conversations) || 0
+        t.phones += Number(m.leads) || 0
+        t.impressions += Number(m.impressions) || 0
+        t.clicks += Number(m.clicks) || 0
+    }
+    for (const k of Object.keys(t)) t[k] = Math.round(t[k])
+    return t
+}
+
+// Chiến dịch nằm trong nhiều Team → số bị cộng hai lần. Trả về [{ name, teams: [tên Team] }]
+export function overlaps(teams, objs) {
+    const by = new Map()
+    for (const t of teams || []) for (const o of teamCampaigns(t, objs)) {
+        if (!by.has(o.id)) by.set(o.id, {name: o.name, teams: []})
+        by.get(o.id).teams.push(t.code || t.name || t.id)
+    }
+    return [...by.values()].filter((x) => x.teams.length > 1)
+}
+
+const done = (e, value) => {
+    const keys = Object.keys(e)
+    return {ok: !keys.length, errors: e, first: keys.length ? e[keys[0]] : '', value}
+}
+
+// Cài đặt báo cáo công ty. patch: dữ liệu giao diện gửi lên; current: cài đặt đang lưu (để biết đã có mật khẩu chưa).
+// Mật khẩu để trống = giữ mật khẩu cũ.
+export function validateCompanyConfig(patch = {}, current = {}) {
+    const e = {}, v = {}
+    const has = (k) => Object.prototype.hasOwnProperty.call(patch, k)
+    if (has('enabled')) v.enabled = !!patch.enabled
+    if (has('mode')) { if (MODES.includes(patch.mode)) v.mode = patch.mode; else e.mode = 'Chế độ gửi không hợp lệ' }
+    if (has('slots')) {
+        const s = uniq((Array.isArray(patch.slots) ? patch.slots : []).map(Number))
+        if (s.some((x) => !SLOTS.includes(x))) e.slots = 'Mốc báo cáo không hợp lệ'
+        else v.slots = SLOTS.filter((x) => s.includes(x))
+    }
+    if (has('baseUrl')) {
+        const u = String(patch.baseUrl ?? '').trim().replace(/\/+$/, '') || DEFAULT_BASE_URL
+        let ok = false
+        try { const p = new URL(u); ok = p.protocol === 'https:' && !p.username && !p.password && (p.pathname === '/' || p.pathname === '') } catch { /* sai dạng */ }
+        if (ok) v.baseUrl = u; else e.baseUrl = 'Địa chỉ hệ thống phải là https://tên-miền (không kèm đường dẫn)'
+    }
+    if (has('email')) {
+        const m = String(patch.email ?? '').trim()
+        if (m && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) e.email = 'Email không hợp lệ'; else v.email = m
+    }
+    if (has('password')) {
+        const p = String(patch.password ?? '')
+        if (p.length > 200) e.password = 'Mật khẩu quá dài'; else if (p) v.password = p
+    }
+    if (has('teams')) {
+        const raw = Array.isArray(patch.teams) ? patch.teams : null
+        if (!raw) e.teams = 'Danh sách Team không hợp lệ'
+        else if (raw.length > MAX_TEAMS) e.teams = `Tối đa ${MAX_TEAMS} Team`
+        else {
+            const out = []
+            for (const [i, t] of raw.entries()) {
+                const id = String((t && t.id) ?? '').trim()
+                const label = String((t && (t.code || t.name)) || `Team ${i + 1}`).slice(0, 40)
+                if (!/^[A-Za-z0-9-]{1,64}$/.test(id)) { e.teams = `${label}: hãy chọn Team của hệ thống công ty`; break }
+                if (out.some((x) => x.id === id)) { e.teams = `${label} bị chọn hai lần`; break }
+                const accountIds = uniq((Array.isArray(t.accountIds) ? t.accountIds : []).map((a) => String(a ?? '').trim().replace(/^act_/i, '')).filter(Boolean))
+                if (accountIds.some((a) => !/^[A-Za-z0-9_]{1,40}$/.test(a))) { e.teams = `${label}: tài khoản quảng cáo không hợp lệ`; break }
+                const match = matchWords(t.match).join(', ')
+                if (match.length > 300) { e.teams = `${label}: từ khoá tên chiến dịch quá dài`; break }
+                if (!accountIds.length && !match) { e.teams = `${label}: hãy chọn tài khoản quảng cáo hoặc nhập từ khoá tên chiến dịch`; break }
+                out.push({id, code: String(t.code ?? '').trim().slice(0, 40), name: String(t.name ?? '').trim().slice(0, 120), accountIds, match})
+            }
+            if (!e.teams) v.teams = out
+        }
+    }
+    const eff = {...current, ...v}
+    if (eff.enabled && !e.email && !e.password) {
+        if (!eff.email) e.email = 'Cần email đăng nhập hệ thống công ty'
+        else if (!eff.password && !eff.has_password) e.password = 'Cần mật khẩu đăng nhập hệ thống công ty'
+    }
+    if (eff.enabled && !e.teams && !(eff.teams || []).length) e.teams = 'Thêm ít nhất một Team để bật báo cáo tự động'
+    if (eff.enabled && !e.slots && !(eff.slots || []).length) e.slots = 'Chọn ít nhất một mốc báo cáo'
+    return done(e, v)
+}
+
+// Phần Phuong sửa trên một bản báo cáo: 7 số (trống = chưa nhập) và 3 ô chữ
+export function validateReportPatch(patch = {}) {
+    const e = {}, v = {}
+    const has = (k) => Object.prototype.hasOwnProperty.call(patch, k)
+    const metrics = {}
+    for (const m of METRICS) {
+        const src = patch.metrics && Object.prototype.hasOwnProperty.call(patch.metrics, m.key) ? patch.metrics[m.key] : undefined
+        if (src === undefined) continue
+        if (isBlank(src)) { metrics[m.key] = null; continue }
+        const n = Number(src)
+        if (!Number.isInteger(n) || n < 0 || n > MAX_NUMBER) { e[m.key] = `${m.label} phải là số nguyên không âm`; continue }
+        metrics[m.key] = n
+    }
+    if (Object.keys(metrics).length) v.metrics = metrics
+    for (const k of TEXT_KEYS) if (has(k)) {
+        const s = String(patch[k] ?? '')
+        if (s.length > MAX_TEXT) e[k] = `Tối đa ${MAX_TEXT} ký tự`; else v[k] = s
+    }
+    return done(e, v)
+}
+
+// Các số còn thiếu (chưa nhập) → không được gửi. Gửi 0 cho Đơn/DSO làm hệ thống công ty tính sai CP/DS.
+export const missingMetrics = (r) => METRICS.filter((m) => r && r.metrics && (r.metrics[m.key] === null || r.metrics[m.key] === undefined))
+
+// Body của POST /api/reports
+export function payloadOf(r) {
+    const metrics = {}
+    for (const k of METRIC_KEYS) metrics[k] = Number(r.metrics[k])
+    return {team_id: r.teamId, date: r.date, slot: Number(r.slot), metrics, notes: r.notes || '', issue: r.issue || '', resolution: r.resolution || ''}
+}
+
+// "12 3.500.000" / "12 3500000" / "đơn 12 dso 3,5tr" → { orders, dso_after } hoặc null. Dùng cho trả lời trên Telegram.
+export function parseOrdersDso(text) {
+    const s = String(text ?? '').toLowerCase().replace(/(\d)[.,](?=\d{3}(\D|$))/g, '$1')
+    const nums = []
+    const re = /(\d+(?:[.,]\d+)?)\s*(tr|triệu|m|k|nghìn|ngàn)?/g
+    let m
+    while ((m = re.exec(s))) {
+        let n = Number(m[1].replace(',', '.'))
+        if (m[2] === 'tr' || m[2] === 'triệu' || m[2] === 'm') n *= 1e6
+        else if (m[2]) n *= 1e3
+        nums.push(Math.round(n))
+    }
+    if (nums.length !== 2 || !Number.isInteger(nums[0])) return null
+    if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > MAX_NUMBER)) return null
+    return {orders: nums[0], dso_after: nums[1]}
+}

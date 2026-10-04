@@ -46,7 +46,7 @@ const statusOptions = computed(() => [{ value: 'all', label: 'Tất cả', count
 const sources = computed(() => [{ value: 'all', label: 'Mọi nguồn' }, ...Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))])
 
 // ----- Nội dung 1 dòng: đối tượng là chính, kết quả ở dưới, nguồn/tài khoản là nhãn phụ -----
-const SHORT = { schedule: 'Lịch', rule: 'Rule', manual: 'Thủ công', undo: 'Hoàn tác', system: 'Hệ thống' }
+const SHORT = { schedule: 'Lịch', rule: 'Rule', manual: 'Thủ công', undo: 'Hoàn tác', company: 'Báo cáo công ty', system: 'Hệ thống' }
 const titleOf = (l) => (l.target && l.target.name) || (l.name && l.name !== '-' ? l.name : '') || l.detail || l.source
 const showDetail = (l) => titleOf(l) !== l.detail
 // Nguồn ngắn gọn: "Rule · Tăng" (nhật ký cũ chưa ghi refName thì dùng chữ nguồn gốc, bỏ phần [..] lặp lại kết quả)

@@ -38,7 +38,7 @@ function createApp(shared) {
 
   // ----- API: xem các nhóm route trong lib/routes/ -----
   app.use('/api', mw.apiHeaders, mw.sameOriginJson, mw.jsonBody, mw.requireAuth);
-  for (const group of ['auth', 'settings', 'objects', 'automation', 'facebook']) app.use('/api', require(`./lib/routes/${group}`)(shared));
+  for (const group of ['auth', 'settings', 'objects', 'automation', 'facebook', 'company']) app.use('/api', require(`./lib/routes/${group}`)(shared));
   app.use('/api', mw.notFound);
 
   // ----- File tĩnh của bản build Vue (public/). Đường dẫn lạ → index.html (SPA). -----
