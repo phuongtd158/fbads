@@ -102,9 +102,13 @@ test('tắt "Áp dụng cả nhóm QC đang học" thì nhóm đang học bị b
   assert.equal(d.status, 'skip'); assert.equal(d.code, 'learning')
 })
 
-test('chạy thật: nhật ký ghi bậc, lần sau không tăng lại cùng bậc', async () => {
+test('chạy thật: nhật ký ghi bậc, lần sau không tăng lại cùng bậc', async (t) => {
   S().rules.push({ ...rule(), level: 'campaign', minSpend: 0, maxBudget: 1e9, enabled: true, steps: [{ count: 0.5, mode: 'percent', value: 10 }] })
   // count 0.5: mọi camp có từ 1 kết quả đều đạt bậc 1 (dữ liệu giả)
+  // số giả tăng theo giờ trong ngày (sáng sớm chưa camp nào có kết quả) → cố định 20h cho test không phụ thuộc giờ chạy
+  const realHours = Date.prototype.getHours
+  Date.prototype.getHours = function () { return 20 }
+  t.after(() => { Date.prototype.getHours = realHours })
   await engine.runRules()
   const logs = S().logs.filter((l) => l.refId === 'rl' && !l.skipped)
   assert.ok(logs.length, 'có camp mock được tăng')

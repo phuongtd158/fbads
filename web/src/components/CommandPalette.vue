@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, RefreshCw, Sun, LogOut, Play, Megaphone, KeyRound, CornerDownLeft, BookOpen } from 'lucide-vue-next'
+import { Search, LayoutDashboard, CalendarClock, Zap, ScrollText, Settings, RefreshCw, Sun, LogOut, Play, Megaphone, KeyRound, CornerDownLeft, BookOpen, Building2 } from 'lucide-vue-next'
 import { state, loadObjs, logout } from '../stores/app'
 import { palette, toggleTheme, toast, toastError } from '../stores/ui'
 import { api } from '../lib/api'
@@ -20,6 +20,7 @@ const actions = computed(() => [
   { group: 'Đi tới', title: 'Lịch tự động', icon: CalendarClock, run: go('/schedules') },
   { group: 'Đi tới', title: 'Rule hiệu quả', icon: Zap, run: go('/rules') },
   { group: 'Đi tới', title: 'Nhật ký', icon: ScrollText, run: go('/logs') },
+  { group: 'Đi tới', title: 'Báo cáo công ty', icon: Building2, run: go('/company') },
   { group: 'Đi tới', title: 'Cài đặt', icon: Settings, run: go('/settings') },
   { group: 'Đi tới', title: 'Kết nối Facebook', icon: KeyRound, run: go('/settings/connection') },
   { group: 'Đi tới', title: 'Hướng dẫn sử dụng', icon: BookOpen, run: go('/help') },
