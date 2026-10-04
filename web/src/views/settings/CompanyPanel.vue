@@ -73,6 +73,11 @@ async function test() {
   toast(`Đăng nhập được: ${r.user.name || r.user.email}`)
   if (!f.teams.length && r.teams.length === 1) { addTeam(); pickTeam(f.teams[0], r.teams[0].id) }
 }
+const MODE_TEXT = {
+  preview: 'Chỉ tạo bản báo cáo và nhắn Telegram để bạn so số. Tool không gửi gì lên hệ thống công ty.',
+  approve: 'Tool chỉ gửi khi bạn bấm Gửi (trên Telegram bot sẽ hỏi lại một lần).',
+  auto: 'Đến mốc tool gửi luôn rồi nhắn Telegram. Số trông bất thường (có đơn mà doanh thu bằng 0, Team không khớp chiến dịch, không lấy được số Facebook) thì dừng lại để bạn xem và gửi tay. Hệ thống công ty lỗi thì tự thử lại tối đa 3 lần.',
+}
 const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label }))
 </script>
 
@@ -82,7 +87,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
       <div class="top">
         <div>
           <h3>Báo cáo lên hệ thống công ty</h3>
-          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, hiển thị, nhấp) thành bản báo cáo. Bạn nhập Đơn hàng và DSO sau VAT rồi bấm gửi, trên Telegram hoặc ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
+          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO sau VAT = doanh thu, hiển thị, nhấp) thành bản báo cáo. Đơn và DSO tính theo <b>Loại kết quả</b> ở <RouterLink to="/settings/general">Cài đặt → Chung</RouterLink>. Xem, sửa và gửi trên Telegram hoặc ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
         </div>
         <Switch v-model="f.enabled" label="Bật báo cáo theo mốc" />
       </div>
@@ -113,7 +118,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
 
       <h4 class="sec">Chế độ gửi</h4>
       <Segmented v-model="f.mode" :options="modes" />
-      <p class="muted tiny mode">{{ f.mode === 'preview' ? 'Chỉ tạo bản báo cáo và nhắn Telegram để bạn so số. Tool không gửi gì lên hệ thống công ty.' : 'Tool chỉ gửi khi bạn bấm Gửi (trên Telegram bot sẽ hỏi lại một lần). Trước khi gửi, tool kiểm tra mốc đó đã có báo cáo trên hệ thống công ty chưa, có rồi thì không gửi đè.' }}</p>
+      <p class="muted tiny mode">{{ MODE_TEXT[f.mode] }} Trước khi gửi, tool luôn kiểm tra mốc đó đã có báo cáo trên hệ thống công ty chưa, có rồi thì không gửi đè.</p>
     </section>
 
     <section class="card pad">
@@ -139,7 +144,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
           <input v-model="t.match" class="input" placeholder="Để trống = mọi chiến dịch của tài khoản đã chọn" />
         </Field>
         <p class="pv">
-          <template v-if="preview(t).n">Hôm nay: <b>{{ preview(t).n }}</b> chiến dịch · chi <b class="num">{{ fmt(preview(t).m.spend) }}</b> · {{ fmt(preview(t).m.messages) }} tin nhắn · {{ fmt(preview(t).m.phones) }} SĐT</template>
+          <template v-if="preview(t).n">Hôm nay: <b>{{ preview(t).n }}</b> chiến dịch · chi <b class="num">{{ fmt(preview(t).m.spend) }}</b> · {{ fmt(preview(t).m.messages) }} tin nhắn · {{ fmt(preview(t).m.phones) }} SĐT · {{ fmt(preview(t).m.orders) }} đơn · DSO <b class="num">{{ fmt(preview(t).m.dso_after) }}</b></template>
           <template v-else-if="t.accountIds.length || t.match">Chưa khớp chiến dịch nào.</template>
           <template v-else>Chọn tài khoản hoặc nhập từ khoá.</template>
         </p>

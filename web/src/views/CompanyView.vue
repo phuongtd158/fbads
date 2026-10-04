@@ -1,5 +1,5 @@
 <script setup>
-// Các bản báo cáo lên hệ thống công ty theo mốc: xem số Facebook đã cộng, nhập Đơn hàng / DSO sau VAT, ghi chú, rồi gửi.
+// Các bản báo cáo lên hệ thống công ty theo mốc: xem số Facebook đã cộng (cả Đơn = kết quả, DSO = doanh thu), sửa nếu cần, ghi chú, rồi gửi.
 import { ref, reactive, computed, onMounted } from 'vue'
 import { Send, Save, Trash2, FilePlus2, Building2, Settings, ChevronDown } from 'lucide-vue-next'
 import { state } from '../stores/app'
@@ -32,7 +32,7 @@ async function load() {
 }
 onMounted(load)
 
-const STATUS = { pending: ['Chờ gửi', 'warning'], sent: ['Đã gửi', 'success'], failed: ['Gửi lỗi', 'danger'], exists: ['Công ty đã có', 'info'] }
+const STATUS = { pending: ['Chờ gửi', 'warning'], sent: ['Đã gửi', 'success'], failed: ['Gửi lỗi', 'danger'], exists: ['Công ty đã có', 'info'], review: ['Cần xem', 'warning'], retry: ['Đang thử lại', 'info'] }
 const dateText = (iso) => { const t = new Date(`${iso}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }); return t.charAt(0).toUpperCase() + t.slice(1) }
 // Nhóm theo ngày + mốc, mới nhất trước
 const groups = computed(() => {
@@ -45,7 +45,7 @@ const groups = computed(() => {
   return [...by.values()]
 })
 const label = (r) => [r.teamCode, r.teamName].filter(Boolean).join(' · ') || r.teamId
-const canSend = computed(() => cfg.value && cfg.value.mode === 'approve' && !state.settings.mock)
+const canSend = computed(() => cfg.value && ['approve', 'auto'].includes(cfg.value.mode) && !state.settings.mock)
 const locked = (r) => r.status === 'sent' || r.status === 'exists'
 const missing = (r) => missingMetrics({ metrics: editOf(r).metrics })
 
@@ -92,7 +92,7 @@ async function build() {
 
     <Callout v-if="!cfg.teams.length" tone="info">Chưa có Team nào. Vào <RouterLink to="/settings/company">Cài đặt → Báo cáo công ty</RouterLink> để nhập tài khoản hệ thống công ty và chọn Team.</Callout>
     <Callout v-else-if="!cfg.enabled" tone="info">Báo cáo theo mốc đang tắt: tool không tự tạo báo cáo lúc {{ cfg.slots.map((s) => s + 'h').join(', ') }}. Bạn vẫn tạo tay được bằng nút <b>Tạo báo cáo ngay</b>. <RouterLink to="/settings/company">Bật trong Cài đặt</RouterLink></Callout>
-    <Callout v-if="cfg.mode === 'preview'" tone="info">Chế độ <b>Chỉ xem</b>: tool không gửi gì lên hệ thống công ty. Đổi sang “Duyệt trước khi gửi” ở <RouterLink to="/settings/company">Cài đặt</RouterLink> khi số đã khớp.</Callout>
+    <Callout v-if="cfg.mode === 'preview'" tone="info">Chế độ <b>Chỉ xem</b>: tool không gửi gì lên hệ thống công ty. Đổi sang “Duyệt trước khi gửi” hoặc “Tự động gửi” ở <RouterLink to="/settings/company">Cài đặt</RouterLink> khi số đã khớp.</Callout>
     <Callout v-if="state.settings.mock" tone="warning">Tool đang dùng dữ liệu giả (Dùng thử) nên số chỉ để xem thử và không gửi được lên công ty.</Callout>
 
     <template v-if="groups.length">
@@ -116,7 +116,10 @@ async function build() {
             <label><span>Vấn đề</span><textarea v-model="editOf(r).issue" class="input" rows="2" maxlength="2000" :readonly="locked(r)" /></label>
             <label><span>Hướng xử lý</span><textarea v-model="editOf(r).resolution" class="input" rows="2" maxlength="2000" :readonly="locked(r)" /></label>
           </div>
-          <p v-if="r.error" class="er">{{ r.error }}</p>
+          <ul v-if="r.status === 'review' && r.reasons && r.reasons.length" class="er why"><li v-for="x in r.reasons" :key="x">{{ x }}</li></ul>
+          <p v-if="r.status === 'review'" class="muted tiny">Chưa tự gửi vì số trông bất thường. Kiểm tra, sửa nếu cần rồi bấm Gửi.</p>
+          <p v-if="r.status === 'retry'" class="muted tiny">Hệ thống công ty chưa nhận, tool sẽ tự thử lại lúc {{ new Date(r.nextTryAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }} (lần {{ (r.attempts || 0) + 1 }}/3).</p>
+          <p v-if="r.error && r.status !== 'retry'" class="er">{{ r.error }}</p>
           <p v-if="r.status === 'sent'" class="ok">Đã gửi lúc {{ new Date(r.sentAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) }}{{ r.remoteStatus === 'LATE' ? ' · công ty ghi nhận nộp muộn' : '' }}</p>
           <footer v-if="!locked(r)">
             <Btn size="sm" :icon="Save" :action="() => save(r)">Lưu</Btn>
@@ -156,6 +159,7 @@ header { display: flex; justify-content: space-between; align-items: center; gap
 .txt label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 600; color: var(--text-2); }
 .txt textarea { resize: vertical; min-height: 60px; font: inherit; }
 .er { margin: 0; color: var(--danger); font-size: 13.5px; } .ok { margin: 0; color: var(--success); font-size: 13.5px; }
+.tiny { margin: 0; font-size: 13px; line-height: 1.5; } .why { padding-left: 18px; display: grid; gap: 2px; }
 footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border); }
 .hint { font-size: 13px; } .grow { flex: 1; }
 @media (max-width: 600px) { .nums { grid-template-columns: 1fr 1fr; } .txt { grid-template-columns: 1fr; } .mk select { max-width: 130px; } }

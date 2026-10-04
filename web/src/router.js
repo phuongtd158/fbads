@@ -29,7 +29,7 @@ const routes = [
         path: '/company',
         name: 'company',
         component: () => import('./views/CompanyView.vue'),
-        meta: {title: 'Báo cáo công ty', sub: 'Số Facebook theo Team ở từng mốc, nhập Đơn/DSO rồi gửi lên hệ thống công ty'}
+        meta: {title: 'Báo cáo công ty', sub: 'Số Facebook theo Team ở từng mốc, kiểm tra rồi gửi lên hệ thống công ty'}
     },
     {
         path: '/settings/:tab?',
