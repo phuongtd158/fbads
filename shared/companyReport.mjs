@@ -1,28 +1,30 @@
 // Báo cáo lên hệ thống nội bộ của công ty (form "Nhập báo cáo"): luật dùng chung cho server và giao diện.
 // Server: lib/companyReport.js (gom số, lịch các mốc), lib/companyApi.js (gọi API công ty).
 // Mỗi báo cáo = 1 Team công ty × 1 ngày × 1 mốc. Mốc 9h chốt số cả ngày hôm qua; 12h, 17h, 22h là lũy kế hôm nay.
+// Cả 7 số đều lấy từ Facebook: Đơn hàng = Kết quả, DSO sau VAT = Doanh thu (theo "Loại kết quả" ở Cài đặt → Chung).
 
 export const SLOTS = [9, 12, 17, 22]
 export const SLOT_LABEL = {9: '9h · chốt hôm qua', 12: '12h', 17: '17h', 22: '22h · cuối ngày'}
-export const MODES = ['preview', 'approve'] // Chỉ xem (không gửi lên công ty) | Duyệt trước (bấm Gửi mới gửi)
-export const MODE_LABEL = {preview: 'Chỉ xem', approve: 'Duyệt trước khi gửi'}
+// Chỉ xem (không gửi lên công ty) | Duyệt trước (bấm Gửi mới gửi) | Tự động gửi đến mốc (số bất thường thì dừng cho người xem)
+export const MODES = ['preview', 'approve', 'auto']
+export const MODE_LABEL = {preview: 'Chỉ xem', approve: 'Duyệt trước khi gửi', auto: 'Tự động gửi'}
+export const canSendMode = (mode) => mode === 'approve' || mode === 'auto'
 export const DEFAULT_BASE_URL = 'https://mkt.companyos.site'
 export const MAX_TEAMS = 30
 export const MAX_TEXT = 2000 // ghi chú / vấn đề / hướng xử lý (giới hạn của form công ty)
 export const MAX_NUMBER = 1e14 // giới hạn của form công ty
 
-// 7 số của form, đúng tên trường API công ty. fb = lấy được từ Facebook; còn lại Phuong nhập tay.
+// 7 số của form, đúng tên trường API công ty, đều lấy từ Facebook (sửa tay được trước khi gửi)
 export const METRICS = [
     {key: 'spend', label: 'Chi tiêu Ads', money: true, fb: true},
     {key: 'messages', label: 'Tin nhắn', fb: true},
     {key: 'phones', label: 'Số điện thoại', fb: true},
-    {key: 'orders', label: 'Số đơn hàng', fb: false},
-    {key: 'dso_after', label: 'DSO sau VAT', money: true, fb: false},
+    {key: 'orders', label: 'Số đơn hàng', fb: true},
+    {key: 'dso_after', label: 'DSO sau VAT', money: true, fb: true},
     {key: 'impressions', label: 'Lượt hiển thị', fb: true},
     {key: 'clicks', label: 'Lượt nhấp', fb: true},
 ]
 export const METRIC_KEYS = METRICS.map((m) => m.key)
-export const MANUAL_KEYS = METRICS.filter((m) => !m.fb).map((m) => m.key)
 export const TEXT_KEYS = ['notes', 'issue', 'resolution']
 
 const isBlank = (v) => v === '' || v === null || v === undefined
@@ -47,15 +49,18 @@ export function teamCampaigns(team, objs) {
         && (!words.length || words.some((w) => String(o.name || '').toLowerCase().includes(w))))
 }
 
-// Cộng số Facebook của các chiến dịch → các số của form. Tin nhắn = cuộc trò chuyện bắt đầu, SĐT = khách hàng tiềm năng.
+// Cộng số Facebook của các chiến dịch → các số của form. Tin nhắn = cuộc trò chuyện bắt đầu, SĐT = khách hàng tiềm năng,
+// Đơn hàng = kết quả, DSO sau VAT = doanh thu (giá trị chuyển đổi của loại kết quả đã chọn).
 export function sumMetrics(camps, data) {
-    const t = {spend: 0, messages: 0, phones: 0, impressions: 0, clicks: 0}
+    const t = {spend: 0, messages: 0, phones: 0, orders: 0, dso_after: 0, impressions: 0, clicks: 0}
     for (const o of camps) {
         const m = (data && data[o.id]) || null
         if (!m) continue
         t.spend += Number(m.spend) || 0
         t.messages += Number(m.conversations) || 0
         t.phones += Number(m.leads) || 0
+        t.orders += Number(m.results) || 0
+        t.dso_after += Number(m.revenue) || 0
         t.impressions += Number(m.impressions) || 0
         t.clicks += Number(m.clicks) || 0
     }
@@ -158,6 +163,16 @@ export function validateReportPatch(patch = {}) {
 
 // Các số còn thiếu (chưa nhập) → không được gửi. Gửi 0 cho Đơn/DSO làm hệ thống công ty tính sai CP/DS.
 export const missingMetrics = (r) => METRICS.filter((m) => r && r.metrics && (r.metrics[m.key] === null || r.metrics[m.key] === undefined))
+
+// Lý do KHÔNG tự gửi (chế độ Tự động gửi): số trông bất thường → để người dùng xem rồi gửi tay. Mảng rỗng = gửi được.
+export function anomalies(r) {
+    const out = []
+    const miss = missingMetrics(r)
+    if (miss.length) out.push(`Còn thiếu ${miss.map((m) => m.label).join(', ')}`)
+    if (!r.campaigns || !r.campaigns.length) out.push('Team không khớp chiến dịch nào (kiểm tra cấu hình Team)')
+    if (r.metrics && Number(r.metrics.orders) > 0 && !(Number(r.metrics.dso_after) > 0)) out.push('Có đơn nhưng doanh thu bằng 0 (tài khoản chưa báo giá trị đơn về Facebook)')
+    return out
+}
 
 // Body của POST /api/reports
 export function payloadOf(r) {

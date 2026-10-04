@@ -82,10 +82,21 @@ test('chiến dịch thuộc Team: theo tài khoản và/hoặc từ khoá tên;
   assert.deepEqual(S.overlaps([{ code: 'X', accountIds: ['A'] }, { code: 'Y', match: 'ct01' }], objs), [{ name: 'CT01 Hoạt huyết - Mess', teams: ['X', 'Y'] }])
 })
 
-test('cộng số: tin nhắn = cuộc trò chuyện, SĐT = khách hàng tiềm năng, làm tròn', () => {
+test('cộng số: tin nhắn = cuộc trò chuyện, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO = doanh thu, làm tròn', () => {
   const camps = [{ id: '1' }, { id: '2' }, { id: '3' }]
-  const data = { 1: { spend: 100.4, conversations: 3, leads: 2, impressions: 1000, clicks: 10 }, 2: { spend: 200.4, conversations: 1, leads: 0, impressions: 500, clicks: 5 } }
-  assert.deepEqual(S.sumMetrics(camps, data), { spend: 301, messages: 4, phones: 2, impressions: 1500, clicks: 15 })
+  const data = { 1: { spend: 100.4, conversations: 3, leads: 2, results: 2, revenue: 500000.4, impressions: 1000, clicks: 10 }, 2: { spend: 200.4, conversations: 1, leads: 0, results: 1, revenue: 250000, impressions: 500, clicks: 5 } }
+  assert.deepEqual(S.sumMetrics(camps, data), { spend: 301, messages: 4, phones: 2, orders: 3, dso_after: 750000, impressions: 1500, clicks: 15 })
+})
+
+test('số bất thường (không tự gửi): thiếu số, Team không khớp chiến dịch, có đơn mà doanh thu = 0', () => {
+  const metrics = { spend: 1, messages: 2, phones: 3, orders: 4, dso_after: 5, impressions: 6, clicks: 7 }
+  assert.deepEqual(S.anomalies({ metrics, campaigns: ['a'] }), [])
+  assert.deepEqual(S.anomalies({ metrics: { ...metrics, orders: 0, dso_after: 0 }, campaigns: ['a'] }), [])
+  assert.match(S.anomalies({ metrics: { ...metrics, dso_after: 0 }, campaigns: ['a'] })[0], /doanh thu bằng 0/)
+  assert.match(S.anomalies({ metrics, campaigns: [] })[0], /không khớp chiến dịch/)
+  assert.match(S.anomalies({ metrics: { ...metrics, clicks: null }, campaigns: ['a'] })[0], /Còn thiếu Lượt nhấp/)
+  assert.equal(S.canSendMode('auto'), true)
+  assert.equal(S.canSendMode('preview'), false)
 })
 
 test('kiểm tra cài đặt: mật khẩu trống giữ mật khẩu cũ, bật phải có tài khoản + Team, Team phải có phạm vi', () => {
@@ -131,13 +142,13 @@ test('đến mốc: tạo báo cáo 1 lần cho mỗi Team, mốc 9h ghi ngày h
   assert.equal(r.date, '2026-10-03')
   assert.equal(r.slot, 9)
   assert.equal(r.status, 'pending')
-  assert.equal(r.metrics.orders, null)
+  assert.equal(typeof r.metrics.orders, 'number', 'Đơn lấy từ kết quả Facebook')
   assert.ok(r.campaigns.length > 0 && r.campaigns.length <= 4, 'chỉ các camp của tài khoản mẫu A')
   assert.ok(r.metrics.spend > 0)
   const msgs = tgSent.filter((x) => x.method === 'sendMessage')
   assert.equal(msgs.length, 1)
   assert.match(msgs[0].body.text, /Báo cáo công ty · 9h ngày 03\/10/)
-  assert.match(msgs[0].body.text, /Đơn hàng: <i>chưa nhập<\/i>/)
+  assert.match(msgs[0].body.text, /Đơn hàng: <b>/)
   assert.deepEqual(msgs[0].body.reply_markup.inline_keyboard[0].map((b) => b.callback_data), [`ce:${r.id}`, `cs:${r.id}`])
   assert.equal(co.calls.length, 0, 'tạo báo cáo không gọi hệ thống công ty')
 })
@@ -163,12 +174,16 @@ test('chế độ Chỉ xem: báo Telegram không có nút, và không gửi đ�
   assert.equal(co.calls.length, 0)
 })
 
-test('làm mới mốc: giữ Đơn/DSO và ghi chú đã nhập, không đụng bản đã gửi', async () => {
+test('làm mới mốc: giữ số đã sửa tay và ghi chú, số chưa sửa lấy lại từ Facebook', async () => {
   const [r] = await company.createDrafts(12, '2026-10-04', { silent: true })
   await company.update(r.id, { metrics: { orders: 5, dso_after: 1000000 }, notes: 'ok' })
+  assert.deepEqual(r.edited.sort(), ['dso_after', 'orders'])
+  r.metrics.spend = -1
   const [again] = await company.createDrafts(12, '2026-10-04', { silent: true })
   assert.equal(again.id, r.id)
   assert.equal(again.metrics.orders, 5)
+  assert.equal(again.metrics.dso_after, 1000000)
+  assert.ok(again.metrics.spend > 0, 'số chưa sửa được làm mới')
   assert.equal(again.notes, 'ok')
   assert.equal(store.get().companyReports.length, 1)
 })
@@ -212,6 +227,7 @@ test('thiếu Đơn/DSO hoặc đang dùng dữ liệu giả thì không gửi',
   const [r] = await company.createDrafts(17, '2026-10-04', { silent: true })
   await assert.rejects(company.send(r.id), /dữ liệu giả/)
   store.get().settings.mock = false
+  await company.update(r.id, { metrics: { orders: '', dso_after: '' } })
   await assert.rejects(company.send(r.id), /Còn thiếu: Số đơn hàng, DSO sau VAT/)
   assert.equal(co.calls.length, 0)
 })
@@ -246,6 +262,7 @@ const lastText = () => tgSent.filter((x) => x.method === 'sendMessage' || x.meth
 
 test('Telegram: Nhập Đơn/DSO → nhắn 2 số → Gửi → hỏi lại → Có thì mới gửi', async () => {
   const [r] = await company.createDrafts(17, '2026-10-04', { silent: true })
+  await company.update(r.id, { metrics: { orders: '' } })
   store.get().settings.mock = false
   await bot.handleUpdate(press(`cs:${r.id}`))
   assert.match(lastText(), /Còn thiếu/)
@@ -268,6 +285,145 @@ test('Telegram: Nhập Đơn/DSO → nhắn 2 số → Gửi → hỏi lại →
 test('Telegram: người lạ nhắn số không sửa được báo cáo', async () => {
   const [r] = await company.createDrafts(17, '2026-10-04', { silent: true })
   await bot.handleUpdate(press(`ce:${r.id}`))
+  const before = r.metrics.orders
   await bot.handleUpdate(say('12 3500000', 999))
-  assert.equal(r.metrics.orders, null)
+  assert.equal(r.metrics.orders, before)
+  assert.notEqual(r.metrics.dso_after, 3500000)
+})
+
+/* -------------------------------------------------------------- Tự động gửi */
+// Số Facebook cố định (không phụ thuộc giờ chạy test, không gọi Facebook thật)
+let realFb
+function stubFb(m = { spend: 1520000, conversations: 15, leads: 12, results: 7, revenue: 2660000, impressions: 13680000, clicks: 1689 }, { fail } = {}) {
+  realFb ||= { listObjects: fb.listObjects, rangeMetrics: fb.rangeMetrics }
+  fb.listObjects = async () => { if (fail) throw new Error('Token Facebook đã hết hạn'); return [{ id: 'c1', level: 'campaign', accountId: 'mock_a', name: 'CT01 Hoạt huyết' }, { id: 'c2', level: 'campaign', accountId: 'mock_b', name: 'Khác' }] }
+  fb.rangeMetrics = async () => ({ c1: m, c2: { spend: 999, conversations: 9, leads: 9, results: 9, revenue: 9, impressions: 9, clicks: 9 } })
+}
+function autoMode() {
+  stubFb()
+  store.get().company.mode = 'auto'
+  store.get().settings.mock = false
+}
+const unstub = () => { if (realFb) Object.assign(fb, realFb) }
+const posts = () => co.calls.filter((c) => c.method === 'POST' && c.path === '/reports')
+const tgTexts = () => tgSent.filter((x) => x.method === 'sendMessage').map((x) => x.body.text)
+
+test('Tự động gửi: đến mốc gửi luôn đủ 7 số (Đơn = kết quả, DSO = doanh thu), báo Telegram, ghi Nhật ký, chỉ 1 lần', async (t) => {
+  t.after(unstub)
+  autoMode()
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 + 1 })
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 + 2 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'sent')
+  assert.equal(posts().length, 1)
+  assert.deepEqual(posts()[0].body.metrics, { spend: 1520000, messages: 15, phones: 12, orders: 7, dso_after: 2660000, impressions: 13680000, clicks: 1689 })
+  assert.equal(posts()[0].body.slot, 17)
+  const texts = tgTexts()
+  assert.equal(texts.length, 1)
+  assert.match(texts[0], /✅ <b>Báo cáo công ty · 17h ngày 04\/10/)
+  assert.match(texts[0], /Đã tự gửi lên công ty/)
+  assert.equal(store.get().logs[0].source, 'Báo cáo công ty (tự động)')
+  assert.equal(store.get().logs[0].ok, true)
+})
+
+test('Tự động gửi: có đơn mà doanh thu = 0 thì không gửi, chuyển "cần xem" kèm nút gửi tay', async (t) => {
+  t.after(unstub)
+  autoMode()
+  stubFb({ spend: 100000, conversations: 2, leads: 1, results: 3, revenue: 0, impressions: 1000, clicks: 10 })
+  await company.tick({ date: '2026-10-04', minutes: 12 * 60 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'review')
+  assert.match(r.reasons[0], /doanh thu bằng 0/)
+  assert.equal(posts().length, 0)
+  assert.equal(co.calls.length, 0, 'không gọi hệ thống công ty')
+  const msg = tgSent.find((x) => x.method === 'sendMessage')
+  assert.match(msg.body.text, /Chưa tự gửi vì số trông bất thường/)
+  assert.deepEqual(msg.body.reply_markup.inline_keyboard[0].map((b) => b.callback_data), [`ce:${r.id}`, `cs:${r.id}`])
+  // Người dùng sửa DSO rồi gửi tay (Telegram có hỏi lại)
+  await company.update(r.id, { metrics: { dso_after: 900000 } })
+  await bot.handleUpdate(press(`cs:${r.id}`))
+  await bot.handleUpdate(press(`ycs:${r.id}`))
+  assert.equal(r.status, 'sent')
+  assert.equal(posts()[0].body.metrics.dso_after, 900000)
+})
+
+test('Tự động gửi: Team không khớp chiến dịch nào thì không gửi', async (t) => {
+  t.after(unstub)
+  autoMode()
+  store.get().company.teams = [{ ...TEAM, accountIds: ['khong_co'] }]
+  await company.tick({ date: '2026-10-04', minutes: 22 * 60 })
+  assert.equal(store.get().companyReports[0].status, 'review')
+  assert.equal(co.calls.length, 0)
+})
+
+test('Tự động gửi: không lấy được số Facebook thì báo Telegram, không tạo/gửi gì', async (t) => {
+  t.after(unstub)
+  autoMode()
+  stubFb(undefined, { fail: true })
+  await company.tick({ date: '2026-10-04', minutes: 9 * 60 })
+  assert.equal(store.get().companyReports.length, 0)
+  assert.equal(co.calls.length, 0)
+  assert.match(tgTexts()[0], /không lấy được số Facebook/)
+})
+
+test('Tự động gửi: hệ thống công ty lỗi 5xx thì thử lại sau 10 phút, tối đa 3 lần rồi báo lỗi kèm nút', async (t) => {
+  t.after(unstub)
+  autoMode()
+  const realFetch = globalThis.fetch
+  t.after(() => { globalThis.fetch = realFetch })
+  globalThis.fetch = async (url, init = {}) => {
+    if (new URL(String(url)).pathname === '/api/reports' && init.method === 'POST') { co.calls.push({ method: 'POST', path: '/reports' }); return json({ error: 'Lỗi máy chủ' }, 503) }
+    return realFetch(url, init)
+  }
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'retry')
+  assert.equal(r.attempts, 1)
+  assert.equal(tgTexts().length, 0, 'lần đầu lỗi chưa làm phiền')
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 + 1 }) // chưa đến giờ thử lại
+  assert.equal(posts().length, 1)
+  for (const n of [2, 3]) {
+    r.nextTryAt = new Date(Date.now() - 1000).toISOString()
+    await company.tick({ date: '2026-10-04', minutes: 17 * 60 + 10 * n })
+    assert.equal(r.attempts, n)
+  }
+  assert.equal(r.status, 'failed')
+  assert.equal(posts().length, 3)
+  const texts = tgTexts()
+  assert.equal(texts.length, 1)
+  assert.match(texts[0], /Không tự gửi được \(đã thử 3 lần\)/)
+  await company.tick({ date: '2026-10-04', minutes: 18 * 60 })
+  assert.equal(posts().length, 3, 'thất bại rồi thì không thử nữa')
+})
+
+test('Tự động gửi: sai mật khẩu thì báo ngay, không thử lại', async (t) => {
+  t.after(unstub)
+  autoMode()
+  store.get().company.password = 'sai'
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'failed')
+  assert.equal(r.attempts, 1)
+  assert.equal(co.logins, 1)
+  assert.match(tgTexts()[0], /Không tự gửi được: .*từ chối đăng nhập/)
+})
+
+test('Tự động gửi: mốc đã có báo cáo trên công ty thì không gửi đè', async (t) => {
+  t.after(unstub)
+  autoMode()
+  co.reports.push({ id: 'old', team_id: 'team-1', date: '2026-10-04', slot: 17, user_id: 'u1', status: 'SUBMITTED' })
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 })
+  assert.equal(store.get().companyReports[0].status, 'exists')
+  assert.equal(posts().length, 0)
+  assert.match(tgTexts()[0], /không gửi đè/)
+})
+
+test('Tự động gửi: đang Dùng thử (dữ liệu giả) thì không gửi, chỉ báo', async (t) => {
+  t.after(unstub)
+  autoMode()
+  store.get().settings.mock = true
+  await company.tick({ date: '2026-10-04', minutes: 17 * 60 })
+  assert.equal(store.get().companyReports[0].status, 'pending')
+  assert.equal(co.calls.length, 0)
+  assert.match(tgTexts()[0], /dữ liệu giả/)
 })
