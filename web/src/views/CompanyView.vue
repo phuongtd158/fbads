@@ -1,12 +1,12 @@
 <script setup>
 // Các bản báo cáo lên hệ thống công ty theo mốc: xem số Facebook đã cộng (cả Đơn = kết quả, DSO = doanh thu), sửa nếu cần, ghi chú, rồi gửi.
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Send, Save, Trash2, FilePlus2, Building2, Settings, ChevronDown } from 'lucide-vue-next'
+import { Send, Save, Trash2, FilePlus2, Building2, Settings, ChevronDown, RefreshCw, Lock } from 'lucide-vue-next'
 import { state } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { METRICS, SLOTS, missingMetrics, validateReportPatch } from '../lib/companyReport'
+import { METRICS, SLOTS, missingMetrics, validateReportPatch, validateReason, diffRemote } from '../lib/companyReport'
 import Btn from '../components/Btn.vue'
 import Badge from '../components/Badge.vue'
 import Callout from '../components/Callout.vue'
@@ -30,7 +30,19 @@ async function load() {
   for (const k of Object.keys(edits)) delete edits[k]
   for (const x of r.reports) editOf(x)
 }
-onMounted(load)
+// Lấy trạng thái từ công ty (đã nộp / nộp muộn, lần sửa, đã khoá) rồi tải lại. Lỗi mạng thì chỉ hiện số đang có.
+const syncing = ref(false)
+async function sync(quiet = true) {
+  if (!cfg.value || !cfg.value.enabled || state.settings.mock) return
+  syncing.value = true
+  try {
+    const r = await api('company/sync', 'POST')
+    list.value = r.reports
+    for (const x of r.reports) { delete edits[x.id]; editOf(x) }
+    if (!quiet) toast('Đã lấy trạng thái từ công ty')
+  } catch (e) { if (!quiet) throw e } finally { syncing.value = false }
+}
+onMounted(async () => { await load(); sync() })
 
 const STATUS = { pending: ['Chờ gửi', 'warning'], sent: ['Đã gửi', 'success'], failed: ['Gửi lỗi', 'danger'], exists: ['Công ty đã có', 'info'], review: ['Cần xem', 'warning'], retry: ['Đang thử lại', 'info'] }
 const dateText = (iso) => { const t = new Date(`${iso}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }); return t.charAt(0).toUpperCase() + t.slice(1) }
@@ -46,7 +58,14 @@ const groups = computed(() => {
 })
 const label = (r) => [r.teamCode, r.teamName].filter(Boolean).join(' · ') || r.teamId
 const canSend = computed(() => cfg.value && ['approve', 'auto'].includes(cfg.value.mode) && !state.settings.mock)
-const locked = (r) => r.status === 'sent' || r.status === 'exists'
+const onCompany = (r) => r.status === 'sent' || r.status === 'exists'
+const remoteLocked = (r) => !!(r.remote && r.remote.locked)
+// Báo cáo đã có trên công ty: sửa được (rồi bấm Cập nhật) khi chưa khoá và đang ở chế độ gửi được
+const updatable = (r) => onCompany(r) && r.remote && r.remote.id && !r.remote.locked && canSend.value
+const locked = (r) => onCompany(r) && !updatable(r)
+const changed = (r) => (updatable(r) ? diffRemote({ ...editOf(r), remote: r.remote }) : [])
+const REMOTE_STATUS = { SUBMITTED: 'Đã nộp', LATE: 'Nộp muộn', LOCKED: 'Đã khoá' }
+const reasons = reactive({})
 const missing = (r) => missingMetrics({ metrics: editOf(r).metrics })
 
 async function save(r, quiet = false) {
@@ -62,10 +81,21 @@ async function send(r) {
   await save(r, true)
   const miss = missing(r)
   if (miss.length) { toast(`Còn thiếu: ${miss.map((m) => m.label).join(', ')}`, 'error'); return }
-  if (!await confirm('Gửi lên hệ thống công ty?', `Báo cáo ${label(r)} · ${r.slot}h ngày ${r.date.slice(8)}/${r.date.slice(5, 7)}: chi ${fmt(r.metrics.spend)}, ${fmt(r.metrics.orders)} đơn, DSO ${fmt(r.metrics.dso_after)}. Gửi xong không sửa ở tool được nữa.`, { ok: 'Gửi báo cáo' })) return
+  if (!await confirm('Gửi lên hệ thống công ty?', `Báo cáo ${label(r)} · ${r.slot}h ngày ${r.date.slice(8)}/${r.date.slice(5, 7)}: chi ${fmt(r.metrics.spend)}, ${fmt(r.metrics.orders)} đơn, DSO ${fmt(r.metrics.dso_after)}. Gửi xong muốn sửa thì dùng nút Cập nhật (cần nhập lý do).`, { ok: 'Gửi báo cáo' })) return
   try {
     Object.assign(r, await api(`company/reports/${r.id}/send`, 'POST'))
     toast('Đã gửi báo cáo lên công ty')
+  } finally { await load() }
+}
+async function update(r) {
+  const bad = validateReason(reasons[r.id])
+  if (bad) { toast(bad, 'error'); return }
+  await save(r, true)
+  if (!await confirm('Cập nhật lên hệ thống công ty?', `Báo cáo ${label(r)} · ${r.slot}h sẽ được thay bằng số trên tool (lần sửa ${(r.remote.revision || 0) + 1}), công ty tính lại KPI. Lý do: ${reasons[r.id].trim()}`, { ok: 'Cập nhật' })) return
+  try {
+    Object.assign(r, await api(`company/reports/${r.id}/update`, 'POST', { reason: reasons[r.id] }))
+    reasons[r.id] = ''
+    toast('Đã cập nhật báo cáo lên công ty')
   } finally { await load() }
 }
 async function remove(r) {
@@ -86,6 +116,7 @@ async function build() {
     <Teleport to="#page-actions" defer>
       <div v-if="cfg.teams.length" class="mk">
         <select v-model.number="slot" class="input" aria-label="Mốc báo cáo"><option v-for="s in SLOTS" :key="s" :value="s">Mốc {{ s }}h</option></select>
+        <Btn v-if="cfg.enabled && !state.settings.mock" :icon="RefreshCw" :loading="syncing" aria-label="Lấy trạng thái từ công ty" title="Lấy trạng thái từ công ty" :action="() => sync(false)" />
         <Btn variant="primary" :icon="FilePlus2" :action="build">Tạo báo cáo ngay</Btn>
       </div>
     </Teleport>
@@ -108,6 +139,7 @@ async function build() {
               <span>{{ m.label }}<i v-if="m.fb" class="fbt">FB</i></span>
               <b v-if="locked(r)" class="num">{{ fmt(r.metrics[m.key]) }}</b>
               <MoneyInput v-else v-model="editOf(r).metrics[m.key]" :placeholder="m.fb ? '0' : 'Nhập…'" :aria-label="m.label" />
+              <small v-if="r.remote && changed(r).includes(m.key)" class="was">Công ty: {{ fmt(r.remote.metrics[m.key]) }}</small>
             </label>
           </div>
           <button v-if="!locked(r) || r.notes || r.issue || r.resolution" type="button" class="more" :aria-expanded="!!open[r.id]" @click="open[r.id] = !open[r.id]"><ChevronDown :size="15" :class="{ rot: open[r.id] }" />Ghi chú, vấn đề, hướng xử lý</button>
@@ -120,8 +152,17 @@ async function build() {
           <p v-if="r.status === 'review'" class="muted tiny">Chưa tự gửi vì số trông bất thường. Kiểm tra, sửa nếu cần rồi bấm Gửi.</p>
           <p v-if="r.status === 'retry'" class="muted tiny">Hệ thống công ty chưa nhận, tool sẽ tự thử lại lúc {{ new Date(r.nextTryAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) }} (lần {{ (r.attempts || 0) + 1 }}/3).</p>
           <p v-if="r.error && r.status !== 'retry'" class="er">{{ r.error }}</p>
+          <p v-if="r.remote" class="rm faint">
+            <span>Trên công ty: <b>{{ REMOTE_STATUS[r.remote.status] || r.remote.status || 'đã có' }}</b></span>
+            <span v-if="r.remote.revision">lần sửa {{ r.remote.revision }}</span>
+            <span v-if="r.remote.locked" class="lk"><Lock :size="13" /> Đã khoá, muốn sửa hãy gửi yêu cầu chỉnh sửa trên web công ty</span>
+          </p>
           <p v-if="r.status === 'sent'" class="ok">Đã gửi lúc {{ new Date(r.sentAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) }}{{ r.remoteStatus === 'LATE' ? ' · công ty ghi nhận nộp muộn' : '' }}</p>
-          <footer v-if="!locked(r)">
+          <footer v-if="updatable(r)" class="upd">
+            <input v-model="reasons[r.id]" class="input" maxlength="500" placeholder="Lý do cập nhật (bắt buộc)" aria-label="Lý do cập nhật" />
+            <Btn size="sm" variant="primary" :icon="RefreshCw" :disabled="!changed(r).length" :title="changed(r).length ? '' : 'Số trên tool giống số đã nộp'" :action="() => update(r)">Cập nhật lên công ty</Btn>
+          </footer>
+          <footer v-else-if="!onCompany(r)">
             <Btn size="sm" :icon="Save" :action="() => save(r)">Lưu</Btn>
             <Btn v-if="canSend" size="sm" variant="primary" :icon="Send" :action="() => send(r)">Gửi lên công ty</Btn>
             <span v-if="missing(r).length" class="faint hint">Còn thiếu {{ missing(r).map((m) => m.label).join(', ') }}</span>
@@ -137,6 +178,9 @@ async function build() {
 </template>
 
 <style scoped>
+.was { display: block; margin-top: 3px; font-size: 12px; color: var(--warning); font-weight: 600; }
+.rm { margin: 0; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 12px; } .rm .lk { display: inline-flex; align-items: center; gap: 4px; }
+.upd { display: flex; gap: 8px; flex-wrap: wrap; } .upd .input { flex: 1; min-width: 200px; }
 .mk { display: flex; gap: 8px; align-items: center; } .mk select { width: auto; }
 .co { margin-bottom: 12px; }
 .grp { margin-bottom: 22px; }

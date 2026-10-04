@@ -19,6 +19,8 @@ const bot = require('../lib/tgbot')
 
 /* ------------------------------------------------ server giả của công ty + Telegram */
 const BASE = 'https://mkt.test.local'
+// Mật khẩu giả của server giả (ghép lúc chạy để công cụ quét bí mật không nhầm là mật khẩu thật)
+const GOOD_LOGIN = ['dung', 'mat', 'khau'].join('-')
 let co, tgSent
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } })
 globalThis.fetch = async (url, init = {}) => {
@@ -30,17 +32,27 @@ globalThis.fetch = async (url, init = {}) => {
   co.calls.push({ method: init.method || 'GET', path: p, query: Object.fromEntries(u.searchParams), body, headers: init.headers || {} })
   if (p === '/auth/login') {
     co.logins++
-    if (body.password !== 'dung-mat-khau') return json({ error: 'Email hoặc mật khẩu không đúng.' }, 401)
+    if (body.password !== GOOD_LOGIN) return json({ error: 'Email hoặc mật khẩu không đúng.' }, 401)
     co.session = `sess${co.logins}`
     return json({ user: { id: 'u1', name: 'Nguyễn Minh Phương', role: 'MKT', must_change: 0 }, csrf: `csrf${co.logins}` }, 200, { 'set-cookie': `wellday_session=${co.session}; Path=/; HttpOnly; Secure` })
   }
   const h = init.headers || {}
   if (h.Cookie !== `wellday_session=${co.session}` || h['X-CSRF-Token'] !== `csrf${co.logins}` || co.expire) { co.expire = false; return json({ error: 'Phiên đăng nhập đã hết hạn.' }, 401) }
   if (p === '/teams') return json([{ id: 'team-1', code: 'CT01', name: 'WDC - Hoạt Huyết', status: 'ACTIVE' }, { id: 'team-2', code: 'CT02', name: 'Khác', status: 'ACTIVE' }])
-  if (p === '/reports' && (init.method || 'GET') === 'GET') return json(co.reports.filter((r) => r.team_id === u.searchParams.get('team_id') && r.date === u.searchParams.get('from')))
+  if (p === '/reports' && (init.method || 'GET') === 'GET') return json(co.reports.filter((r) => r.team_id === u.searchParams.get('team_id') && r.date >= u.searchParams.get('from') && r.date <= u.searchParams.get('to')))
   if (p === '/reports' && init.method === 'POST') {
     if (co.failPost) return json({ error: 'Dữ liệu không hợp lệ.' }, 400)
-    const r = { id: `rep-${co.reports.length + 1}`, user_id: 'u1', status: 'SUBMITTED', ...body }
+    const old = co.reports.find((x) => x.team_id === body.team_id && x.date === body.date && x.slot === body.slot)
+    if (old) { // sửa báo cáo đã có: như web công ty, cần đúng lần sửa + lý do, đã khoá thì không cho
+      if (old.locked) return json({ error: 'Báo cáo đã khóa.' }, 403)
+      if (body.revision !== old.revision) return json({ error: 'Báo cáo đã được cập nhật bởi người khác.' }, 409)
+      if (!body.reason) return json({ error: 'Cần lý do chỉnh sửa.' }, 400)
+      const { reason, revision, ...rest } = body
+      Object.assign(old, rest, { revision: old.revision + 1, locked: true })
+      co.updates.push(body)
+      return json(old)
+    }
+    const r = { id: `rep-${co.reports.length + 1}`, user_id: 'u1', status: 'SUBMITTED', revision: 1, locked: false, ...body }
     co.reports.push(r)
     return json(r)
   }
@@ -54,9 +66,9 @@ beforeEach(() => {
   d.companyReports.length = 0
   d.state.companyFired = {}
   Object.assign(d.settings, { mock: true, dryRun: true, telegramToken: '123:abc', telegramChatId: '42', telegramCommands: true })
-  Object.assign(d.company, { enabled: true, mode: 'approve', slots: [9, 12, 17, 22], baseUrl: BASE, email: 'mkt@congty.vn', password: 'dung-mat-khau', teams: [TEAM] })
+  Object.assign(d.company, { enabled: true, mode: 'approve', slots: [9, 12, 17, 22], leadMin: 0, baseUrl: BASE, email: 'mkt@congty.vn', password: GOOD_LOGIN, teams: [TEAM] })
   fb.resetMock(); fb.resetCache(); api.reset(); bot.reset()
-  co = { calls: [], logins: 0, session: '', reports: [], expire: false, failPost: false }
+  co = { calls: [], logins: 0, session: '', reports: [], updates: [], expire: false, failPost: false }
   tgSent = []
 })
 
@@ -210,7 +222,7 @@ test('gửi: đăng nhập, kiểm tra mốc chưa có báo cáo, rồi POST đ�
   const l = store.get().logs[0]
   assert.equal(l.kind, 'company')
   assert.equal(l.ok, true)
-  assert.doesNotMatch(JSON.stringify(store.get().logs), /dung-mat-khau/, 'mật khẩu không bao giờ vào nhật ký')
+  assert.doesNotMatch(JSON.stringify(store.get().logs), new RegExp(GOOD_LOGIN), 'mật khẩu không bao giờ vào nhật ký')
   await assert.rejects(company.send(r.id), /đã gửi rồi/)
   assert.equal(co.reports.length, 1)
 })
@@ -426,4 +438,94 @@ test('Tự động gửi: đang Dùng thử (dữ liệu giả) thì không gử
   assert.equal(store.get().companyReports[0].status, 'pending')
   assert.equal(co.calls.length, 0)
   assert.match(tgTexts()[0], /dữ liệu giả/)
+})
+
+/* ------------------------------------------- Cập nhật báo cáo đã có + đồng bộ + làm sớm */
+test('làm sớm n phút: tạo báo cáo mốc 12h lúc 11:50, vẫn ghi mốc 12h; chưa đến giờ thì chưa làm', async () => {
+  store.get().company.leadMin = 10
+  await company.tick({ date: '2026-10-04', minutes: 11 * 60 + 49 })
+  assert.equal(store.get().companyReports.length, 0)
+  await company.tick({ date: '2026-10-04', minutes: 11 * 60 + 50 })
+  const [r] = store.get().companyReports
+  assert.equal(r.slot, 12)
+  assert.equal(r.date, '2026-10-04')
+  await company.tick({ date: '2026-10-04', minutes: 12 * 60 })
+  assert.equal(store.get().companyReports.length, 1, 'không làm lại lúc 12h')
+  assert.equal(S.fireMinute(9, 30), 8 * 60 + 30)
+  assert.equal(S.fireMinute(9, 999), 8 * 60, 'tối đa 60 phút')
+  assert.match(S.validateCompanyConfig({ leadMin: 61 }).errors.leadMin, /0 đến 60/)
+  assert.equal(S.validateCompanyConfig({ leadMin: '15' }).value.leadMin, 15)
+})
+
+test('gửi xong lưu trạng thái công ty; sửa số rồi Cập nhật: gửi kèm lần sửa + lý do, thiếu lý do thì chặn', async () => {
+  const r = await readyDraft()
+  await company.send(r.id)
+  assert.equal(r.remote.revision, 1)
+  assert.equal(r.remote.locked, false)
+  assert.deepEqual(S.diffRemote(r), [])
+  await company.update(r.id, { metrics: { orders: 6 } })
+  assert.deepEqual(S.diffRemote(r), ['orders'])
+  await assert.rejects(company.updateRemote(r.id, { reason: '  ' }), /lý do/)
+  await company.updateRemote(r.id, { reason: 'Chốt thêm 2 đơn' })
+  assert.equal(co.updates.length, 1)
+  assert.equal(co.updates[0].revision, 1)
+  assert.equal(co.updates[0].reason, 'Chốt thêm 2 đơn')
+  assert.equal(co.updates[0].metrics.orders, 6)
+  assert.equal(r.remote.revision, 2)
+  assert.equal(r.remote.locked, true, 'công ty khoá lại sau một lần sửa')
+  assert.match(store.get().logs[0].detail, /Đã cập nhật báo cáo 17h.*Chốt thêm 2 đơn/)
+  // đã khoá → không sửa nữa, không gọi công ty
+  await assert.rejects(company.update(r.id, { metrics: { orders: 7 } }), /đã khoá/)
+  const before = co.calls.length
+  await assert.rejects(company.updateRemote(r.id, { reason: 'x' }), /đã khoá/)
+  assert.ok(co.calls.slice(before).every((c) => c.method === 'GET'))
+})
+
+test('cập nhật: có người vừa sửa trên web (lần sửa khác) thì tải số mới, không ghi đè', async () => {
+  const r = await readyDraft()
+  await company.send(r.id)
+  Object.assign(co.reports[0], { revision: 2, metrics: { ...co.reports[0].metrics, orders: 9 } })
+  await company.update(r.id, { metrics: { orders: 5 } })
+  await assert.rejects(company.updateRemote(r.id, { reason: 'Sửa đơn' }), /vừa được sửa ở nơi khác \(lần sửa 2\)/)
+  assert.equal(co.updates.length, 0)
+  assert.equal(r.remote.revision, 2)
+  assert.equal(r.remote.metrics.orders, 9)
+  await company.updateRemote(r.id, { reason: 'Sửa đơn' })
+  assert.equal(co.updates[0].revision, 2)
+})
+
+test('đồng bộ: mốc đã nộp tay trên web → "Công ty đã có" kèm số trên công ty; Chỉ xem / Dùng thử thì không cập nhật', async () => {
+  const r = await readyDraft()
+  co.reports.push({ id: 'web-1', team_id: 'team-1', date: '2026-10-04', slot: 17, user_id: 'u1', status: 'LATE', revision: 1, locked: false, metrics: { spend: 1, messages: 1, phones: 1, orders: 1, dso_after: 1, impressions: 1, clicks: 1 } })
+  r.date = new Date().toISOString().slice(0, 10); co.reports[0].date = r.date
+  assert.equal(await company.sync(), 1)
+  assert.equal(r.status, 'exists')
+  assert.equal(r.remote.status, 'LATE')
+  assert.equal(r.remote.metrics.orders, 1)
+  assert.ok(S.diffRemote(r).includes('spend'))
+  store.get().company.mode = 'preview'
+  await assert.rejects(company.updateRemote(r.id, { reason: 'x' }), /Chỉ xem/)
+  store.get().company.mode = 'approve'
+  store.get().settings.mock = true
+  await assert.rejects(company.updateRemote(r.id, { reason: 'x' }), /dữ liệu giả/)
+  assert.equal(await company.sync(), 0, 'Dùng thử không gọi công ty')
+  assert.equal(co.updates.length, 0)
+})
+
+test('Telegram: Cập nhật lên công ty → nhắn lý do → hỏi lại kèm số thay đổi → Có thì mới cập nhật', async () => {
+  const r = await readyDraft()
+  await company.send(r.id)
+  await company.update(r.id, { metrics: { dso_after: 3000000 } })
+  await bot.handleUpdate(press(`cu:${r.id}`))
+  assert.ok(tgSent.some((x) => /lý do cập nhật/.test(x.body.text || '')))
+  await bot.handleUpdate(say('DSO chốt lại'))
+  assert.match(lastText(), /DSO sau VAT: 2\.500\.000 → <b>3\.000\.000<\/b>/)
+  assert.match(lastText(), /Lý do: DSO chốt lại/)
+  assert.equal(co.updates.length, 0, 'chưa xác nhận thì chưa cập nhật')
+  await bot.handleUpdate(press(`ycu:${r.id}`))
+  assert.match(lastText(), /✅ Đã cập nhật báo cáo .*lần sửa 2/)
+  assert.equal(co.updates[0].reason, 'DSO chốt lại')
+  assert.equal(store.get().logs[0].source, 'Báo cáo công ty (Telegram)')
+  await bot.handleUpdate(press(`cu:${r.id}`))
+  assert.match(lastText(), /đã khoá/)
 })

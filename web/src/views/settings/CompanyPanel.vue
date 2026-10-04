@@ -16,7 +16,7 @@ import Segmented from '../../components/Segmented.vue'
 
 const loaded = ref(false)
 const cfg = ref({})
-const f = reactive({ enabled: false, mode: 'approve', slots: [], email: '', password: '', baseUrl: DEFAULT_BASE_URL, teams: [] })
+const f = reactive({ enabled: false, mode: 'approve', slots: [], leadMin: 0, email: '', password: '', baseUrl: DEFAULT_BASE_URL, teams: [] })
 const remoteTeams = ref(null) // Team của hệ thống công ty (sau khi Kiểm tra kết nối)
 const me = ref(null)
 const errors = ref({})
@@ -25,7 +25,7 @@ onMounted(async () => {
   ensureObjs()
   const r = await api('company')
   cfg.value = r.config
-  Object.assign(f, { enabled: r.config.enabled, mode: r.config.mode, slots: [...r.config.slots], email: r.config.email, password: '', baseUrl: r.config.baseUrl, teams: r.config.teams.map((t) => ({ ...t, accountIds: [...t.accountIds] })) })
+  Object.assign(f, { enabled: r.config.enabled, mode: r.config.mode, slots: [...r.config.slots], leadMin: r.config.leadMin || 0, email: r.config.email, password: '', baseUrl: r.config.baseUrl, teams: r.config.teams.map((t) => ({ ...t, accountIds: [...t.accountIds] })) })
   loaded.value = true
 })
 
@@ -48,7 +48,7 @@ function pickTeam(row, id) {
 const addTeam = () => f.teams.push({ id: '', code: '', name: '', accountIds: accounts.value.length === 1 ? [accounts.value[0].id] : [], match: '' })
 const toggle = (arr, v) => { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) }
 
-const body = () => ({ enabled: f.enabled, mode: f.mode, slots: f.slots, email: f.email.trim(), password: f.password, baseUrl: f.baseUrl.trim(), teams: f.teams })
+const body = () => ({ enabled: f.enabled, mode: f.mode, slots: f.slots, leadMin: f.leadMin, email: f.email.trim(), password: f.password, baseUrl: f.baseUrl.trim(), teams: f.teams })
 
 async function save(silent = false) {
   const v = validateCompanyConfig(body(), { ...cfg.value })
@@ -78,6 +78,12 @@ const MODE_TEXT = {
   approve: 'Tool chỉ gửi khi bạn bấm Gửi (trên Telegram bot sẽ hỏi lại một lần).',
   auto: 'Đến mốc tool gửi luôn rồi nhắn Telegram. Số trông bất thường (có đơn mà doanh thu bằng 0, Team không khớp chiến dịch, không lấy được số Facebook) thì dừng lại để bạn xem và gửi tay. Hệ thống công ty lỗi thì tự thử lại tối đa 3 lần.',
 }
+const leadHint = computed(() => {
+  const n = Number(f.leadMin) || 0
+  if (!n) return 'Để 0 thì tool làm báo cáo đúng giờ mốc.'
+  const at = (f.slots.length ? f.slots : SLOTS).map((s) => { const m = s * 60 - n; return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}` })
+  return `Tool lấy số và ${f.mode === 'auto' ? 'gửi' : 'nhắn Telegram'} lúc ${at.join(', ')}. Báo cáo vẫn ghi đúng mốc.`
+})
 const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label }))
 </script>
 
@@ -115,6 +121,9 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
       </div>
       <p v-if="errors.slots" class="err">{{ errors.slots }}</p>
       <p class="muted tiny">Mốc 9h gửi số cả ngày hôm qua; 12h, 17h, 22h là số lũy kế hôm nay. Facebook cập nhật số chậm khoảng 15–30 phút.</p>
+      <Field label="Làm báo cáo trước mốc (phút)" :error="errors.leadMin" class="lead" :hint="leadHint">
+        <input v-model.number="f.leadMin" class="input" type="number" min="0" max="60" step="5" inputmode="numeric" />
+      </Field>
 
       <h4 class="sec">Chế độ gửi</h4>
       <Segmented v-model="f.mode" :options="modes" />
@@ -168,6 +177,7 @@ h3 { font-size: 18px; letter-spacing: -.02em; } .sub { margin: 4px 0 18px; font-
 .adv { margin: 0 0 14px; font-size: 14px; } .adv summary { cursor: pointer; color: var(--text-2); font-weight: 600; margin-bottom: 8px; }
 .btns { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .ok { display: flex; align-items: center; gap: 6px; color: var(--success); font-size: 14px; margin: 0; }
+.lead { margin-top: 16px; max-width: 360px; }
 .tiny { font-size: 13px; margin: 10px 0 0; line-height: 1.55; } .mode { margin-top: 10px; }
 .slots, .accs { display: flex; gap: 8px; flex-wrap: wrap; }
 .slot, .acc { border: 1px solid var(--border-strong); background: var(--surface); padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13.5px; color: var(--text-2); transition: .15s var(--ease); }
