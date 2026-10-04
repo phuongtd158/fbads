@@ -13,6 +13,11 @@ export const DEFAULT_BASE_URL = 'https://mkt.companyos.site'
 export const MAX_TEAMS = 30
 export const MAX_TEXT = 2000 // ghi chú / vấn đề / hướng xử lý (giới hạn của form công ty)
 export const MAX_NUMBER = 1e14 // giới hạn của form công ty
+export const MAX_LEAD_MIN = 60 // làm báo cáo sớm hơn mốc tối đa 60 phút
+export const MAX_REASON = 500
+
+// Phút trong ngày tool làm báo cáo của mốc: đúng giờ mốc trừ đi số phút làm sớm (Cài đặt → Báo cáo công ty)
+export const fireMinute = (slot, leadMin = 0) => Number(slot) * 60 - Math.max(0, Math.min(MAX_LEAD_MIN, Number(leadMin) || 0))
 
 // 7 số của form, đúng tên trường API công ty, đều lấy từ Facebook (sửa tay được trước khi gửi)
 export const METRICS = [
@@ -94,6 +99,11 @@ export function validateCompanyConfig(patch = {}, current = {}) {
         const s = uniq((Array.isArray(patch.slots) ? patch.slots : []).map(Number))
         if (s.some((x) => !SLOTS.includes(x))) e.slots = 'Mốc báo cáo không hợp lệ'
         else v.slots = SLOTS.filter((x) => s.includes(x))
+    }
+    if (has('leadMin')) {
+        const n = Number(patch.leadMin === '' || patch.leadMin == null ? 0 : patch.leadMin)
+        if (!Number.isInteger(n) || n < 0 || n > MAX_LEAD_MIN) e.leadMin = `Số phút làm sớm phải từ 0 đến ${MAX_LEAD_MIN}`
+        else v.leadMin = n
     }
     if (has('baseUrl')) {
         const u = String(patch.baseUrl ?? '').trim().replace(/\/+$/, '') || DEFAULT_BASE_URL
@@ -179,6 +189,39 @@ export function payloadOf(r) {
     const metrics = {}
     for (const k of METRIC_KEYS) metrics[k] = Number(r.metrics[k])
     return {team_id: r.teamId, date: r.date, slot: Number(r.slot), metrics, notes: r.notes || '', issue: r.issue || '', resolution: r.resolution || ''}
+}
+
+// Body cập nhật báo cáo đã có trên công ty: như gửi mới, kèm lần sửa hiện tại và lý do (giống nút "Lưu & tính lại KPI" của web công ty)
+export function updatePayloadOf(r, revision, reason) {
+    return {...payloadOf(r), revision, reason: String(reason || '').trim()}
+}
+
+export function validateReason(reason) {
+    const s = String(reason ?? '').trim()
+    if (!s) return 'Nhập lý do cập nhật (công ty bắt buộc)'
+    if (s.length > MAX_REASON) return `Lý do tối đa ${MAX_REASON} ký tự`
+    return ''
+}
+
+// Báo cáo trên hệ thống công ty → phần tool lưu để hiển thị / so sánh
+export function remoteOf(x, fallbackMetrics) {
+    if (!x) return null
+    const metrics = {}
+    const src = x.metrics || fallbackMetrics || {}
+    for (const k of METRIC_KEYS) metrics[k] = src[k] == null ? null : Number(src[k])
+    return {
+        id: String(x.id || ''), status: String(x.status || ''), revision: x.revision == null ? null : Number(x.revision),
+        locked: !!x.locked, metrics, notes: x.notes || '', issue: x.issue || '', resolution: x.resolution || '',
+        updatedAt: x.updated_at || '', syncedAt: new Date().toISOString(),
+    }
+}
+
+// Số trên tool khác số đã nộp lên công ty → danh sách các ô khác (để hiện và bật nút Cập nhật)
+export function diffRemote(r) {
+    if (!r || !r.remote) return []
+    const out = METRICS.filter((m) => r.metrics[m.key] != null && Number(r.metrics[m.key]) !== Number(r.remote.metrics[m.key])).map((m) => m.key)
+    for (const k of TEXT_KEYS) if ((r[k] || '') !== (r.remote[k] || '')) out.push(k)
+    return out
 }
 
 // "12 3.500.000" / "12 3500000" / "đơn 12 dso 3,5tr" → { orders, dso_after } hoặc null. Dùng cho trả lời trên Telegram.
