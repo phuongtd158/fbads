@@ -36,11 +36,12 @@ const isBlank = (v) => v === '' || v === null || v === undefined
 const uniq = (a) => [...new Set(a)]
 const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10)
 
-// Ngày của báo cáo = ngày nộp (như web công ty, kể cả mốc 9h). Mốc 9h báo số chốt cả ngày hôm qua (xem dataDate)
-export const reportDate = (slot, today) => today
-// Số liệu của báo cáo thuộc ngày nào: mốc 9h chốt cả ngày hôm qua (so với ngày báo cáo), các mốc khác là luỹ kế của chính ngày đó
-export const dataDate = (slot, date) => (Number(slot) === 9 ? addDays(date, -1) : date)
-export const DATE_RULE = 2 // bản báo cáo tạo theo cách tính ngày mới (9h ghi ngày nộp). Bản cũ chưa gửi của mốc 9h bị bỏ.
+// Ngày của báo cáo: mốc 9h chốt số cả ngày hôm qua và PHẢI ghi ngày hôm qua (công ty từ chối ngày nộp:
+// "Báo cáo 9h dùng để chốt số liệu của ngày hôm qua"). Các mốc khác ghi hôm nay.
+export const reportDate = (slot, today) => (Number(slot) === 9 ? addDays(today, -1) : today)
+// Báo cáo của ngày `date` được nộp vào ngày nào: mốc 9h nộp sáng hôm sau
+export const submitDate = (slot, date) => (Number(slot) === 9 ? addDays(date, 1) : date)
+export const DATE_RULE = 3 // 2 = bản tạo bởi bản lỗi (9h ghi ngày nộp, công ty từ chối) → bỏ khi mở dữ liệu nếu chưa gửi
 // Khoảng số liệu Facebook của mốc
 export const rangeOf = (slot) => (Number(slot) === 9 ? 'yesterday' : 'today')
 

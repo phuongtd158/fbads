@@ -73,10 +73,10 @@ beforeEach(() => {
 })
 
 /* ------------------------------------------------------------ luật dùng chung */
-test('mốc 9h ghi ngày nộp (như web công ty) nhưng là số chốt cả ngày hôm qua; các mốc khác báo hôm nay', () => {
-  assert.equal(S.reportDate(9, '2026-10-01'), '2026-10-01')
-  assert.equal(S.dataDate(9, '2026-10-01'), '2026-09-30')
-  assert.equal(S.dataDate(17, '2026-10-01'), '2026-10-01')
+test('mốc 9h ghi ngày hôm qua (công ty bắt buộc, từ chối ngày nộp), các mốc khác báo hôm nay', () => {
+  assert.equal(S.reportDate(9, '2026-10-01'), '2026-09-30')
+  assert.equal(S.submitDate(9, '2026-09-30'), '2026-10-01')
+  assert.equal(S.submitDate(17, '2026-10-01'), '2026-10-01')
   assert.equal(S.reportDate(17, '2026-10-01'), '2026-10-01')
   assert.equal(S.rangeOf(9), 'yesterday')
   assert.equal(S.rangeOf(22), 'today')
@@ -153,7 +153,7 @@ test('đến mốc: tạo báo cáo 1 lần cho mỗi Team, mốc 9h ghi ngày h
   const list = store.get().companyReports
   assert.equal(list.length, 1)
   const r = list[0]
-  assert.equal(r.date, '2026-10-04', 'mốc 9h ghi ngày nộp')
+  assert.equal(r.date, '2026-10-03', 'mốc 9h ghi ngày hôm qua')
   assert.equal(r.dateRule, S.DATE_RULE)
   assert.equal(r.slot, 9)
   assert.equal(r.status, 'pending')
@@ -162,7 +162,7 @@ test('đến mốc: tạo báo cáo 1 lần cho mỗi Team, mốc 9h ghi ngày h
   assert.ok(r.metrics.spend > 0)
   const msgs = tgSent.filter((x) => x.method === 'sendMessage')
   assert.equal(msgs.length, 1)
-  assert.match(msgs[0].body.text, /Báo cáo công ty · 9h ngày 04\/10<\/b> · số chốt ngày 03\/10/)
+  assert.match(msgs[0].body.text, /Báo cáo công ty · 9h ngày 03\/10<\/b> · nộp sáng 04\/10/)
   assert.match(msgs[0].body.text, /Đơn hàng: <b>/)
   assert.deepEqual(msgs[0].body.reply_markup.inline_keyboard[0].map((b) => b.callback_data), [`ce:${r.id}`, `cs:${r.id}`])
   assert.equal(co.calls.length, 0, 'tạo báo cáo không gọi hệ thống công ty')
@@ -531,4 +531,13 @@ test('Telegram: Cập nhật lên công ty → nhắn lý do → hỏi lại kè
   assert.equal(store.get().logs[0].source, 'Báo cáo công ty (Telegram)')
   await bot.handleUpdate(press(`cu:${r.id}`))
   assert.match(lastText(), /đã khoá/)
+})
+
+test('Tự động gửi mốc 9h: gửi lên công ty với ngày hôm qua (không bao giờ ghi ngày nộp)', async (t) => {
+  t.after(unstub)
+  autoMode()
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 })
+  assert.equal(posts().length, 1)
+  assert.equal(posts()[0].body.date, '2026-10-04')
+  assert.equal(posts()[0].body.slot, 9)
 })
