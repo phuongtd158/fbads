@@ -254,3 +254,16 @@ test('dữ liệu cũ chỉ có 1 tài khoản quảng cáo → tự chuyển sa
   assert.deepEqual(st.get().settings.adAccountIds, ['9876543'])
   assert.equal(st.get().settings.adAccountId, '9876543')
 })
+
+test('báo cáo công ty mốc 9h tạo theo cách tính ngày cũ (ghi nhầm ngày hôm qua) mà chưa gửi thì bị bỏ khi mở dữ liệu', () => {
+  const dir = newDir()
+  const companyReports = [
+    { id: 'a', slot: 9, date: '2026-10-04', status: 'exists' },
+    { id: 'b', slot: 9, date: '2026-10-04', status: 'sent' },
+    { id: 'c', slot: 17, date: '2026-10-04', status: 'pending' },
+    { id: 'd', slot: 9, date: '2026-10-05', status: 'pending', dateRule: 2 },
+  ]
+  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: {}, rules: [], schedules: [], logs: [], state: {}, companyReports }))
+  const st = create({ dir, env: {} })
+  assert.deepEqual(st.get().companyReports.map((r) => r.id), ['b', 'c', 'd'])
+})

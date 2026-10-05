@@ -6,7 +6,7 @@ import { state } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { METRICS, SLOTS, missingMetrics, validateReportPatch, validateReason, diffRemote } from '../lib/companyReport'
+import { METRICS, SLOTS, dataDate, missingMetrics, validateReportPatch, validateReason, diffRemote } from '../lib/companyReport'
 import Btn from '../components/Btn.vue'
 import Badge from '../components/Badge.vue'
 import Callout from '../components/Callout.vue'
@@ -128,7 +128,7 @@ async function build() {
 
     <template v-if="groups.length">
       <section v-for="g in groups" :key="g.key" class="grp">
-        <h3><span class="num">{{ g.slot }}h</span> <span class="muted">{{ dateText(g.date) }}{{ g.slot === 9 ? ' · chốt cả ngày' : ' · lũy kế đến ' + g.slot + 'h' }}</span></h3>
+        <h3><span class="num">{{ g.slot }}h</span> <span class="muted">{{ dateText(g.date) }}{{ g.slot === 9 ? ' · số chốt cả ngày ' + dataDate(9, g.date).slice(8) + '/' + dataDate(9, g.date).slice(5, 7) : ' · lũy kế đến ' + g.slot + 'h' }}</span></h3>
         <article v-for="r in g.items" :key="r.id" class="card rp" :class="r.status">
           <header>
             <div class="tt"><Building2 :size="17" /><b>{{ label(r) }}</b><span class="faint" :title="(r.campaigns || []).join('\n')">{{ (r.campaigns || []).length }} chiến dịch</span></div>
