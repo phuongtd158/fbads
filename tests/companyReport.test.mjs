@@ -73,11 +73,15 @@ beforeEach(() => {
 })
 
 /* ------------------------------------------------------------ luật dùng chung */
-test('mốc 9h ghi ngày nộp (như web công ty) nhưng là số chốt cả ngày hôm qua; các mốc khác báo hôm nay', () => {
-  assert.equal(S.reportDate(9, '2026-10-01'), '2026-10-01')
-  assert.equal(S.dataDate(9, '2026-10-01'), '2026-09-30')
-  assert.equal(S.dataDate(17, '2026-10-01'), '2026-10-01')
+test('mốc 9h là báo cáo 9h của ngày hôm qua (chạy sáng nay, cập nhật vào bản ghi đã có); các mốc khác báo hôm nay', () => {
+  assert.equal(S.reportDate(9, '2026-10-01'), '2026-09-30')
+  assert.equal(S.submitDate(9, '2026-09-30'), '2026-10-01')
   assert.equal(S.reportDate(17, '2026-10-01'), '2026-10-01')
+  assert.equal(S.submitDate(17, '2026-10-01'), '2026-10-01')
+  assert.equal(S.updatesExisting(9), true)
+  assert.equal(S.updatesExisting(12), false)
+  assert.equal(S.closeReason('2026-10-04'), 'Chốt số liệu cả ngày 04/10')
+  assert.equal(S.validateReason(S.closeReason('2026-10-04')), '')
   assert.equal(S.rangeOf(9), 'yesterday')
   assert.equal(S.rangeOf(22), 'today')
 })
@@ -148,12 +152,12 @@ test('sửa báo cáo: số nguyên không âm, trống = chưa nhập; body g�
 
 /* ------------------------------------------------------- tạo báo cáo theo mốc */
 test('đến mốc: tạo báo cáo 1 lần cho mỗi Team, mốc 9h ghi ngày hôm qua, báo Telegram kèm nút', async () => {
-  await company.tick({ date: '2026-10-04', minutes: 9 * 60 + 3 })
-  await company.tick({ date: '2026-10-04', minutes: 9 * 60 + 5 }) // vòng sau trong cùng mốc: không tạo lại
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 + 3 })
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 + 5 }) // vòng sau trong cùng mốc: không tạo lại
   const list = store.get().companyReports
   assert.equal(list.length, 1)
   const r = list[0]
-  assert.equal(r.date, '2026-10-04', 'mốc 9h ghi ngày nộp')
+  assert.equal(r.date, '2026-10-04', 'mốc 9h sáng 05/10 là báo cáo 9h ngày 04/10')
   assert.equal(r.dateRule, S.DATE_RULE)
   assert.equal(r.slot, 9)
   assert.equal(r.status, 'pending')
@@ -162,7 +166,7 @@ test('đến mốc: tạo báo cáo 1 lần cho mỗi Team, mốc 9h ghi ngày h
   assert.ok(r.metrics.spend > 0)
   const msgs = tgSent.filter((x) => x.method === 'sendMessage')
   assert.equal(msgs.length, 1)
-  assert.match(msgs[0].body.text, /Báo cáo công ty · 9h ngày 04\/10<\/b> · số chốt ngày 03\/10/)
+  assert.match(msgs[0].body.text, /Báo cáo công ty · 9h ngày 04\/10<\/b> · chốt cả ngày, cập nhật sáng 05\/10/)
   assert.match(msgs[0].body.text, /Đơn hàng: <b>/)
   assert.deepEqual(msgs[0].body.reply_markup.inline_keyboard[0].map((b) => b.callback_data), [`ce:${r.id}`, `cs:${r.id}`])
   assert.equal(co.calls.length, 0, 'tạo báo cáo không gọi hệ thống công ty')
@@ -431,6 +435,69 @@ test('Tự động gửi: mốc đã có báo cáo trên công ty thì không g�
   assert.equal(store.get().companyReports[0].status, 'exists')
   assert.equal(posts().length, 0)
   assert.match(tgTexts()[0], /không gửi đè/)
+})
+
+const yesterday9h = (extra = {}) => ({ id: 'rep-9h', team_id: 'team-1', date: '2026-10-04', slot: 9, user_id: 'u1', status: 'SUBMITTED', revision: 1, locked: false, metrics: { spend: 1, messages: 1, phones: 1, orders: 1, dso_after: 1, impressions: 1, clicks: 1 }, ...extra })
+
+test('Tự động gửi mốc 9h: cập nhật vào báo cáo 9h ngày hôm qua đã có, kèm lần sửa + lý do, không tạo bản ghi ngày hôm nay', async (t) => {
+  t.after(unstub)
+  autoMode()
+  co.reports.push(yesterday9h())
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 + 1 })
+  const [r] = store.get().companyReports
+  assert.equal(r.date, '2026-10-04')
+  assert.equal(r.status, 'sent')
+  assert.equal(r.sentAs, 'update')
+  assert.equal(posts().length, 1)
+  assert.deepEqual(co.updates, [{ team_id: 'team-1', date: '2026-10-04', slot: 9, metrics: { spend: 1520000, messages: 15, phones: 12, orders: 7, dso_after: 2660000, impressions: 13680000, clicks: 1689 }, notes: '', issue: '', resolution: '', revision: 1, reason: 'Chốt số liệu cả ngày 04/10' }])
+  assert.equal(co.reports.length, 1, 'không tạo báo cáo ngày 05/10')
+  assert.equal(co.reports[0].metrics.orders, 7)
+  assert.equal(r.remote.revision, 2)
+  assert.match(tgTexts()[0], /9h ngày 04\/10<\/b> · chốt cả ngày, cập nhật sáng 05\/10/)
+  assert.match(tgTexts()[0], /Đã tự cập nhật vào báo cáo 9h ngày 04\/10 trên công ty/)
+  assert.match(store.get().logs[0].detail, /Đã cập nhật báo cáo 9h ngày 04\/10 .*Chốt số liệu cả ngày 04\/10/)
+})
+
+test('Tự động gửi mốc 9h: chưa có bản ghi 9h hôm qua thì tạo mới với ngày hôm qua', async (t) => {
+  t.after(unstub)
+  autoMode()
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 + 1 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'sent')
+  assert.equal(r.sentAs, 'create')
+  assert.equal(posts().length, 1)
+  assert.equal(posts()[0].body.date, '2026-10-04')
+  assert.equal(posts()[0].body.reason, undefined)
+  assert.equal(co.updates.length, 0)
+  assert.match(tgTexts()[0], /Đã tự gửi lên công ty/)
+})
+
+test('Tự động gửi mốc 9h: bản ghi 9h hôm qua đã khoá thì không đụng tới, chỉ báo', async (t) => {
+  t.after(unstub)
+  autoMode()
+  co.reports.push(yesterday9h({ locked: true }))
+  await company.tick({ date: '2026-10-05', minutes: 9 * 60 + 1 })
+  const [r] = store.get().companyReports
+  assert.equal(r.status, 'exists')
+  assert.equal(posts().length, 0)
+  assert.equal(co.reports[0].metrics.orders, 1)
+  assert.match(tgTexts()[0], /đã khoá nên tool không cập nhật được/)
+  assert.equal(company.updatable(r), false)
+})
+
+test('Duyệt trước mốc 9h: đồng bộ không chặn bản chờ gửi; bấm Gửi thì cập nhật vào bản ghi 9h hôm qua', async (t) => {
+  t.after(unstub)
+  stubFb()
+  store.get().settings.mock = false
+  const today = new Date().toISOString().slice(0, 10)
+  const [r] = await company.createDrafts(9, today, { silent: true })
+  co.reports.push(yesterday9h({ date: r.date }))
+  assert.equal(await company.sync(), 1)
+  assert.equal(r.status, 'pending', 'mốc 9h: bản ghi đã có là chỗ sẽ cập nhật vào')
+  await company.send(r.id)
+  assert.equal(r.sentAs, 'update')
+  assert.equal(co.updates.length, 1)
+  assert.equal(co.updates[0].reason, S.closeReason(r.date))
 })
 
 test('Tự động gửi: đang Dùng thử (dữ liệu giả) thì không gửi, chỉ báo', async (t) => {

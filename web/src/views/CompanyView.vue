@@ -6,7 +6,7 @@ import { state } from '../stores/app'
 import { toast, confirm } from '../stores/ui'
 import { api } from '../lib/api'
 import { fmt } from '../lib/format'
-import { METRICS, SLOTS, dataDate, missingMetrics, validateReportPatch, validateReason, diffRemote } from '../lib/companyReport'
+import { METRICS, SLOTS, submitDate, updatesExisting, closeReason, missingMetrics, validateReportPatch, validateReason, diffRemote } from '../lib/companyReport'
 import Btn from '../components/Btn.vue'
 import Badge from '../components/Badge.vue'
 import Callout from '../components/Callout.vue'
@@ -45,6 +45,7 @@ async function sync(quiet = true) {
 onMounted(async () => { await load(); sync() })
 
 const STATUS = { pending: ['Chờ gửi', 'warning'], sent: ['Đã gửi', 'success'], failed: ['Gửi lỗi', 'danger'], exists: ['Công ty đã có', 'info'], review: ['Cần xem', 'warning'], retry: ['Đang thử lại', 'info'] }
+const dm = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 const dateText = (iso) => { const t = new Date(`${iso}T00:00:00`).toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }); return t.charAt(0).toUpperCase() + t.slice(1) }
 // Nhóm theo ngày + mốc, mới nhất trước
 const groups = computed(() => {
@@ -81,10 +82,14 @@ async function send(r) {
   await save(r, true)
   const miss = missing(r)
   if (miss.length) { toast(`Còn thiếu: ${miss.map((m) => m.label).join(', ')}`, 'error'); return }
-  if (!await confirm('Gửi lên hệ thống công ty?', `Báo cáo ${label(r)} · ${r.slot}h ngày ${r.date.slice(8)}/${r.date.slice(5, 7)}: chi ${fmt(r.metrics.spend)}, ${fmt(r.metrics.orders)} đơn, DSO ${fmt(r.metrics.dso_after)}. Gửi xong muốn sửa thì dùng nút Cập nhật (cần nhập lý do).`, { ok: 'Gửi báo cáo' })) return
+  const head = `Báo cáo ${label(r)} · ${r.slot}h ngày ${dm(r.date)}: chi ${fmt(r.metrics.spend)}, ${fmt(r.metrics.orders)} đơn, DSO ${fmt(r.metrics.dso_after)}.`
+  const tail = updatesExisting(r.slot)
+    ? ` Bản ghi 9h ngày ${dm(r.date)} trên công ty đã có thì tool cập nhật vào đó (lý do: ${closeReason(r.date)}), chưa có thì tạo mới.`
+    : ' Gửi xong muốn sửa thì dùng nút Cập nhật (cần nhập lý do).'
+  if (!await confirm('Gửi lên hệ thống công ty?', head + tail, { ok: 'Gửi báo cáo' })) return
   try {
     Object.assign(r, await api(`company/reports/${r.id}/send`, 'POST'))
-    toast('Đã gửi báo cáo lên công ty')
+    toast(r.sentAs === 'update' ? `Đã cập nhật vào báo cáo 9h ngày ${dm(r.date)} trên công ty` : 'Đã gửi báo cáo lên công ty')
   } finally { await load() }
 }
 async function update(r) {
@@ -128,7 +133,7 @@ async function build() {
 
     <template v-if="groups.length">
       <section v-for="g in groups" :key="g.key" class="grp">
-        <h3><span class="num">{{ g.slot }}h</span> <span class="muted">{{ dateText(g.date) }}{{ g.slot === 9 ? ' · số chốt cả ngày ' + dataDate(9, g.date).slice(8) + '/' + dataDate(9, g.date).slice(5, 7) : ' · lũy kế đến ' + g.slot + 'h' }}</span></h3>
+        <h3><span class="num">{{ g.slot }}h</span> <span class="muted">{{ dateText(g.date) }}{{ updatesExisting(g.slot) ? ' · chốt cả ngày, cập nhật sáng ' + dm(submitDate(g.slot, g.date)) : ' · lũy kế đến ' + g.slot + 'h' }}</span></h3>
         <article v-for="r in g.items" :key="r.id" class="card rp" :class="r.status">
           <header>
             <div class="tt"><Building2 :size="17" /><b>{{ label(r) }}</b><span class="faint" :title="(r.campaigns || []).join('\n')">{{ (r.campaigns || []).length }} chiến dịch</span></div>
@@ -157,7 +162,7 @@ async function build() {
             <span v-if="r.remote.revision">lần sửa {{ r.remote.revision }}</span>
             <span v-if="r.remote.locked" class="lk"><Lock :size="13" /> Đã khoá, muốn sửa hãy gửi yêu cầu chỉnh sửa trên web công ty</span>
           </p>
-          <p v-if="r.status === 'sent'" class="ok">Đã gửi lúc {{ new Date(r.sentAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) }}{{ r.remoteStatus === 'LATE' ? ' · công ty ghi nhận nộp muộn' : '' }}</p>
+          <p v-if="r.status === 'sent' && r.sentAt" class="ok">{{ r.sentAs === 'update' ? 'Đã cập nhật' : 'Đã gửi' }} lúc {{ new Date(r.sentAt).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) }}{{ r.remoteStatus === 'LATE' ? ' · công ty ghi nhận nộp muộn' : '' }}</p>
           <footer v-if="updatable(r)" class="upd">
             <input v-model="reasons[r.id]" class="input" maxlength="500" placeholder="Lý do cập nhật (bắt buộc)" aria-label="Lý do cập nhật" />
             <Btn size="sm" variant="primary" :icon="RefreshCw" :disabled="!changed(r).length" :title="changed(r).length ? '' : 'Số trên tool giống số đã nộp'" :action="() => update(r)">Cập nhật lên công ty</Btn>

@@ -120,7 +120,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
         <button v-for="s in SLOTS" :key="s" type="button" class="slot" :class="{ on: f.slots.includes(s) }" :aria-pressed="f.slots.includes(s)" @click="toggle(f.slots, s)">{{ SLOT_LABEL[s] }}</button>
       </div>
       <p v-if="errors.slots" class="err">{{ errors.slots }}</p>
-      <p class="muted tiny">Mốc 9h gửi số cả ngày hôm qua; 12h, 17h, 22h là số lũy kế hôm nay. Facebook cập nhật số chậm khoảng 15–30 phút.</p>
+      <p class="muted tiny">Mốc 9h ghi số cả ngày hôm qua vào báo cáo 9h của ngày hôm qua trên công ty (đã có thì cập nhật, chưa có thì tạo mới); 12h, 17h, 22h là số lũy kế hôm nay. Facebook cập nhật số chậm khoảng 15–30 phút.</p>
       <Field label="Làm báo cáo trước mốc (phút)" :error="errors.leadMin" class="lead" :hint="leadHint">
         <input v-model.number="f.leadMin" class="input" type="number" min="0" max="60" step="5" inputmode="numeric" />
       </Field>

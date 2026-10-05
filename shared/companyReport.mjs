@@ -36,11 +36,15 @@ const isBlank = (v) => v === '' || v === null || v === undefined
 const uniq = (a) => [...new Set(a)]
 const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10)
 
-// Ngày của báo cáo = ngày nộp (như web công ty, kể cả mốc 9h). Mốc 9h báo số chốt cả ngày hôm qua (xem dataDate)
-export const reportDate = (slot, today) => today
-// Số liệu của báo cáo thuộc ngày nào: mốc 9h chốt cả ngày hôm qua (so với ngày báo cáo), các mốc khác là luỹ kế của chính ngày đó
-export const dataDate = (slot, date) => (Number(slot) === 9 ? addDays(date, -1) : date)
-export const DATE_RULE = 2 // bản báo cáo tạo theo cách tính ngày mới (9h ghi ngày nộp). Bản cũ chưa gửi của mốc 9h bị bỏ.
+// Ngày của báo cáo = ngày của số liệu. Mốc 9h chốt cả ngày hôm qua → ghi vào bản ghi "9h ngày hôm qua" trên công ty
+// (sáng nay mới chạy, xem submitDate); 12h, 17h, 22h là luỹ kế hôm nay.
+export const reportDate = (slot, today) => (Number(slot) === 9 ? addDays(today, -1) : today)
+// Ngày tool chạy / gửi báo cáo của mốc: mốc 9h chạy sáng hôm sau ngày báo cáo
+export const submitDate = (slot, date) => (Number(slot) === 9 ? addDays(date, 1) : date)
+export const DATE_RULE = 3 // bản báo cáo tạo theo cách tính ngày hiện tại. Bản cũ chưa gửi của mốc 9h bị bỏ (lib/store.js).
+// Mốc 9h: bản ghi trên công ty đã có (chưa khoá) thì tool cập nhật vào đó với lý do này (công ty bắt buộc có lý do)
+export const closeReason = (date) => `Chốt số liệu cả ngày ${date.slice(8, 10)}/${date.slice(5, 7)}`
+export const updatesExisting = (slot) => Number(slot) === 9
 // Khoảng số liệu Facebook của mốc
 export const rangeOf = (slot) => (Number(slot) === 9 ? 'yesterday' : 'today')
 
