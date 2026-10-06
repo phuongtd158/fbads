@@ -948,5 +948,961 @@
     "enabled": true
    }
   }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So 7 ngày",
+   "range": "today",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 130
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "So 7 ngày",
+    "metric": "cpa",
+    "op": ">",
+    "value": 0,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "vs": "range",
+      "compareRange": "last_7d",
+      "factor": 130,
+      "value": 0
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 100000,
+    "action": "notify",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So tổng hôm nay",
+   "range": "today",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 130
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Số liệu hôm nay mới tính đến giờ hiện tại, còn khoảng so sánh là trung bình cả ngày, nên chi tiêu/số kết quả hôm nay thường thấp hơn vào buổi sáng. Nên so CPA, ROAS hoặc CTR, hoặc dùng khung giờ cuối ngày."
+   ],
+   "value": {
+    "name": "So tổng hôm nay",
+    "metric": "spend",
+    "op": ">",
+    "value": 0,
+    "conditions": [
+     {
+      "metric": "spend",
+      "op": ">",
+      "vs": "range",
+      "compareRange": "last_7d",
+      "factor": 130,
+      "value": 0
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 100000,
+    "action": "notify",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So tin nhắn 3 ngày",
+   "range": "yesterday",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "conditions": [
+    {
+     "metric": "messages",
+     "op": "<",
+     "vs": "range",
+     "compareRange": "last_3d",
+     "factor": "50"
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "So tin nhắn 3 ngày",
+    "metric": "messages",
+    "op": "<",
+    "value": 0,
+    "conditions": [
+     {
+      "metric": "messages",
+      "op": "<",
+      "vs": "range",
+      "compareRange": "last_3d",
+      "factor": 50,
+      "value": 0
+     }
+    ],
+    "match": "all",
+    "range": "yesterday",
+    "minSpend": 100000,
+    "action": "notify",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So trùng khoảng",
+   "range": "last_7d",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 130
+    }
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.value": "Khoảng so sánh phải khác khoảng tính số liệu của rule",
+    "value": "Khoảng so sánh phải khác khoảng tính số liệu của rule"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So % sai",
+   "range": "today",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 0
+    },
+    {
+     "metric": "ctr",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_30d",
+     "factor": 130
+    }
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.value": "Phần trăm so với khoảng khác phải từ 1 đến 1000",
+    "value": "Phần trăm so với khoảng khác phải từ 1 đến 1000",
+    "c1.value": "Chọn khoảng thời gian để so sánh"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "So VÀ mục tiêu",
+   "range": "today",
+   "minSpend": 100000,
+   "action": "notify",
+   "cooldownHours": 24,
+   "allActive": true,
+   "match": "any",
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 130
+    },
+    {
+     "metric": "roas",
+     "op": "<",
+     "vs": "target",
+     "factor": 80
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Tài khoản “Tài khoản mẫu A” chưa đặt mục tiêu ROAS: rule sẽ bỏ qua camp của tài khoản này (đặt ở Cài đặt → Mục tiêu).",
+    "Tài khoản “Tài khoản mẫu B” chưa đặt mục tiêu ROAS: rule sẽ bỏ qua camp của tài khoản này (đặt ở Cài đặt → Mục tiêu)."
+   ],
+   "value": {
+    "name": "So VÀ mục tiêu",
+    "metric": "cpa",
+    "op": ">",
+    "value": 0,
+    "conditions": [
+     {
+      "metric": "cpa",
+      "op": ">",
+      "vs": "range",
+      "compareRange": "last_7d",
+      "factor": 130,
+      "value": 0
+     },
+     {
+      "metric": "roas",
+      "op": "<",
+      "vs": "target",
+      "factor": 80,
+      "value": 0
+     }
+    ],
+    "match": "any",
+    "range": "today",
+    "minSpend": 100000,
+    "action": "notify",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "campaign",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc chi tiêu",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 150000,
+     "tierMetric": "leads",
+     "tiers": [
+      {
+       "count": 2,
+       "value": 200000
+      }
+     ]
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giảm 50% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.",
+    "Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn."
+   ],
+   "value": {
+    "name": "Bậc chi tiêu",
+    "metric": "spend",
+    "op": ">",
+    "value": 150000,
+    "conditions": [
+     {
+      "metric": "spend",
+      "op": ">",
+      "value": 150000,
+      "tierMetric": "leads",
+      "tiers": [
+       {
+        "count": 2,
+        "value": 200000
+       }
+      ]
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 0,
+    "action": "decrease",
+    "pct": 50,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "adset",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc chi tiêu 3",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "minSpend": 0,
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 150000,
+     "tierMetric": "messages",
+     "tiers": [
+      {
+       "count": 2,
+       "value": "200000"
+      },
+      {
+       "count": 5,
+       "value": 300000
+      },
+      {
+       "count": 9,
+       "value": 400000
+      }
+     ]
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giảm 50% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.",
+    "Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn."
+   ],
+   "value": {
+    "name": "Bậc chi tiêu 3",
+    "metric": "spend",
+    "op": ">",
+    "value": 150000,
+    "conditions": [
+     {
+      "metric": "spend",
+      "op": ">",
+      "value": 150000,
+      "tierMetric": "messages",
+      "tiers": [
+       {
+        "count": 2,
+        "value": 200000
+       },
+       {
+        "count": 5,
+        "value": 300000
+       },
+       {
+        "count": 9,
+        "value": 400000
+       }
+      ]
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 0,
+    "action": "decrease",
+    "pct": 50,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "adset",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc rỗng",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 150000,
+     "tierMetric": "leads",
+     "tiers": []
+    }
+   ]
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [
+    "Giảm 50% mỗi lần là khá lớn, Facebook có thể học lại từ đầu. Nên khoảng 20%.",
+    "Chưa đặt sàn ngân sách: ngân sách có thể giảm rất thấp qua nhiều lần. Nên đặt sàn."
+   ],
+   "value": {
+    "name": "Bậc rỗng",
+    "metric": "spend",
+    "op": ">",
+    "value": 150000,
+    "conditions": [
+     {
+      "metric": "spend",
+      "op": ">",
+      "value": 150000
+     }
+    ],
+    "match": "all",
+    "range": "today",
+    "minSpend": 0,
+    "action": "decrease",
+    "pct": 50,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 0,
+    "minBudget": 0,
+    "cooldownHours": 24,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "adset",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc sai loại",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "value": 50000,
+     "tierMetric": "leads",
+     "tiers": [
+      {
+       "count": 2,
+       "value": 200000
+      }
+     ]
+    }
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.tiers": "Nâng ngưỡng theo kết quả chỉ dùng cho điều kiện \"Chi tiêu lớn hơn\"",
+    "tiers": "Nâng ngưỡng theo kết quả chỉ dùng cho điều kiện \"Chi tiêu lớn hơn\"",
+    "minSpend": "Cần đặt chi tiêu tối thiểu lớn hơn 0 để không quyết định khi camp mới chạy, chưa đủ dữ liệu."
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc giảm",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 150000,
+     "tierMetric": "leads",
+     "tiers": [
+      {
+       "count": 2,
+       "value": 200000
+      },
+      {
+       "count": 4,
+       "value": 180000
+      }
+     ]
+    }
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.tiers": "Ngưỡng của bậc sau phải lớn hơn ngưỡng trước đó",
+    "tiers": "Ngưỡng của bậc sau phải lớn hơn ngưỡng trước đó"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Bậc lẻ",
+   "range": "today",
+   "action": "decrease",
+   "pct": 50,
+   "cooldownHours": 24,
+   "allActive": true,
+   "level": "adset",
+   "conditions": [
+    {
+     "metric": "spend",
+     "op": ">",
+     "value": 150000,
+     "tierMetric": "leads",
+     "tiers": [
+      {
+       "count": 1.5,
+       "value": 200000
+      }
+     ]
+    }
+   ]
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "c0.tiers": "Số kết quả của mỗi bậc là số nguyên từ 1 trở lên",
+    "tiers": "Số kết quả của mỗi bậc là số nguyên từ 1 trở lên"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc",
+   "action": "ladder",
+   "ladderMetric": "results",
+   "steps": [
+    {
+     "count": 1,
+     "mode": "percent",
+     "value": 50
+    },
+    {
+     "count": 2,
+     "mode": "amount",
+     "value": "100000"
+    },
+    {
+     "count": 3,
+     "mode": "percent",
+     "value": 50,
+     "everyHours": 3
+    }
+   ],
+   "minSpend": 100000,
+   "maxBudget": 2000000,
+   "allActive": true,
+   "level": "adset"
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Tăng theo bậc",
+    "metric": "",
+    "op": "",
+    "value": 0,
+    "conditions": [],
+    "match": "all",
+    "ladderMetric": "results",
+    "steps": [
+     {
+      "count": 1,
+      "mode": "percent",
+      "value": 50
+     },
+     {
+      "count": 2,
+      "mode": "amount",
+      "value": 100000
+     },
+     {
+      "count": 3,
+      "mode": "percent",
+      "value": 50,
+      "everyHours": 3
+     }
+    ],
+    "includeLearning": true,
+    "range": "today",
+    "minSpend": 100000,
+    "action": "ladder",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 2000000,
+    "minBudget": 0,
+    "cooldownHours": 0,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "adset",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc lead",
+   "action": "ladder",
+   "ladderMetric": "leads",
+   "steps": [
+    {
+     "count": 2,
+     "value": 20,
+     "everyHours": 2
+    },
+    {
+     "count": 4,
+     "value": 30,
+     "everyHours": 6
+    }
+   ],
+   "minSpend": 100000,
+   "maxBudget": 2000000,
+   "allActive": true,
+   "level": "adset",
+   "includeLearning": false,
+   "conditions": [
+    {
+     "metric": "cpa",
+     "op": ">",
+     "vs": "range",
+     "compareRange": "last_7d",
+     "factor": 130
+    }
+   ],
+   "range": "yesterday",
+   "cooldownHours": 5
+  },
+  "expected": {
+   "ok": true,
+   "errors": {},
+   "warnings": [],
+   "value": {
+    "name": "Tăng theo bậc lead",
+    "metric": "",
+    "op": "",
+    "value": 0,
+    "conditions": [],
+    "match": "all",
+    "ladderMetric": "leads",
+    "steps": [
+     {
+      "count": 2,
+      "mode": "percent",
+      "value": 20
+     },
+     {
+      "count": 4,
+      "mode": "percent",
+      "value": 30,
+      "everyHours": 6
+     }
+    ],
+    "includeLearning": false,
+    "range": "today",
+    "minSpend": 100000,
+    "action": "ladder",
+    "pct": 0,
+    "budgetMode": "percent",
+    "amount": 0,
+    "maxBudget": 2000000,
+    "minBudget": 0,
+    "cooldownHours": 0,
+    "resume": "",
+    "resumeAt": "",
+    "from": "",
+    "to": "",
+    "allActive": true,
+    "level": "adset",
+    "accountIds": [],
+    "targets": [],
+    "enabled": true
+   }
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc thiếu trần",
+   "action": "ladder",
+   "ladderMetric": "results",
+   "steps": [
+    {
+     "count": 1,
+     "mode": "percent",
+     "value": 50
+    },
+    {
+     "count": 2,
+     "mode": "amount",
+     "value": "100000"
+    },
+    {
+     "count": 3,
+     "mode": "percent",
+     "value": 50,
+     "everyHours": 3
+    }
+   ],
+   "minSpend": 100000,
+   "maxBudget": "",
+   "allActive": true,
+   "level": "adset"
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "maxBudget": "Rule tăng theo bậc cần đặt trần ngân sách (không bị giới hạn % mỗi ngày nên phải có trần)"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc sai",
+   "action": "ladder",
+   "ladderMetric": "results",
+   "steps": [
+    {
+     "count": 2,
+     "value": 50
+    },
+    {
+     "count": 2,
+     "value": 150
+    },
+    {
+     "count": 3,
+     "value": 0,
+     "everyHours": 0.5
+    }
+   ],
+   "minSpend": 100000,
+   "maxBudget": 2000000,
+   "allActive": true,
+   "level": "adset"
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "s1": "Bậc 2: số kết quả phải lớn hơn bậc trước",
+    "steps": "Bậc 2: số kết quả phải lớn hơn bậc trước",
+    "s2": "Bậc 3: nhập mức tăng lớn hơn 0"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc rỗng",
+   "action": "ladder",
+   "ladderMetric": "roas",
+   "steps": [],
+   "minSpend": 100000,
+   "maxBudget": 2000000,
+   "allActive": true,
+   "level": "adset"
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "ladderMetric": "Chọn loại kết quả để tính bậc",
+    "steps": "Thêm ít nhất 1 bậc"
+   },
+   "warnings": []
+  }
+ },
+ {
+  "kind": "rule",
+  "input": {
+   "name": "Tăng theo bậc quá nhiều",
+   "action": "ladder",
+   "ladderMetric": "results",
+   "steps": [
+    {
+     "count": 1,
+     "value": 10
+    },
+    {
+     "count": 2,
+     "value": 10
+    },
+    {
+     "count": 3,
+     "value": 10
+    },
+    {
+     "count": 4,
+     "value": 10
+    },
+    {
+     "count": 5,
+     "value": 10
+    },
+    {
+     "count": 6,
+     "value": 10
+    }
+   ],
+   "minSpend": 100000,
+   "maxBudget": 2000000,
+   "allActive": true,
+   "level": "adset"
+  },
+  "expected": {
+   "ok": false,
+   "errors": {
+    "steps": "Tối đa 5 bậc"
+   },
+   "warnings": []
+  }
  }
 ]

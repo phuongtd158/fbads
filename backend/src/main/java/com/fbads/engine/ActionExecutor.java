@@ -89,7 +89,7 @@ public class ActionExecutor {
         AppSettings s = settings.get();
         boolean isRule = ctx != null && ctx.isRule();
         int capPct = s.getDailyChangeCapPct() > 0 ? s.getDailyChangeCapPct() : 30;
-        if (isRule && s.isSkipLearning() && obj.learning)
+        if (isRule && s.isSkipLearning() && obj.learning && !ctx.includeLearning())
             return Plan.skip("learning", "Đang trong giai đoạn học nên tạm không đổi ngân sách (tránh làm Facebook học lại từ đầu).");
         double cur = obj.dailyBudget;
         double next = "percent".equals(action.mode()) ? cur * (1 + action.value() / 100) : "add".equals(action.mode()) ? cur + action.value() : action.value();
@@ -99,7 +99,7 @@ public class ActionExecutor {
         if (!(next > 0)) return Plan.error("Ngân sách mới sẽ là " + Fmt.money(next) + " (không lớn hơn 0) nên không đổi.");
         boolean capped = false;
         double base = cur;
-        if (isRule) { // giới hạn tổng thay đổi mỗi ngày (chỉ áp dụng cho rule; lịch là ý định rõ ràng của bạn)
+        if (isRule && !ctx.noCap()) { // giới hạn tổng thay đổi mỗi ngày (chỉ áp dụng cho rule; lịch là ý định rõ ràng của bạn; rule tăng theo bậc không dùng vì đã bắt buộc có trần)
             Double b = budgetBase(obj.id);
             base = b != null ? b : cur;
             double lo = Math.round(base * (1 - capPct / 100.0)), hi = Math.round(base * (1 + capPct / 100.0));

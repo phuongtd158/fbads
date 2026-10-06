@@ -59,6 +59,13 @@ public class EngineState {
         marks.save(m);
     }
 
+    /** Rule tăng theo bậc: đã tăng bậc step (0 = bậc 1) vào ngày date lúc atMs */
+    public void setLadder(String ruleId, String objId, String date, int step, long atMs) {
+        RuleMark m = mark(ruleId, objId);
+        m.setLadder(date, step, atMs);
+        marks.save(m);
+    }
+
     public void setHold(String ruleId, String objId, long untilMs) {
         RuleMark m = mark(ruleId, objId);
         m.setHoldUntilMs(untilMs);

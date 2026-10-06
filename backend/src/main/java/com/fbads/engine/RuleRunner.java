@@ -1,7 +1,9 @@
 package com.fbads.engine;
 
 import com.fbads.client.RateLimits;
+import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
+import com.fbads.dto.Condition;
 import com.fbads.dto.Metrics;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
@@ -56,6 +58,27 @@ public class RuleRunner {
 
     private static String rangeOf(Rule r) { return r.getRange() == null || r.getRange().isEmpty() ? "today" : r.getRange(); }
 
+    /** Số liệu của mọi khoảng các rule cần: khoảng tính của rule và các khoảng so sánh trong điều kiện */
+    private Map<String, Map<String, Metrics>> loadMaps(List<Rule> list, boolean force) {
+        LinkedHashSet<String> ranges = new LinkedHashSet<>();
+        for (Rule r : list) {
+            ranges.add(rangeOf(r));
+            for (Condition c : r.conditionList()) if (c.vsRange()) ranges.add(c.compareRange());
+        }
+        Map<String, Map<String, Metrics>> maps = new LinkedHashMap<>();
+        for (String range : ranges) maps.put(range, fb.rangeMetrics(range, force));
+        return maps;
+    }
+
+    /** Các trường thêm của 1 điều kiện: khoảng so sánh, bậc ngưỡng theo kết quả, bậc của rule tăng theo bậc */
+    private static void extras(Map<String, Object> m, RuleEvaluator.CondEval c) {
+        if (c.compareRange() != null) m.put("compareRange", c.compareRange());
+        if (c.tierMetric() != null) {
+            m.put("tierMetric", c.tierMetric()); m.put("tierCount", c.tierCount()); m.put("tierAt", c.tier() != null ? c.tier().count() : null);
+        }
+        if (c.ladderNeed() != null && c.ladderNeed() != 0) { m.put("ladderStep", c.ladderStep()); m.put("ladderNeed", c.ladderNeed()); }
+    }
+
     public void runRules() {
         List<AdObject> objs = fb.listObjects(true);
         killSwitch.check(objs);
@@ -63,8 +86,7 @@ public class RuleRunner {
         if (active.isEmpty()) return;
         // Facebook đang giới hạn số lần gọi → chỉ có số liệu cũ: không quyết định dựa trên nó, đợi lượt sau
         if (fb.isStale()) { log.info("Bỏ qua lượt kiểm tra rule: Facebook đang giới hạn số lần gọi, số liệu chưa cập nhật."); return; }
-        Map<String, Map<String, Metrics>> maps = new LinkedHashMap<>();
-        for (String range : new LinkedHashSet<>(active.stream().map(RuleRunner::rangeOf).toList())) maps.put(range, fb.rangeMetrics(range, true));
+        Map<String, Map<String, Metrics>> maps = loadMaps(active, true);
         Delivery.View running = new Delivery.View(objs);
         for (Rule rule : active) {
             for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, running)) {
@@ -73,12 +95,15 @@ public class RuleRunner {
                 if (d.plan.is("do") || d.plan.is("error")) state.setLastRun(rule.getId(), d.obj.id, clock.millis());
                 String range = d.range.equals("today") ? "" : " " + Labels.range(d.range);
                 RuleEvaluator.CondEval c0 = d.conds.getFirst();
-                String what = d.conds.size() == 1
+                String what = d.ladder != null
+                        ? "Bậc " + (d.ladder.step() + 1) + ": có " + Fmt.num(d.ladder.count()) + " " + RuleEvaluator.unitWord(d.ladder.metric())
+                        : d.conds.size() == 1
                         ? Labels.metric(c0.metric()) + range + " " + Labels.show(c0.actual(), c0.metric())
                         : String.join(" · ", d.conds.stream().map(c -> Labels.metric(c.metric()) + " " + Labels.show(c.actual(), c.metric())).toList())
                           + (range.isEmpty() ? "" : " –" + range);
                 String r = executor.act(d.obj, d.action, "Rule: " + rule.getName() + " [" + what + "]",
-                        ActCtx.of("rule", rule.getId(), rule.getName()).withCondition(condition(rule, d, c0)));
+                        (d.planCtx != null ? d.planCtx : ActCtx.of("rule", rule.getId(), rule.getName())).withCondition(condition(rule, d, c0)));
+                if (d.ladder != null && "ok".equals(r)) state.setLadder(rule.getId(), d.obj.id, clock.now().date(), d.ladder.step(), clock.millis());
                 // Rule tắt có hẹn bật lại: ghi nhớ để bật lại vào giờ hẹn ngày hôm sau (chạy thử thì camp không bị tắt thật nên không cần)
                 if ("ok".equals(r) && "off".equals(d.action.type()) && "nextday".equals(rule.getResume()) && !settings.get().isDry())
                     state.addResume(rule.getId(), d.obj.id, clock.now().date());
@@ -101,9 +126,16 @@ public class RuleRunner {
             if (x.factor() != null) m.put("factor", x.factor());
             m.put("threshold", x.threshold()); m.put("actual", finite(x.actual())); m.put("actualInf", x.actual() == Double.POSITIVE_INFINITY);
             m.put("hit", x.hit()); m.put("unknown", x.unknown());
+            extras(m, x);
             list.add(m);
         }
         c.put("conditions", list);
+        if (d.ladder != null) {
+            Map<String, Object> l = new LinkedHashMap<>();
+            l.put("step", d.ladder.step() + 1); l.put("count", d.ladder.count()); l.put("need", d.ladder.need()); l.put("metric", d.ladder.metric());
+            l.put("total", rule.getSteps() == null ? 0 : rule.getSteps().size());
+            c.put("ladder", l);
+        }
         return c;
     }
 
@@ -138,9 +170,9 @@ public class RuleRunner {
     /** Xem trước: rule này đang khớp camp nào NGAY BÂY GIỜ (không thay đổi gì, không cập nhật thời gian nghỉ) */
     public Map<String, Object> preview(Rule rule) {
         List<AdObject> objs = fb.listObjects(false);
-        Map<String, Metrics> map = fb.rangeMetrics(rangeOf(rule), false);
+        Map<String, Map<String, Metrics>> maps = loadMaps(List.of(rule), false);
         List<Map<String, Object>> items = new ArrayList<>();
-        for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, r -> map, new Delivery.View(objs))) {
+        for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, new Delivery.View(objs))) {
             Map<String, Object> i = new LinkedHashMap<>();
             i.put("id", d.obj.id); i.put("name", d.obj.name); i.put("level", d.obj.level); i.put("effective", d.obj.effective);
             i.put("learning", d.obj.learning); i.put("budget", d.obj.dailyBudget);
@@ -152,6 +184,7 @@ public class RuleRunner {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("metric", c.metric()); m.put("op", c.op()); m.put("vs", c.vs()); m.put("factor", c.factor()); m.put("threshold", c.threshold());
                 m.put("actual", finite(c.actual())); m.put("inf", c.actual() == Double.POSITIVE_INFINITY); m.put("hit", c.hit()); m.put("unknown", c.unknown());
+                extras(m, c);
                 conds.add(m);
             }
             i.put("conds", conds);

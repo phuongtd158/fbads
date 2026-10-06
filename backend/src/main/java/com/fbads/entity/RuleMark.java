@@ -20,6 +20,10 @@ public class RuleMark {
     private Long workspaceId;
     private Long lastRunMs;
     private Long holdUntilMs;
+    /** Rule tăng theo bậc: bậc đã chạy (0 = bậc 1) trong ngày ladderDate, lúc ladderAtMs */
+    private String ladderDate;
+    private Integer ladderStep;
+    private Long ladderAtMs;
 
     protected RuleMark() {}
 
@@ -30,4 +34,8 @@ public class RuleMark {
     public void setLastRunMs(Long v) { this.lastRunMs = v; }
     public long holdUntil() { return holdUntilMs == null ? 0 : holdUntilMs; }
     public void setHoldUntilMs(Long v) { this.holdUntilMs = v; }
+    /** Bậc đã chạy trong ngày `date` (-1 = chưa bậc nào) */
+    public int ladderStep(String date) { return date.equals(ladderDate) && ladderStep != null ? ladderStep : -1; }
+    public long ladderAt(String date) { return date.equals(ladderDate) && ladderAtMs != null ? ladderAtMs : 0; }
+    public void setLadder(String date, int step, long at) { this.ladderDate = date; this.ladderStep = step; this.ladderAtMs = at; }
 }

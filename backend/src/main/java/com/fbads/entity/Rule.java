@@ -4,6 +4,7 @@ import org.hibernate.annotations.TenantId;
 import com.fbads.common.JsonConverters;
 import com.fbads.dto.Condition;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Column;
@@ -24,7 +25,8 @@ import java.util.List;
 @Entity
 @Table(name = "rules")
 @JsonPropertyOrder({"id", "name", "metric", "op", "value", "conditions", "match", "range", "minSpend", "action", "pct", "budgetMode", "amount",
-        "maxBudget", "minBudget", "cooldownHours", "resume", "resumeAt", "from", "to", "allActive", "level", "accountIds", "targets", "enabled"})
+        "maxBudget", "minBudget", "cooldownHours", "resume", "resumeAt", "from", "to", "allActive", "level", "accountIds", "targets", "enabled",
+        "ladderMetric", "steps", "includeLearning"})
 public class Rule {
     @Id
     private String id;
@@ -70,6 +72,33 @@ public class Rule {
     @Convert(converter = JsonConverters.StringList.class)
     private List<String> targets = new ArrayList<>();
     private boolean enabled = true;
+    // Rule tăng theo bậc kết quả (action = ladder); rule khác để null (không có trong JSON)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String ladderMetric;         // results | leads | messages
+    @Convert(converter = StepList.class)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<Step> steps;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Boolean includeLearning;
+
+    /** Một bậc của rule tăng theo bậc: có từ count kết quả thì tăng value (mode percent: %, amount: số tiền); everyHours = lặp lại (bậc cuối) */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Step(double count, String mode, double value, Double everyHours) {}
+
+    public static class StepList implements AttributeConverter<List<Step>, String> {
+        private static final JsonMapper M = JsonMapper.builder().build();
+
+        @Override
+        public String convertToDatabaseColumn(List<Step> v) { return v == null ? null : M.writeValueAsString(v); }
+
+        @Override
+        public List<Step> convertToEntityAttribute(String s) {
+            return s == null || s.isBlank() ? null : M.readValue(s, new TypeReference<List<Step>>() {});
+        }
+    }
+
+    @JsonIgnore
+    public boolean isLadder() { return "ladder".equals(action); }
 
     /** Các điều kiện (rule cũ chỉ có metric/op/value → coi như 1 điều kiện) */
     public List<Condition> conditionList() {
@@ -88,6 +117,13 @@ public class Rule {
             return s == null || s.isBlank() ? new ArrayList<>() : M.readValue(s, new TypeReference<List<Condition>>() {});
         }
     }
+
+    public String getLadderMetric() { return ladderMetric; }
+    public void setLadderMetric(String v) { this.ladderMetric = v; }
+    public List<Step> getSteps() { return steps; }
+    public void setSteps(List<Step> v) { this.steps = v; }
+    public Boolean getIncludeLearning() { return includeLearning; }
+    public void setIncludeLearning(Boolean v) { this.includeLearning = v; }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }

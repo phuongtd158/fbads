@@ -39,19 +39,35 @@ public record RuleRequest(
         Boolean allActive,
         List<String> targets,
         List<String> accountIds,
-        Boolean enabled) {
+        Boolean enabled,
+        /** Rule tăng theo bậc kết quả (action = "ladder"): loại kết quả tính bậc */
+        String ladderMetric,
+        /** Các bậc: có từ count kết quả thì tăng value (% hoặc số tiền); bậc cuối có thể lặp lại mỗi everyHours giờ */
+        List<StepRequest> steps,
+        /** Tăng cả nhóm đang học (mặc định có) */
+        Boolean includeLearning) {
 
     public static final RuleRequest EMPTY = new RuleRequest(null, null, null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, null, null, null, null, null, null, null, null);
+            null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
-    /** Một điều kiện: số liệu lớn/nhỏ hơn ngưỡng, hoặc (vs = "target") so với mục tiêu tài khoản × factor% */
-    public record ConditionRequest(String metric, String op, String vs, @JsNumber Double factor, @JsNumber Double value) {
-        public static final ConditionRequest EMPTY = new ConditionRequest(null, null, null, null, null);
+    /**
+     * Một điều kiện: số liệu lớn/nhỏ hơn ngưỡng; vs = "target": so với mục tiêu tài khoản × factor%;
+     * vs = "range": so với chính số liệu đó ở compareRange × factor%; tiers: ngưỡng chi tiêu nâng theo số kết quả tierMetric.
+     */
+    public record ConditionRequest(String metric, String op, String vs, @JsNumber Double factor, @JsNumber Double value,
+                                   String compareRange, String tierMetric, List<TierRequest> tiers) {
+        public static final ConditionRequest EMPTY = new ConditionRequest(null, null, null, null, null, null, null, null);
+
+        public ConditionRequest(String metric, String op, String vs, Double factor, Double value) { this(metric, op, vs, factor, value, null, null, null); }
     }
+
+    public record TierRequest(@JsNumber Double count, @JsNumber Double value) {}
+
+    public record StepRequest(@JsNumber Double count, String mode, @JsNumber Double value, @JsNumber Double everyHours) {}
 
     /** Bản sao đã bật (xem trước luôn xét như rule đang bật) */
     public RuleRequest enabledCopy() {
         return new RuleRequest(id, name, conditions, metric, op, value, match, range, minSpend, action, budgetMode, pct, amount, maxBudget, minBudget,
-                cooldownHours, resume, resumeAt, from, to, level, allActive, targets, accountIds, true);
+                cooldownHours, resume, resumeAt, from, to, level, allActive, targets, accountIds, true, ladderMetric, steps, includeLearning);
     }
 }
