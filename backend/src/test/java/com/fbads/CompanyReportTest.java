@@ -7,6 +7,7 @@ import com.fbads.company.CompanyRules;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.CompanyConfigPatch;
 import com.fbads.dto.CompanyReportPatch;
+import com.fbads.dto.Responses.CompanyLogin;
 import com.fbads.dto.Metrics;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
@@ -410,8 +411,8 @@ class CompanyReportTest extends IntegrationBase {
 
     @Test
     void testConnectionAndTeams() {
-        Map<String, Object> me = company.test();
-        assertThat(((Map<?, ?>) me.get("user")).get("name")).isEqualTo("Nguyễn Minh Phương");
+        CompanyLogin me = company.test();
+        assertThat(me.user().get("name")).isEqualTo("Nguyễn Minh Phương");
         assertThat(api.listTeams(company.config()).getFirst()).isEqualTo(new CompanyApi.Team("team-1", "CT01", "WDC - Hoạt Huyết", "ACTIVE"));
     }
 

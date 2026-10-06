@@ -1,0 +1,491 @@
+{
+  "GET /api/objects" : {
+    "accountErrors" : [ ],
+    "accounts" : [ {
+      "currency" : "string",
+      "id" : "string",
+      "name" : "string"
+    } ],
+    "at" : "number",
+    "blockedUntil" : "null",
+    "items" : [ {
+      "accountId" : "string",
+      "accountName" : "string",
+      "currency" : "string",
+      "dailyBudget" : "number",
+      "effective" : "string",
+      "id" : "string",
+      "learning" : "boolean",
+      "level" : "string",
+      "metrics" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "null",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "name" : "string",
+      "status" : "string"
+    } ],
+    "stale" : "boolean",
+    "usage" : "null"
+  },
+  "GET /api/insights" : {
+    "accountErrors" : [ ],
+    "at" : "number",
+    "blockedUntil" : "null",
+    "days" : "number",
+    "key" : "string",
+    "metrics" : {
+      "mock_1" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "mock_2" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "mock_3" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "mock_4" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "mock_5" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "mock_6" : {
+        "checkouts" : "number",
+        "clicks" : "number",
+        "comments" : "number",
+        "conversations" : "number",
+        "cpa" : "number",
+        "impressions" : "number",
+        "leads" : "number",
+        "leadsOnMeta" : "number",
+        "reach" : "number",
+        "results" : "number",
+        "revenue" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      }
+    },
+    "range" : {
+      "preset" : "string"
+    },
+    "since" : "string",
+    "stale" : "boolean",
+    "until" : "string",
+    "usage" : "null"
+  },
+  "POST /api/objects/{id}/status" : {
+    "ok" : "boolean"
+  },
+  "POST /api/objects/{id}/budget" : {
+    "ok" : "boolean"
+  },
+  "GET /api/objects/{id}/trend" : {
+    "at" : "number",
+    "blockedUntil" : "null",
+    "days" : [ {
+      "checkouts" : "number",
+      "clicks" : "number",
+      "comments" : "number",
+      "conversations" : "number",
+      "cpa" : "number",
+      "date" : "string",
+      "impressions" : "number",
+      "leads" : "number",
+      "leadsOnMeta" : "number",
+      "reach" : "number",
+      "results" : "number",
+      "revenue" : "number",
+      "roas" : "number",
+      "spend" : "number"
+    } ],
+    "events" : [ {
+      "date" : "string",
+      "detail" : "string",
+      "source" : "string",
+      "ts" : "string",
+      "type" : "string"
+    } ],
+    "id" : "string",
+    "since" : "string",
+    "stale" : "boolean",
+    "until" : "string"
+  },
+  "GET /api/logs" : [ {
+    "action" : {
+      "mode" : "string",
+      "type" : "string",
+      "value" : "number"
+    },
+    "after" : {
+      "dailyBudget" : "number"
+    },
+    "before" : {
+      "dailyBudget" : "number",
+      "effective" : "string",
+      "level" : "string",
+      "metrics" : {
+        "cpa" : "null",
+        "results" : "number",
+        "roas" : "number",
+        "spend" : "number"
+      },
+      "status" : "string"
+    },
+    "detail" : "string",
+    "id" : "string",
+    "kind" : "string",
+    "mode" : "string",
+    "name" : "string",
+    "ok" : "boolean",
+    "source" : "string",
+    "target" : {
+      "accountId" : "string",
+      "accountName" : "string",
+      "id" : "string",
+      "level" : "string",
+      "name" : "string"
+    },
+    "ts" : "string"
+  } ],
+  "POST /api/logs/{id}/undo" : {
+    "entry" : {
+      "action" : {
+        "mode" : "string",
+        "revert" : "boolean",
+        "type" : "string",
+        "value" : "number"
+      },
+      "after" : {
+        "dailyBudget" : "number"
+      },
+      "before" : {
+        "dailyBudget" : "number",
+        "effective" : "string",
+        "level" : "string",
+        "metrics" : {
+          "cpa" : "null",
+          "results" : "number",
+          "roas" : "null",
+          "spend" : "number"
+        },
+        "status" : "string"
+      },
+      "detail" : "string",
+      "id" : "string",
+      "kind" : "string",
+      "mode" : "string",
+      "name" : "string",
+      "ok" : "boolean",
+      "refLogId" : "string",
+      "source" : "string",
+      "target" : {
+        "accountId" : "string",
+        "accountName" : "string",
+        "id" : "string",
+        "level" : "string",
+        "name" : "string"
+      },
+      "ts" : "string"
+    },
+    "ok" : "boolean"
+  },
+  "GET /api/state" : {
+    "rules" : "array",
+    "schedules" : "array",
+    "settings" : {
+      "accessToken" : "string",
+      "accountTargets" : "object",
+      "adAccountId" : "string",
+      "adAccountIds" : "array",
+      "alertAccount" : "boolean",
+      "alertDisapproved" : "boolean",
+      "alertSpike" : "boolean",
+      "apiVersion" : "string",
+      "dailyChangeCapPct" : "number",
+      "dailySpendLimit" : "number",
+      "dryRun" : "boolean",
+      "fbAppId" : "string",
+      "fbAppSecret" : "string",
+      "fbConfigId" : "string",
+      "has_accessToken" : "boolean",
+      "has_fbAppSecret" : "boolean",
+      "has_telegramToken" : "boolean",
+      "killScope" : "string",
+      "killSwitchEnabled" : "boolean",
+      "mock" : "boolean",
+      "reportTime" : "string",
+      "resultAction" : "string",
+      "ruleIntervalMin" : "number",
+      "skipLearning" : "boolean",
+      "spikeMinSpend" : "number",
+      "spikePct" : "number",
+      "telegramChatId" : "string",
+      "telegramToken" : "string",
+      "timezone" : "string",
+      "weeklyReport" : "boolean"
+    },
+    "storage" : {
+      "lastError" : "string",
+      "lastSavedAt" : "null",
+      "mode" : "string",
+      "pending" : "boolean",
+      "provider" : "string"
+    }
+  },
+  "GET /api/storage" : {
+    "lastError" : "string",
+    "lastSavedAt" : "null",
+    "mode" : "string",
+    "pending" : "boolean",
+    "provider" : "string"
+  },
+  "GET /api/company" : {
+    "config" : {
+      "baseUrl" : "string",
+      "email" : "string",
+      "enabled" : "boolean",
+      "has_password" : "boolean",
+      "leadMin" : "number",
+      "mode" : "string",
+      "slots" : [ "number" ],
+      "teams" : [ {
+        "accountIds" : [ "string" ],
+        "code" : "string",
+        "id" : "string",
+        "match" : "string",
+        "name" : "string"
+      } ]
+    },
+    "reports" : [ ]
+  },
+  "POST /api/company/config" : {
+    "config" : {
+      "baseUrl" : "string",
+      "email" : "string",
+      "enabled" : "boolean",
+      "has_password" : "boolean",
+      "leadMin" : "number",
+      "mode" : "string",
+      "slots" : [ "number" ],
+      "teams" : [ {
+        "accountIds" : [ "string" ],
+        "code" : "string",
+        "id" : "string",
+        "match" : "string",
+        "name" : "string"
+      } ]
+    }
+  },
+  "POST /api/company/test" : {
+    "teams" : [ {
+      "code" : "string",
+      "id" : "string",
+      "name" : "string",
+      "status" : "string"
+    } ],
+    "user" : {
+      "email" : "string",
+      "name" : "string",
+      "role" : "string"
+    }
+  },
+  "GET /api/company/teams" : {
+    "teams" : [ {
+      "code" : "string",
+      "id" : "string",
+      "name" : "string",
+      "status" : "string"
+    } ]
+  },
+  "POST /api/company/reports/build" : {
+    "built" : [ "string" ],
+    "reports" : [ {
+      "attempts" : "number",
+      "builtAt" : "string",
+      "campaigns" : [ "string" ],
+      "createdAt" : "string",
+      "date" : "string",
+      "dateRule" : "number",
+      "edited" : [ ],
+      "error" : "string",
+      "id" : "string",
+      "issue" : "string",
+      "metrics" : {
+        "clicks" : "number",
+        "dso_after" : "number",
+        "impressions" : "number",
+        "messages" : "number",
+        "orders" : "number",
+        "phones" : "number",
+        "spend" : "number"
+      },
+      "nextTryAt" : "null",
+      "notes" : "string",
+      "reasons" : [ ],
+      "remote" : "null",
+      "remoteId" : "null",
+      "remoteStatus" : "null",
+      "remoteUpdatedAt" : "null",
+      "resolution" : "string",
+      "sentAs" : "null",
+      "sentAt" : "null",
+      "slot" : "number",
+      "status" : "string",
+      "teamCode" : "string",
+      "teamId" : "string",
+      "teamName" : "string",
+      "updatedAt" : "string"
+    } ]
+  },
+  "POST /api/company/reports/{id}" : {
+    "attempts" : "number",
+    "builtAt" : "string",
+    "campaigns" : [ "string" ],
+    "createdAt" : "string",
+    "date" : "string",
+    "dateRule" : "number",
+    "edited" : [ ],
+    "error" : "string",
+    "id" : "string",
+    "issue" : "string",
+    "metrics" : {
+      "clicks" : "number",
+      "dso_after" : "number",
+      "impressions" : "number",
+      "messages" : "number",
+      "orders" : "number",
+      "phones" : "number",
+      "spend" : "number"
+    },
+    "nextTryAt" : "null",
+    "notes" : "string",
+    "reasons" : [ ],
+    "remote" : "null",
+    "remoteId" : "null",
+    "remoteStatus" : "null",
+    "remoteUpdatedAt" : "null",
+    "resolution" : "string",
+    "sentAs" : "null",
+    "sentAt" : "null",
+    "slot" : "number",
+    "status" : "string",
+    "teamCode" : "string",
+    "teamId" : "string",
+    "teamName" : "string",
+    "updatedAt" : "string"
+  },
+  "POST /api/company/sync" : {
+    "reports" : [ {
+      "attempts" : "number",
+      "builtAt" : "string",
+      "campaigns" : [ "string" ],
+      "createdAt" : "string",
+      "date" : "string",
+      "dateRule" : "number",
+      "edited" : [ ],
+      "error" : "string",
+      "id" : "string",
+      "issue" : "string",
+      "metrics" : {
+        "clicks" : "number",
+        "dso_after" : "number",
+        "impressions" : "number",
+        "messages" : "number",
+        "orders" : "number",
+        "phones" : "number",
+        "spend" : "number"
+      },
+      "nextTryAt" : "null",
+      "notes" : "string",
+      "reasons" : [ ],
+      "remote" : "null",
+      "remoteId" : "null",
+      "remoteStatus" : "null",
+      "remoteUpdatedAt" : "null",
+      "resolution" : "string",
+      "sentAs" : "null",
+      "sentAt" : "null",
+      "slot" : "number",
+      "status" : "string",
+      "teamCode" : "string",
+      "teamId" : "string",
+      "teamName" : "string",
+      "updatedAt" : "string"
+    } ],
+    "synced" : "number"
+  },
+  "DELETE /api/company/reports/{id}" : {
+    "ok" : "boolean"
+  }
+}

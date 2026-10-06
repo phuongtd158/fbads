@@ -5,6 +5,11 @@ import com.fbads.common.ApiException;
 import com.fbads.common.DateRanges;
 import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
+import com.fbads.dto.Responses.Insights;
+import com.fbads.dto.Responses.ObjectsList;
+import com.fbads.dto.Responses.ObjectsMeta;
+import com.fbads.dto.Responses.Trend;
+import com.fbads.dto.Responses.TrendEvent;
 import com.fbads.entity.LogEntry;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookInsights;
@@ -39,15 +44,12 @@ public class ObjectService {
         this.logs = logs;
     }
 
-    public Map<String, Object> list(boolean refresh) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("items", objects.listObjects(refresh));
-        m.putAll(objects.objectsMeta());
-        return m;
+    public ObjectsList list(boolean refresh) {
+        return new ObjectsList(objects.listObjects(refresh), objects.objectsMeta());
     }
 
     /** Số liệu theo khoảng ngày cho Tổng quan: ?range=last_7d hoặc ?since=…&until=… (trống = hôm nay) */
-    public Map<String, Object> insights(Map<String, String> q) {
+    public Insights insights(Map<String, String> q) {
         String today = DateRanges.todayIn(settings.get().getTimezone());
         DateRanges.Parsed parsed = DateRanges.parse(q, today);
         if (!parsed.ok()) throw new ApiException(400, parsed.error());
@@ -55,20 +57,10 @@ public class ObjectService {
         FacebookInsights.RangeResult got = insights.rangeData(new FacebookInsights.RangeQuery(parsed.key(),
                 DateRanges.fbParams(parsed.spec(), today), range.days()),
                 "1".equals(q.get("refresh")));
-        Map<String, Object> meta = objects.objectsMeta();
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("range", parsed.spec().toJson());
-        m.put("key", parsed.key());
-        m.put("since", range.since());
-        m.put("until", range.until());
-        m.put("days", range.days());
-        m.put("at", got.at() == null || got.at() == 0 ? null : got.at());
-        m.put("stale", got.stale());
-        m.put("blockedUntil", meta.get("blockedUntil"));
-        m.put("usage", meta.get("usage"));
-        m.put("accountErrors", meta.get("accountErrors"));
-        m.put("metrics", got.data());
-        return m;
+        ObjectsMeta meta = objects.objectsMeta();
+        return new Insights(parsed.spec().toJson(), parsed.key(), range.since(), range.until(), range.days(),
+                got.at() == null || got.at() == 0 ? null : got.at(), got.stale(), meta.blockedUntil(), meta.usage(),
+                meta.accountErrors(), got.data());
     }
 
     static final int TREND_DAYS = 30;
@@ -78,7 +70,7 @@ public class ObjectService {
      * Xu hướng theo ngày của một camp/nhóm QC (biểu đồ): ?days=30 (7–90), tính tới hôm nay theo múi giờ trong Cài đặt.
      * Kèm các lần bật/tắt/đổi ngân sách đã làm thật với mục này trong khoảng đó (lấy từ Nhật ký) để đánh dấu trên biểu đồ.
      */
-    public Map<String, Object> trend(String id, String daysParam, boolean refresh) {
+    public Trend trend(String id, String daysParam, boolean refresh) {
         if (!OBJ_ID.matcher(id).matches()) throw new ApiException(400, "Mã camp không hợp lệ");
         int n;
         try {
@@ -94,7 +86,7 @@ public class ObjectService {
         String until = DateRanges.todayIn(s.getTimezone());
         String since = LocalDate.parse(until).minusDays(n - 1).toString();
         FacebookInsights.TrendResult got = insights.dailyTrend(id, since, until, refresh);
-        List<Map<String, Object>> events = new ArrayList<>();
+        List<TrendEvent> events = new ArrayList<>();
         for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
             Object type = l.getAction() == null ? null : l.getAction().get("type");
             if (l.getTarget() == null || !id.equals(l.getTarget().get("id")) || !Boolean.TRUE.equals(l.getOk())
@@ -102,17 +94,11 @@ public class ObjectService {
                     || !List.of("on", "off", "budget").contains(type) || "mock".equals(l.getMode()) != s.isMock()) continue;
             String date = l.getTs().atZone(zone).toLocalDate().toString();
             if (date.compareTo(since) < 0 || date.compareTo(until) > 0) continue;
-            Map<String, Object> e = new LinkedHashMap<>();
-            e.put("ts", l.getTs().toString()); e.put("date", date); e.put("type", type); e.put("source", l.getSource());
-            e.put("detail", l.getDetail());
-            events.add(e);
+            events.add(new TrendEvent(l.getTs().toString(), date, (String) type, l.getSource(), l.getDetail()));
         }
-        events.sort(Comparator.comparing(e -> (String) e.get("ts")));
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", id); m.put("since", since); m.put("until", until); m.put("days", got.days()); m.put("events", events);
-        m.put("at", got.at() == 0 ? null : got.at()); m.put("stale", got.stale());
-        m.put("blockedUntil", objects.objectsMeta().get("blockedUntil"));
-        return m;
+        events.sort(Comparator.comparing(TrendEvent::ts));
+        return new Trend(id, since, until, got.days(), events, got.at() == 0 ? null : got.at(), got.stale(),
+                objects.objectsMeta().blockedUntil());
     }
 
     public void setStatus(String id, boolean on, String name) {

@@ -5,6 +5,8 @@ import com.fbads.client.MockAds;
 import com.fbads.client.RateLimits;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.ObjectsMeta;
+import com.fbads.dto.Responses.Usage;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.AccInfo;
 import com.fbads.service.facebook.FacebookState.Cache0;
@@ -130,16 +132,12 @@ public class FacebookObjects {
     }
 
     /** Thông tin kèm danh sách cho giao diện: số liệu lúc nào, có phải số cũ không, mức dùng API, tài khoản */
-    public Map<String, Object> objectsMeta() {
+    public ObjectsMeta objectsMeta() {
         Ws w = state.ws();
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("at", w.cache.at() == 0 ? null : w.cache.at());
-        m.put("stale", w.cache.stale());
-        m.put("blockedUntil", limits.blocked() ? limits.blockedUntil() : null);
-        m.put("usage", limits.at() == 0 ? null : Map.of("pct", limits.pct(), "tier", limits.tier()));
-        m.put("accounts", accounts());
-        m.put("accountErrors", state.isMock() ? List.of() : w.accErrors);
-        return m;
+        return new ObjectsMeta(w.cache.at() == 0 ? null : w.cache.at(), w.cache.stale(),
+                limits.blocked() ? limits.blockedUntil() : null,
+                limits.at() == 0 ? null : new Usage(limits.pct(), limits.tier()), accounts(),
+                state.isMock() ? List.of() : w.accErrors);
     }
 
     /** Tài khoản quảng cáo đang quản lý: { id, name, currency } */

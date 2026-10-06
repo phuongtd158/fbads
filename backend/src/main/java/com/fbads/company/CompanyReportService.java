@@ -4,6 +4,11 @@ import com.fbads.common.ApiException;
 import com.fbads.common.ValidationException;
 import com.fbads.dto.CompanyConfigPatch;
 import com.fbads.dto.CompanyReportPatch;
+import com.fbads.dto.Responses.CompanyBuilt;
+import com.fbads.dto.Responses.CompanyConfigSaved;
+import com.fbads.dto.Responses.CompanyLogin;
+import com.fbads.dto.Responses.CompanyOverview;
+import com.fbads.dto.Responses.CompanyTeams;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
@@ -83,14 +88,11 @@ public class CompanyReportService {
         return reports.findAllByOrderBySeqDesc();
     }
 
-    public Map<String, Object> overview() {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("config", config().publicView());
-        m.put("reports", list());
-        return m;
+    public CompanyOverview overview() {
+        return new CompanyOverview(config().publicView(), list());
     }
 
-    public Map<String, Object> saveConfig(CompanyConfigPatch patch) {
+    public CompanyConfigSaved saveConfig(CompanyConfigPatch patch) {
         CompanyConfig c = config();
         Result<CompanyRules.ConfigValue> r = CompanyRules.validateConfig(patch == null ? new CompanyConfigPatch() : patch, c);
         if (!r.ok()) throw new ValidationException(r);
@@ -105,20 +107,18 @@ public class CompanyReportService {
         if (v.teams() != null) c.setTeams(new ArrayList<>(v.teams()));
         CompanyConfig saved = configs.save(c);
         api.reset(); // đổi tài khoản/địa chỉ → đăng nhập lại ở lần gọi sau
-        return Map.of("config", saved.publicView());
+        return new CompanyConfigSaved(saved.publicView());
     }
 
     /** Đăng nhập thử bằng tài khoản đã lưu → tên người dùng + danh sách Team để chọn */
-    public Map<String, Object> test() {
+    public CompanyLogin test() {
         CompanyConfig c = config();
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("user", api.test(c));
-        m.put("teams", api.listTeams(c));
-        return m;
+        Map<String, String> user = api.test(c);
+        return new CompanyLogin(user, api.listTeams(c));
     }
 
-    public Map<String, Object> teams() {
-        return Map.of("teams", api.listTeams(config()));
+    public CompanyTeams teams() {
+        return new CompanyTeams(api.listTeams(config()));
     }
 
     // ------------------------------------------------------------------ Chạy theo mốc
@@ -152,17 +152,14 @@ public class CompanyReportService {
     }
 
     /** Tạo bản báo cáo của một mốc ngay (không chờ đến giờ) */
-    public Map<String, Object> buildNow(Double slotIn, boolean notify) {
+    public CompanyBuilt buildNow(Double slotIn, boolean notify) {
         int slot = slotIn == null || slotIn != Math.rint(slotIn) ? -1 : (int) (double) slotIn;
         if (!CompanyRules.SLOTS.contains(slot)) throw new ApiException(400, "Mốc báo cáo không hợp lệ");
         if (config().getTeams().isEmpty()) {
             throw new ApiException(400, "Chưa có Team nào. Thêm Team ở Cài đặt → Báo cáo công ty.");
         }
         List<CompanyReport> list = createDrafts(slot, clock.now().date(), !notify);
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("reports", list());
-        m.put("built", list.stream().map(CompanyReport::getId).toList());
-        return m;
+        return new CompanyBuilt(list(), list.stream().map(CompanyReport::getId).toList());
     }
 
     // ------------------------------------------------------------------ Sửa, gửi, cập nhật

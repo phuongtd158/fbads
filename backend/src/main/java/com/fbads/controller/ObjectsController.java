@@ -1,6 +1,11 @@
 package com.fbads.controller;
 
 import com.fbads.dto.Requests;
+import com.fbads.dto.Responses.Insights;
+import com.fbads.dto.Responses.ObjectsList;
+import com.fbads.dto.Responses.Ok;
+import com.fbads.dto.Responses.Trend;
+import com.fbads.dto.Responses.Undone;
 import com.fbads.entity.LogEntry;
 import com.fbads.service.LogService;
 import com.fbads.service.ObjectService;
@@ -14,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,8 +26,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class ObjectsController {
-    private static final Map<String, Object> OK = Map.of("ok", true);
-
     private final ObjectService objects;
     private final LogService logs;
     private final UndoService undo;
@@ -35,40 +37,42 @@ public class ObjectsController {
     }
 
     @GetMapping("/objects")
-    Map<String, Object> list(@RequestParam(required = false) String refresh) { return objects.list("1".equals(refresh)); }
+    ObjectsList list(@RequestParam(required = false) String refresh) {
+        return objects.list("1".equals(refresh));
+    }
 
     @GetMapping("/insights")
-    Map<String, Object> insights(@RequestParam Map<String, String> q) { return objects.insights(q); }
+    Insights insights(@RequestParam Map<String, String> q) {
+        return objects.insights(q);
+    }
 
     @GetMapping("/objects/{id}/trend")
-    Map<String, Object> trend(@PathVariable String id, @RequestParam(required = false) String days,
+    Trend trend(@PathVariable String id, @RequestParam(required = false) String days,
             @RequestParam(required = false) String refresh) {
         return objects.trend(id, days, "1".equals(refresh));
     }
 
     @PostMapping("/objects/{id}/status")
-    Map<String, Object> status(@PathVariable String id, @RequestBody(required = false) Requests.StatusChange body) {
+    Ok status(@PathVariable String id, @RequestBody(required = false) Requests.StatusChange body) {
         Requests.StatusChange b = body == null ? Requests.StatusChange.EMPTY : body;
         objects.setStatus(id, b.on(), b.name());
-        return OK;
+        return Ok.OK;
     }
 
     /** Số tiền kiểm tra bằng Bean Validation (@Valid + chú thích trong Requests.Budget) */
     @PostMapping("/objects/{id}/budget")
-    Map<String, Object> budget(@PathVariable String id, @Valid @RequestBody Requests.Budget b) {
+    Ok budget(@PathVariable String id, @Valid @RequestBody Requests.Budget b) {
         objects.setBudget(id, b.amount(), b.name());
-        return OK;
+        return Ok.OK;
     }
 
     @GetMapping("/logs")
-    List<LogEntry> logs() { return logs.recent(300); }
+    List<LogEntry> logs() {
+        return logs.recent(300);
+    }
 
     @PostMapping("/logs/{id}/undo")
-    Map<String, Object> undo(@PathVariable String id, @RequestBody(required = false) Requests.Undo b) {
-        LogEntry entry = undo.undo(id, (b == null ? Requests.Undo.EMPTY : b).force());
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("ok", true);
-        m.put("entry", entry);
-        return m;
+    Undone undo(@PathVariable String id, @RequestBody(required = false) Requests.Undo b) {
+        return new Undone(true, undo.undo(id, (b == null ? Requests.Undo.EMPTY : b).force()));
     }
 }

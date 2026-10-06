@@ -1,5 +1,7 @@
 package com.fbads.controller;
 
+import com.fbads.dto.Responses.State;
+import com.fbads.dto.Responses.Storage;
 import com.fbads.dto.SettingsPatch;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
@@ -16,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,29 +45,16 @@ public class SettingsController {
         this.telegram = telegram;
     }
 
-    /** Nơi lưu dữ liệu (hiện ở Cài đặt → Chung) */
-    static Map<String, Object> storage() {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("mode", "db");
-        m.put("provider", "MySQL");
-        m.put("lastSavedAt", null);
-        m.put("lastError", "");
-        m.put("pending", false);
-        return m;
-    }
-
     @GetMapping("/state")
-    Map<String, Object> state() {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("settings", settings.publicSettings());
-        m.put("schedules", schedules.findAll());
-        m.put("rules", rules.findAll());
-        m.put("storage", storage());
-        return m;
+    State state() {
+        return new State(settings.publicSettings(), schedules.findAll(), rules.findAll(), Storage.MYSQL);
     }
 
+    /** Nơi lưu dữ liệu (hiện ở Cài đặt → Chung) */
     @GetMapping("/storage")
-    Map<String, Object> storageStatus() { return storage(); }
+    Storage storageStatus() {
+        return Storage.MYSQL;
+    }
 
     @PostMapping("/settings")
     ResponseEntity<?> save(@RequestBody(required = false) SettingsPatch body) {
