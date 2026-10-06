@@ -16,6 +16,7 @@ public final class Passwords {
     private Passwords() {}
 
     public static PasswordEncoder encoder() {
-        return new DelegatingPasswordEncoder("bcrypt", Map.of("bcrypt", new BCryptPasswordEncoder(), LEGACY, new NodeScryptPasswordEncoder()));
+        return new DelegatingPasswordEncoder("bcrypt",
+                Map.of("bcrypt", new BCryptPasswordEncoder(), LEGACY, new NodeScryptPasswordEncoder()));
     }
 }

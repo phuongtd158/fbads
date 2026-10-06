@@ -2,10 +2,11 @@ package com.fbads.client;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /** Lỗi khi gọi Facebook: message đã dịch sang tiếng Việt; fb = chi tiết gốc (mã lỗi, fbtrace_id…) để ghi nhật ký. */
 public class FbException extends RuntimeException {
-    private static final java.util.Set<Integer> RATE_CODES = java.util.Set.of(4, 17, 32, 613);
+    private static final Set<Integer> RATE_CODES = Set.of(4, 17, 32, 613);
     private final Map<String, Object> fb;
 
     public FbException(String message, Map<String, Object> fb) {

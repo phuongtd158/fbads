@@ -18,7 +18,8 @@ import jakarta.persistence.Table;
 @Table(name = "daily_marks")
 public class DailyMark {
     @Embeddable
-    public record Key(@Column(name = "workspace_id") Long workspaceId, @Column(name = "day") String day, @Column(name = "mark") String mark) {}
+    public record Key(@Column(name = "workspace_id") Long workspaceId, @Column(name = "day") String day,
+            @Column(name = "mark") String mark) {}
 
     @EmbeddedId
     private Key key;

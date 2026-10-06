@@ -82,7 +82,8 @@ public final class DateRanges {
             }
             return new Resolved(since.toString(), until.toString(), (int) ChronoUnit.DAYS.between(since, until) + 1);
         }
-        return new Resolved(spec.since(), spec.until(), (int) ChronoUnit.DAYS.between(LocalDate.parse(spec.since()), LocalDate.parse(spec.until())) + 1);
+        return new Resolved(spec.since(), spec.until(),
+                (int) ChronoUnit.DAYS.between(LocalDate.parse(spec.since()), LocalDate.parse(spec.until())) + 1);
     }
 
     /** Tham số gửi Facebook Insights: date_preset khi có tên sẵn, không thì time_range */
@@ -97,7 +98,8 @@ public final class DateRanges {
         String preset = q.get("range") != null ? q.get("range") : q.get("preset");
         if (q.get("since") != null || q.get("until") != null) {
             String since = q.get("since"), until = q.get("until");
-            if (!isIsoDate(since) || !isIsoDate(until)) return err("Ngày bắt đầu và ngày kết thúc phải có dạng năm-tháng-ngày (vd 2026-09-01).");
+            if (!isIsoDate(since) || !isIsoDate(until))
+                return err("Ngày bắt đầu và ngày kết thúc phải có dạng năm-tháng-ngày (vd 2026-09-01).");
             if (since.compareTo(until) > 0) return err("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
             if (until.compareTo(today) > 0) return err("Không chọn được ngày trong tương lai.");
             if (since.compareTo(minDate(today)) < 0) return err("Facebook chỉ giữ số liệu khoảng " + MAX_BACK_MONTHS + " tháng gần nhất.");

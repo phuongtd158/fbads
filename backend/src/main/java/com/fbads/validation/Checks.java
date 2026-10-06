@@ -48,14 +48,21 @@ public final class Checks {
         return cleanAccountId(v).matches("^\\d{5,}$") ? "" : "ID tài khoản quảng cáo chỉ gồm chữ số và có ít nhất 5 số (ví dụ 1234567890)";
     }
 
-    public static String checkAppId(String v) { return (v == null ? "" : v).trim().matches("^\\d{8,}$") ? "" : "App ID chỉ gồm chữ số (ít nhất 8 số)"; }
+    public static String checkAppId(String v) {
+        return (v == null ? "" : v).trim().matches("^\\d{8,}$") ? "" : "App ID chỉ gồm chữ số (ít nhất 8 số)";
+    }
 
-    public static String checkAppSecret(String v) { return (v == null ? "" : v).trim().matches("(?i)^[a-f0-9]{16,}$") ? "" : "App Secret gồm chữ và số (thường 32 ký tự)"; }
+    public static String checkAppSecret(String v) {
+        return (v == null ? "" : v).trim().matches("(?i)^[a-f0-9]{16,}$") ? "" : "App Secret gồm chữ và số (thường 32 ký tự)";
+    }
 
-    public static String checkConfigId(String v) { return v == null || v.isEmpty() || v.trim().matches("^\\d{5,}$") ? "" : "Configuration ID chỉ gồm chữ số"; }
+    public static String checkConfigId(String v) {
+        return v == null || v.isEmpty() || v.trim().matches("^\\d{5,}$") ? "" : "Configuration ID chỉ gồm chữ số";
+    }
 
     public static String checkTelegramToken(String v) {
-        return v == null || v.isEmpty() || TG_TOKEN.matcher(v.trim()).matches() ? "" : "Bot Token không đúng dạng (ví dụ 123456789:AAxxxxxxxx…)";
+        return v == null || v.isEmpty() || TG_TOKEN.matcher(v.trim()).matches() ? ""
+                : "Bot Token không đúng dạng (ví dụ 123456789:AAxxxxxxxx…)";
     }
 
     /** Nhiều Chat ID cách nhau bằng dấu phẩy / chấm phẩy / khoảng trắng; bỏ trùng không phân biệt hoa thường */
@@ -72,7 +79,8 @@ public final class Checks {
         List<String> ids = parseChatIds(v);
         for (String id : ids) {
             if (!TG_CHAT.matcher(id).matches())
-                return "“" + (id.length() > 24 ? id.substring(0, 24) + "…" : id) + "” không phải Chat ID hợp lệ (dãy số, có thể có dấu -, hoặc @tenkenh)";
+                return "“" + (id.length() > 24 ? id.substring(0, 24) + "…" : id)
+                        + "” không phải Chat ID hợp lệ (dãy số, có thể có dấu -, hoặc @tenkenh)";
         }
         if (ids.size() > MAX_TG_CHATS) return "Tối đa " + MAX_TG_CHATS + " Chat ID (đang nhập " + ids.size() + ")";
         return "";

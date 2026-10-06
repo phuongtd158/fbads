@@ -32,11 +32,16 @@ public class ApiFilters {
         protected boolean shouldNotFilter(HttpServletRequest req) { return !req.getRequestURI().startsWith("/api/"); }
 
         @Override
-        protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
+        protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                FilterChain chain) throws ServletException, IOException {
             res.setHeader("Cache-Control", "no-store");
             res.setHeader("X-Content-Type-Options", "nosniff");
             String m = req.getMethod();
-            if (m.equals("GET") || (m.equals("HEAD") && (req.getRequestURI().equals("/api/auth") || req.getRequestURI().equals("/api/health")))) { chain.doFilter(req, res); return; }
+            if (m.equals("GET") || (m.equals("HEAD")
+                    && (req.getRequestURI().equals("/api/auth") || req.getRequestURI().equals("/api/health")))) {
+                chain.doFilter(req, res);
+                return;
+            }
             String origin = req.getHeader("Origin");
             if (origin != null) {
                 String host;

@@ -45,7 +45,9 @@ public class CompanyController {
     }
 
     @PostMapping("/reports/{id}")
-    CompanyReport update(@PathVariable String id, @RequestBody(required = false) CompanyReportPatch body) { return company.update(id, body); }
+    CompanyReport update(@PathVariable String id, @RequestBody(required = false) CompanyReportPatch body) {
+        return company.update(id, body);
+    }
 
     @PostMapping("/reports/{id}/send")
     CompanyReport send(@PathVariable String id) { return company.send(id, CompanyReportService.SOURCE); }

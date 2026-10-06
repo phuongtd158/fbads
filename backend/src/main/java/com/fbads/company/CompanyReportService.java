@@ -31,11 +31,15 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Báo cáo lên hệ thống nội bộ của công ty theo các mốc 9h / 12h / 17h / 22h (bản Java của lib/companyReport.js).
@@ -60,7 +64,8 @@ public class CompanyReportService {
     static final int SYNC_DAYS = 3;
     public static final String SOURCE = "Báo cáo công ty";
     public static final String AUTO_SOURCE = "Báo cáo công ty (tự động)";
-    static final String LOCKED_MSG = "Báo cáo trên hệ thống công ty đã khoá, tool không sửa được. Muốn sửa hãy gửi yêu cầu chỉnh sửa trên web công ty.";
+    static final String LOCKED_MSG = "Báo cáo trên hệ thống công ty đã khoá, tool không sửa được. Muốn sửa hãy gửi yêu "
+            + "cầu chỉnh sửa trên web công ty.";
     static final String MANUAL_HINT = "Mở tool → <b>Báo cáo công ty</b> để kiểm tra và gửi.";
 
     private final CompanyConfigRepository configs;
@@ -76,8 +81,9 @@ public class CompanyReportService {
     /** Bản báo cáo đang gửi (không gửi hai lần cùng lúc) */
     private final Set<String> inflight = ConcurrentHashMap.newKeySet();
 
-    public CompanyReportService(CompanyConfigRepository configs, CompanyReportRepository reports, CompanyApi api, FacebookService fb, SettingsService settings,
-                                LogService logs, EventBus events, EngineClock clock, EngineState state, JsonMapper mapper) {
+    public CompanyReportService(CompanyConfigRepository configs, CompanyReportRepository reports, CompanyApi api,
+            FacebookService fb, SettingsService settings, LogService logs, EventBus events, EngineClock clock,
+            EngineState state, JsonMapper mapper) {
         this.configs = configs;
         this.reports = reports;
         this.api = api;
@@ -140,7 +146,9 @@ public class CompanyReportService {
     private boolean isMock() { return settings.get().isMock(); }
 
     static String teamLabel(CompanyReport r) {
-        String s = java.util.stream.Stream.of(r.getTeamCode(), r.getTeamName()).filter(x -> x != null && !x.isEmpty()).collect(Collectors.joining(" · "));
+        String s = Stream.of(r.getTeamCode(), r.getTeamName())
+                .filter(x -> x != null && !x.isEmpty())
+                .collect(Collectors.joining(" · "));
         return s.isEmpty() ? r.getTeamId() : s;
     }
 
@@ -168,10 +176,12 @@ public class CompanyReportService {
 
     /** Tin Telegram của một bản báo cáo */
     String summary(CompanyReport r, String head) {
-        java.util.function.Function<String, String> val = k -> r.getMetrics().get(k) == null ? "<i>chưa nhập</i>" : "<b>" + Fmt.money(r.getMetrics().get(k)) + "</b>";
+        Function<String, String> val = k -> r.getMetrics().get(k) == null ? "<i>chưa nhập</i>"
+                : "<b>" + Fmt.money(r.getMetrics().get(k)) + "</b>";
         List<String> lines = new ArrayList<>();
         lines.add(head + " <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + "</b>"
-                + (CompanyRules.updatesExisting(r.getSlot()) ? " · chốt cả ngày, cập nhật sáng " + CompanyRules.dm(CompanyRules.submitDate(r.getSlot(), r.getDate())) : ""));
+                + (CompanyRules.updatesExisting(r.getSlot())
+                        ? " · chốt cả ngày, cập nhật sáng " + CompanyRules.dm(CompanyRules.submitDate(r.getSlot(), r.getDate())) : ""));
         lines.add("<b>" + esc(teamLabel(r)) + "</b> (" + (r.getCampaigns() == null ? 0 : r.getCampaigns().size()) + " chiến dịch)");
         lines.add("Chi tiêu Ads: " + val.apply("spend"));
         lines.add("Tin nhắn: " + val.apply("messages") + " · SĐT: " + val.apply("phones"));
@@ -200,23 +210,35 @@ public class CompanyReportService {
         List<CompanyReport> out = new ArrayList<>();
         for (CompanyConfig.Team team : c.getTeams()) {
             CompanyReport r = reports.findByTeamIdAndDateAndSlot(team.id(), date, slot).orElse(null);
-            if (r != null && ("sent".equals(r.getStatus()) || ("exists".equals(r.getStatus()) && !CompanyRules.updatesExisting(slot)))) { out.add(r); continue; }
+            if (r != null && ("sent".equals(r.getStatus()) || ("exists".equals(r.getStatus()) && !CompanyRules.updatesExisting(slot)))) {
+                out.add(r);
+                continue;
+            }
             Built built;
             try {
                 built = build(team, slot);
             } catch (RuntimeException e) {
                 String label = !team.code().isEmpty() ? team.code() : !team.name().isEmpty() ? team.name() : team.id();
                 String mode = settings.get().mode();
-                logs.log(l -> { l.setKind("company"); l.setSource(SOURCE); l.setName(label); l.setDetail("Không lấy được số Facebook cho mốc " + slot + "h: " + e.getMessage());
-                    l.setOk(false); l.setMode(mode); l.setError(Map.of("message", String.valueOf(e.getMessage()))); });
+                logs.log(l -> {
+                    l.setKind("company");
+                    l.setSource(SOURCE);
+                    l.setName(label);
+                    l.setDetail("Không lấy được số Facebook cho mốc " + slot + "h: " + e.getMessage());
+                    l.setOk(false);
+                    l.setMode(mode);
+                    l.setError(Map.of("message", String.valueOf(e.getMessage())));
+                });
                 if (!silent || "auto".equals(c.getMode()))
-                    telegram("❌ <b>Báo cáo công ty · " + slot + "h ngày " + CompanyRules.dm(date) + "</b>\n<b>" + esc(label) + "</b>: không lấy được số Facebook nên chưa tạo báo cáo.\n" + esc(e.getMessage()));
+                    telegram("❌ <b>Báo cáo công ty · " + slot + "h ngày " + CompanyRules.dm(date) + "</b>\n<b>" + esc(label)
+                            + "</b>: không lấy được số Facebook nên chưa tạo báo cáo.\n" + esc(e.getMessage()));
                 continue;
             }
             Instant now = now();
             if (r == null) r = new CompanyReport(Ids.uid(), team.id(), date, slot, now);
             r.setTeamCode(team.code()); r.setTeamName(team.name()); r.setCampaigns(new ArrayList<>(built.campaigns()));
-            r.setUpdatedAt(now); r.setBuiltAt(now); r.setStatus("pending"); r.setError(""); r.setReasons(new ArrayList<>()); r.setAttempts(0); r.setNextTryAt(null);
+            r.setUpdatedAt(now); r.setBuiltAt(now); r.setStatus("pending"); r.setError("");
+            r.setReasons(new ArrayList<>()); r.setAttempts(0); r.setNextTryAt(null);
             Set<String> edited = new HashSet<>(r.getEdited());
             Map<String, Long> metrics = new LinkedHashMap<>(r.getMetrics());
             built.metrics().forEach((k, v) -> { if (!edited.contains(k)) metrics.put(k, v); });
@@ -233,20 +255,25 @@ public class CompanyReportService {
     private static boolean retryable(RuntimeException e) { return e instanceof ApiException a && (a.status() == 502 || a.status() == 504); }
 
     private static String existsFoot(CompanyReport r) {
-        return r.getRemote() != null && r.getRemote().locked() ? "\nBáo cáo trên công ty đã khoá, muốn sửa hãy gửi yêu cầu chỉnh sửa trên web công ty." : "";
+        return r.getRemote() != null && r.getRemote().locked()
+                ? "\nBáo cáo trên công ty đã khoá, muốn sửa hãy gửi yêu cầu chỉnh sửa trên web công ty." : "";
     }
 
     void attemptAuto(CompanyReport r) {
         r.setAttempts(r.getAttempts() + 1);
         try {
             send(r, AUTO_SOURCE);
-            String done = "update".equals(r.getSentAs()) ? "Đã tự cập nhật vào báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + " trên công ty" : "Đã tự gửi lên công ty";
+            String done = "update".equals(r.getSentAs())
+                    ? "Đã tự cập nhật vào báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + " trên công ty"
+                    : "Đã tự gửi lên công ty";
             telegram(summary(r, "✅") + "\n\n" + done + ("LATE".equals(r.getRemoteStatus()) ? " (công ty ghi nhận nộp muộn)" : "") + ".");
         } catch (RuntimeException e) {
             if ("exists".equals(r.getStatus())) {
                 String why = CompanyRules.updatesExisting(r.getSlot()) && r.getRemote() != null && r.getRemote().locked()
-                        ? "báo cáo của mốc này trên công ty đã khoá nên tool không cập nhật được." : "hệ thống công ty đã có báo cáo của mốc này nên tool không gửi đè.";
-                telegram("ℹ️ <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + "</b>\n<b>" + esc(teamLabel(r)) + "</b>: " + why + existsFoot(r));
+                        ? "báo cáo của mốc này trên công ty đã khoá nên tool không cập nhật được."
+                                : "hệ thống công ty đã có báo cáo của mốc này nên tool không gửi đè.";
+                telegram("ℹ️ <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + "</b>\n<b>"
+                        + esc(teamLabel(r)) + "</b>: " + why + existsFoot(r));
                 return;
             }
             if (retryable(e) && r.getAttempts() < RETRY_MAX) {
@@ -273,8 +300,10 @@ public class CompanyReportService {
                 r.setStatus("review");
                 r.setReasons(new ArrayList<>(reasons));
                 reports.save(r);
-                log(r, AUTO_SOURCE, "Chưa tự gửi báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + ": " + String.join("; ", reasons), false, null, true);
-                telegram(summary(r, "⚠️") + "\n\nChưa tự gửi vì số trông bất thường:\n" + String.join("\n", reasons.stream().map(x -> "• " + esc(x)).toList()) + "\n" + MANUAL_HINT);
+                log(r, AUTO_SOURCE, "Chưa tự gửi báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + ": "
+                        + String.join("; ", reasons), false, null, true);
+                telegram(summary(r, "⚠️") + "\n\nChưa tự gửi vì số trông bất thường:\n"
+                        + String.join("\n", reasons.stream().map(x -> "• " + esc(x)).toList()) + "\n" + MANUAL_HINT);
                 continue;
             }
             attemptAuto(r);
@@ -296,11 +325,15 @@ public class CompanyReportService {
             if (auto) autoSend(list);
         }
         // Bản đang chờ thử lại (lỗi mạng / hệ thống công ty lỗi) đã đến giờ
-        if (auto) for (CompanyReport r : reports.findByStatus("retry")) if (r.getNextTryAt() != null && !r.getNextTryAt().isAfter(now())) attemptAuto(r);
+        if (auto)
+            for (CompanyReport r : reports.findByStatus("retry"))
+                if (r.getNextTryAt() != null && !r.getNextTryAt().isAfter(now())) attemptAuto(r);
     }
 
     // ------------------------------------------------------------------ Sửa, gửi, cập nhật
-    private CompanyReport find(String id) { return reports.findById(id).orElseThrow(() -> new ApiException(404, "Không tìm thấy bản báo cáo này")); }
+    private CompanyReport find(String id) {
+        return reports.findById(id).orElseThrow(() -> new ApiException(404, "Không tìm thấy bản báo cáo này"));
+    }
 
     /** Sửa số / ghi chú. Bản đã khoá trên công ty thì không sửa được. Số đã sửa tay không bị số Facebook ghi đè khi làm mới. */
     public CompanyReport update(String id, CompanyReportPatch patch) {
@@ -309,10 +342,10 @@ public class CompanyReportService {
         Result<CompanyRules.PatchValue> v = CompanyRules.validateReportPatch(patch == null ? CompanyReportPatch.EMPTY : patch);
         if (!v.ok()) throw new ValidationException(v);
         if (!v.value().metrics().isEmpty()) {
-            Set<String> edited = new java.util.LinkedHashSet<>(r.getEdited());
+            Set<String> edited = new LinkedHashSet<>(r.getEdited());
             Map<String, Long> metrics = new LinkedHashMap<>(r.getMetrics());
             v.value().metrics().forEach((k, val) -> {
-                if (!java.util.Objects.equals(metrics.get(k), val) || !metrics.containsKey(k)) { metrics.put(k, val); edited.add(k); }
+                if (!Objects.equals(metrics.get(k), val) || !metrics.containsKey(k)) { metrics.put(k, val); edited.add(k); }
             });
             r.setMetrics(metrics);
             r.setEdited(new ArrayList<>(edited));
@@ -329,13 +362,17 @@ public class CompanyReportService {
         Map<String, Long> metrics = new LinkedHashMap<>();
         JsonNode src = x.path("metrics");
         for (String k : CompanyRules.METRIC_KEYS) {
-            if (src.isObject()) { JsonNode v = src.path(k); metrics.put(k, v.isMissingNode() || v.isNull() ? null : Math.round(v.asDouble())); }
+            if (src.isObject()) {
+                JsonNode v = src.path(k);
+                metrics.put(k, v.isMissingNode() || v.isNull() ? null : Math.round(v.asDouble()));
+            }
             else metrics.put(k, fallback == null ? null : fallback.get(k));
         }
         JsonNode rev = x.path("revision");
-        return new CompanyReport.Remote(x.path("id").asString(""), x.path("status").asString(""), rev.isMissingNode() || rev.isNull() ? null : rev.asInt(),
-                x.path("locked").asBoolean(false), metrics, x.path("notes").asString(""), x.path("issue").asString(""), x.path("resolution").asString(""),
-                x.path("updated_at").asString(""), now().toString());
+        Integer revision = rev.isMissingNode() || rev.isNull() ? null : rev.asInt();
+        return new CompanyReport.Remote(x.path("id").asString(""), x.path("status").asString(""), revision,
+                x.path("locked").asBoolean(false), metrics, x.path("notes").asString(""), x.path("issue").asString(""),
+                x.path("resolution").asString(""), x.path("updated_at").asString(""), now().toString());
     }
 
     private static String what(CompanyReport r) { return "báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()); }
@@ -347,23 +384,31 @@ public class CompanyReportService {
     CompanyReport send(CompanyReport r, String source) {
         CompanyConfig c = config();
         if ("sent".equals(r.getStatus())) throw new ApiException(400, "Báo cáo này đã gửi rồi.");
-        if (!c.canSend()) throw new ApiException(400, "Đang ở chế độ Chỉ xem nên tool không gửi lên công ty. Đổi chế độ gửi ở Cài đặt → Báo cáo công ty.");
+        if (!c.canSend())
+            throw new ApiException(400, "Đang ở chế độ Chỉ xem nên tool không gửi lên công ty. Đổi chế độ gửi ở Cài đặt "
+                    + "→ Báo cáo công ty.");
         if (isMock()) throw new ApiException(400, "Tool đang dùng dữ liệu giả (chế độ Dùng thử) nên không gửi báo cáo lên công ty.");
         List<CompanyRules.MetricDef> miss = CompanyRules.missingMetrics(r);
-        if (!miss.isEmpty()) throw new ApiException(400, "Còn thiếu: " + String.join(", ", miss.stream().map(CompanyRules.MetricDef::label).toList()) + ". Nhập đủ rồi mới gửi.");
+        if (!miss.isEmpty())
+            throw new ApiException(400, "Còn thiếu: "
+                    + String.join(", ", miss.stream().map(CompanyRules.MetricDef::label).toList()) + ". Nhập đủ rồi mới gửi.");
         if (!inflight.add(r.getId())) throw new ApiException(409, "Báo cáo này đang được gửi.");
         String what = what(r);
         try {
             JsonNode exist = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
-            if (exist != null && CompanyRules.updatesExisting(r.getSlot()) && !exist.path("locked").asBoolean(false)) return closeInto(c, r, exist, what, source);
+            if (exist != null && CompanyRules.updatesExisting(r.getSlot()) && !exist.path("locked").asBoolean(false))
+                return closeInto(c, r, exist, what, source);
             if (exist != null) {
                 boolean locked = CompanyRules.updatesExisting(r.getSlot());
-                r.setStatus("exists"); r.setRemote(remoteOf(exist, null)); r.setRemoteId(exist.path("id").asString("")); r.setRemoteStatus(exist.path("status").asString(""));
-                r.setError(locked ? LOCKED_MSG : "Hệ thống công ty đã có báo cáo của mốc này (tool không gửi đè). Muốn sửa hãy vào web công ty.");
+                r.setStatus("exists"); r.setRemote(remoteOf(exist, null)); r.setRemoteId(exist.path("id").asString(""));
+                r.setRemoteStatus(exist.path("status").asString(""));
+                r.setError(locked ? LOCKED_MSG : "Hệ thống công ty đã có báo cáo của mốc này (tool không gửi đè). Muốn "
+                        + "sửa hãy vào web công ty.");
                 if (locked) r.setNextTryAt(null);
                 r.setUpdatedAt(now());
                 reports.save(r);
-                log(r, source, locked ? "Không cập nhật " + what + ": báo cáo trên công ty đã khoá" : "Không gửi " + what + ": công ty đã có báo cáo của mốc này", false, null, false);
+                log(r, source, locked ? "Không cập nhật " + what + ": báo cáo trên công ty đã khoá"
+                        : "Không gửi " + what + ": công ty đã có báo cáo của mốc này", false, null, false);
                 throw new ApiException(409, r.getError());
             }
             Map<String, Object> body = CompanyRules.payloadOf(r);
@@ -374,10 +419,12 @@ public class CompanyReportService {
             x.put("id", res == null ? "" : res.path("id").asString(""));
             r.setRemote(remoteOf(x, r.getMetrics()));
             r.setStatus("sent"); r.setSentAs("create"); r.setSentAt(now());
-            r.setRemoteId(res == null ? "" : res.path("id").asString("")); r.setRemoteStatus(res == null ? "" : res.path("status").asString(""));
+            r.setRemoteId(res == null ? "" : res.path("id").asString(""));
+            r.setRemoteStatus(res == null ? "" : res.path("status").asString(""));
             r.setError(""); r.setReasons(new ArrayList<>()); r.setNextTryAt(null);
             reports.save(r);
-            log(r, source, "Đã gửi " + what + " lên công ty" + ("LATE".equals(r.getRemoteStatus()) ? " (công ty ghi nhận nộp muộn)" : ""), true, null, false);
+            log(r, source, "Đã gửi " + what + " lên công ty"
+                    + ("LATE".equals(r.getRemoteStatus()) ? " (công ty ghi nhận nộp muộn)" : ""), true, null, false);
             return r;
         } catch (RuntimeException e) {
             if (!"exists".equals(r.getStatus())) {
@@ -392,7 +439,8 @@ public class CompanyReportService {
     }
 
     /** Kết quả lưu sau khi cập nhật bản ghi đã có trên công ty: số vừa gửi + lần sửa tăng 1 + phần công ty trả về */
-    private CompanyReport.Remote remoteAfterUpdate(Map<String, Object> body, CompanyReport.Remote fresh, JsonNode res, Map<String, Long> metrics) {
+    private CompanyReport.Remote remoteAfterUpdate(Map<String, Object> body, CompanyReport.Remote fresh, JsonNode res,
+            Map<String, Long> metrics) {
         ObjectNode x = mapper.valueToTree(body);
         x.remove("reason");
         x.remove("revision");
@@ -421,23 +469,29 @@ public class CompanyReportService {
 
     /**
      * Cập nhật báo cáo đã có trên công ty bằng số đang có trên tool (người dùng bấm, luôn kèm lý do). Không bao giờ tự chạy.
-     * Lấy lại báo cáo mới nhất trên công ty: đã khoá → không sửa; lần sửa khác lần tool biết (có người vừa sửa trên web) → tải số mới về, không ghi đè.
+     * Lấy lại báo cáo mới nhất trên công ty: đã khoá → không sửa; lần sửa khác lần tool biết (có người vừa sửa trên
+     * web) → tải số mới về, không ghi đè.
      */
     public CompanyReport updateRemote(String id, String reason, String source) {
         CompanyConfig c = config();
         CompanyReport r = find(id);
         if (!r.isOnRemote()) throw new ApiException(400, "Báo cáo này chưa có trên hệ thống công ty, hãy dùng nút Gửi.");
-        if (!c.canSend()) throw new ApiException(400, "Đang ở chế độ Chỉ xem nên tool không gửi gì lên công ty. Đổi chế độ gửi ở Cài đặt → Báo cáo công ty.");
+        if (!c.canSend())
+            throw new ApiException(400, "Đang ở chế độ Chỉ xem nên tool không gửi gì lên công ty. Đổi chế độ gửi ở Cài "
+                    + "đặt → Báo cáo công ty.");
         if (isMock()) throw new ApiException(400, "Tool đang dùng dữ liệu giả (chế độ Dùng thử) nên không cập nhật lên công ty.");
         String bad = CompanyRules.validateReason(reason);
         if (!bad.isEmpty()) throw new ApiException(400, bad);
         List<CompanyRules.MetricDef> miss = CompanyRules.missingMetrics(r);
-        if (!miss.isEmpty()) throw new ApiException(400, "Còn thiếu: " + String.join(", ", miss.stream().map(CompanyRules.MetricDef::label).toList()) + ".");
+        if (!miss.isEmpty())
+            throw new ApiException(400, "Còn thiếu: " + String.join(", ", miss.stream().map(CompanyRules.MetricDef::label).toList()) + ".");
         if (!inflight.add(r.getId())) throw new ApiException(409, "Báo cáo này đang được gửi.");
         String what = what(r);
         try {
             JsonNode cur = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
-            if (cur == null) throw new ApiException(409, "Không thấy báo cáo của mốc này trên hệ thống công ty nữa (có thể đã bị xoá). Kiểm tra trên web công ty.");
+            if (cur == null)
+                throw new ApiException(409, "Không thấy báo cáo của mốc này trên hệ thống công ty nữa (có thể đã bị "
+                        + "xoá). Kiểm tra trên web công ty.");
             Integer known = r.getRemote() == null ? null : r.getRemote().revision();
             CompanyReport.Remote fresh = remoteOf(cur, null);
             if (fresh.locked()) {
@@ -448,7 +502,8 @@ public class CompanyReportService {
             if (known != null && fresh.revision() != null && !fresh.revision().equals(known)) {
                 r.setRemote(fresh);
                 reports.save(r);
-                throw new ApiException(409, "Báo cáo trên công ty vừa được sửa ở nơi khác (lần sửa " + fresh.revision() + "). Tool đã tải số mới về, kiểm tra lại rồi bấm cập nhật lần nữa.");
+                throw new ApiException(409, "Báo cáo trên công ty vừa được sửa ở nơi khác (lần sửa " + fresh.revision()
+                        + "). Tool đã tải số mới về, kiểm tra lại rồi bấm cập nhật lần nữa.");
             }
             Map<String, Object> body = CompanyRules.updatePayloadOf(r, fresh.revision(), reason);
             JsonNode res = api.submitReport(c, body);
@@ -477,19 +532,22 @@ public class CompanyReportService {
         if (!c.isEnabled() || c.getEmail().isEmpty() || isMock()) return 0;
         String since = now().minusSeconds(SYNC_DAYS * 86_400L).atOffset(ZoneOffset.UTC).toLocalDate().toString();
         Map<String, List<CompanyReport>> byTeam = new LinkedHashMap<>();
-        for (CompanyReport r : reports.findByDateGreaterThanEqual(since)) byTeam.computeIfAbsent(r.getTeamId(), k -> new ArrayList<>()).add(r);
+        for (CompanyReport r : reports.findByDateGreaterThanEqual(since))
+            byTeam.computeIfAbsent(r.getTeamId(), k -> new ArrayList<>()).add(r);
         int n = 0;
         for (Map.Entry<String, List<CompanyReport>> e : byTeam.entrySet()) {
             List<String> dates = e.getValue().stream().map(CompanyReport::getDate).sorted().toList();
             List<JsonNode> remote = api.listReports(c, e.getKey(), dates.getFirst(), dates.getLast());
             for (CompanyReport r : e.getValue()) {
-                JsonNode x = remote.stream().filter(y -> r.getDate().equals(y.path("date").asString("")) && y.path("slot").asDouble(-1) == r.getSlot()).findFirst().orElse(null);
+                JsonNode x = remote.stream().filter(y -> r.getDate().equals(y.path("date").asString(""))
+                        && y.path("slot").asDouble(-1) == r.getSlot()).findFirst().orElse(null);
                 if (x == null) continue;
                 r.setRemote(remoteOf(x, null));
                 r.setRemoteId(r.getRemote().id());
                 r.setRemoteStatus(r.getRemote().status());
                 // mốc 9h: bản ghi đã có trên công ty chính là chỗ tool sẽ cập nhật vào, nên vẫn để chờ gửi
-                if (!List.of("sent", "exists", "retry").contains(r.getStatus()) && !inflight.contains(r.getId()) && !CompanyRules.updatesExisting(r.getSlot())) {
+                if (!List.of("sent", "exists", "retry").contains(r.getStatus()) && !inflight.contains(r.getId())
+                        && !CompanyRules.updatesExisting(r.getSlot())) {
                     r.setStatus("exists");
                     r.setError("Hệ thống công ty đã có báo cáo của mốc này (tool không gửi đè).");
                     r.setNextTryAt(null);

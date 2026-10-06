@@ -2,11 +2,13 @@ package com.fbads.client;
 
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.DoubleUnaryOperator;
 
 /** Dữ liệu giả để dùng thử (chế độ mock): 6 chiến dịch trên 2 tài khoản mẫu, chi tiêu tăng dần theo giờ trong ngày. */
 public class MockAds {
@@ -92,16 +94,20 @@ public class MockAds {
         return out;
     }
 
-    /** Số liệu giả từng ngày của một camp/nhóm QC: ổn định theo camp và ngày (mở lại thấy cùng số), chi tiêu dao động quanh ngân sách. null = không có mục này */
+    /**
+     * Số liệu giả từng ngày của một camp/nhóm QC: ổn định theo camp và ngày (mở lại thấy cùng số), chi tiêu dao động
+     * quanh ngân sách. null = không có mục này
+     */
     public synchronized List<Map.Entry<String, Metrics>> trend(String id, List<String> dates) {
         AdObject o = objs().stream().filter(x -> x.id.equals(id)).findFirst().orElse(null);
         if (o == null) return null;
         List<Map.Entry<String, Metrics>> out = new ArrayList<>();
         for (String date : dates) {
-            double n = java.time.LocalDate.parse(date).toEpochDay();
-            java.util.function.DoubleUnaryOperator wave = k -> (Math.sin(n * k + o.seed * 1.7) + 1) / 2; // 0..1
+            double n = LocalDate.parse(date).toEpochDay();
+            DoubleUnaryOperator wave = k -> (Math.sin(n * k + o.seed * 1.7) + 1) / 2; // 0..1
             double spend = Math.round(o.dailyBudget * (0.55 + 0.45 * wave.applyAsDouble(0.9)));
-            double results = Math.floor(spend / ((60000 + o.seed * 25000 + (o.seed % 2) * 90000) * (0.75 + 0.5 * wave.applyAsDouble(0.37))));
+            double results = Math.floor(spend / ((60000 + o.seed * 25000 + (o.seed % 2) * 90000) * (0.75
+                    + 0.5 * wave.applyAsDouble(0.37))));
             out.add(Map.entry(date, metrics(spend, results, o.seed)));
         }
         return out;

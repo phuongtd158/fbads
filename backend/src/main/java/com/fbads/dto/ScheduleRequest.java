@@ -33,12 +33,14 @@ public record ScheduleRequest(
         /** Chỉ false mới tắt lịch; không gửi = bật */
         Boolean enabled) {
 
-    public static final ScheduleRequest EMPTY = new ScheduleRequest(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    public static final ScheduleRequest EMPTY = new ScheduleRequest(null, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null);
 
     public record Window(String on, String off) {}
 
     /** Lọc theo điều kiện: cấp, ngân sách so với x (và y khi "between"), cụm tên, trạng thái, tài khoản */
-    public record Filter(String level, String op, @JsNumber Double x, @JsNumber Double y, String name, String status, String account, Boolean onlyRunning) {
+    public record Filter(String level, String op, @JsNumber Double x, @JsNumber Double y, String name, String status,
+            String account, Boolean onlyRunning) {
         public static final Filter EMPTY = new Filter(null, null, null, null, null, null, null, null);
     }
 }

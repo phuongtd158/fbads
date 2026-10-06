@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import java.io.IOException;
 
 /**
  * Spring Security:
@@ -41,8 +42,10 @@ public class SecurityConfig {
                 .securityContext(sc -> sc.securityContextRepository(repo))
                 .headers(h -> h.cacheControl(cc -> cc.disable())) // cache do từng phần tự đặt (API: no-store, file build: 1 năm)
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/api/auth", "/api/health", "/api/login", "/api/logout", "/api/setup", "/api/register", "/api/fb/callback").permitAll()
-                        .requestMatchers("/api/**", "/ws", "/ws/**").access((authentication, ctx) -> new AuthorizationDecision(auth.allowed(authentication.get())))
+                        .requestMatchers("/api/auth", "/api/health", "/api/login", "/api/logout", "/api/setup", "/api/register",
+                                "/api/fb/callback").permitAll()
+                        .requestMatchers("/api/**", "/ws", "/ws/**").access((authentication, ctx) ->
+                                new AuthorizationDecision(auth.allowed(authentication.get())))
                         .anyRequest().permitAll())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((req, res, e) -> unauthorized(res))
@@ -50,7 +53,7 @@ public class SecurityConfig {
         return http.build();
     }
 
-    private static void unauthorized(HttpServletResponse res) throws java.io.IOException {
+    private static void unauthorized(HttpServletResponse res) throws IOException {
         res.setStatus(401);
         res.setContentType("application/json;charset=UTF-8");
         res.setHeader("Cache-Control", "no-store");

@@ -11,7 +11,8 @@ public final class Labels {
             Map.entry("ctr", "CTR"), Map.entry("cpc", "CPC"), Map.entry("cpm", "CPM"), Map.entry("messages", "Tin nhắn"),
             Map.entry("costPerMessage", "Chi phí/tin nhắn"), Map.entry("leads", "Lead"), Map.entry("costPerLead", "Chi phí/lead"),
             Map.entry("frequency", "Tần suất"));
-    public static final Map<String, String> RANGE = Map.of("today", "hôm nay", "yesterday", "hôm qua", "last_3d", "3 ngày gần nhất", "last_7d", "7 ngày gần nhất");
+    public static final Map<String, String> RANGE = Map.of("today", "hôm nay", "yesterday", "hôm qua", "last_3d",
+            "3 ngày gần nhất", "last_7d", "7 ngày gần nhất");
 
     private Labels() {}
 

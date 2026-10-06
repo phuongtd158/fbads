@@ -78,7 +78,10 @@ public final class CompanyRules {
         return new ArrayList<>(out);
     }
 
-    /** Chiến dịch thuộc một Team: đúng tài khoản QC (nếu có chọn) VÀ tên chứa một trong các từ khoá (nếu có nhập). Team chưa chọn gì → không có. */
+    /**
+     * Chiến dịch thuộc một Team: đúng tài khoản QC (nếu có chọn) VÀ tên chứa một trong các từ khoá (nếu có nhập). Team
+     * chưa chọn gì → không có.
+     */
     public static List<AdObject> teamCampaigns(CompanyConfig.Team team, List<AdObject> objs) {
         List<String> accs = team == null || team.accountIds() == null ? List.of() : team.accountIds();
         List<String> words = matchWords(team == null ? null : team.match());
@@ -88,24 +91,29 @@ public final class CompanyRules {
                 && (words.isEmpty() || words.stream().anyMatch(w -> (o.name == null ? "" : o.name).toLowerCase().contains(w)))).toList();
     }
 
-    /** Cộng số Facebook của các chiến dịch → 7 số của form (Tin nhắn = cuộc trò chuyện, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO = doanh thu) */
+    /**
+     * Cộng số Facebook của các chiến dịch → 7 số của form (Tin nhắn = cuộc trò chuyện, SĐT = khách hàng tiềm năng, Đơn
+     * = kết quả, DSO = doanh thu)
+     */
     public static Map<String, Long> sumMetrics(List<AdObject> camps, Map<String, Metrics> data) {
         double[] t = new double[7];
         for (AdObject o : camps) {
             Metrics m = data == null ? null : data.get(o.id);
             if (m == null) continue;
-            t[0] += m.spend(); t[1] += m.conversations(); t[2] += m.leads(); t[3] += m.results(); t[4] += m.revenue(); t[5] += m.impressions(); t[6] += m.clicks();
+            t[0] += m.spend(); t[1] += m.conversations(); t[2] += m.leads(); t[3] += m.results(); t[4] += m.revenue();
+            t[5] += m.impressions(); t[6] += m.clicks();
         }
         Map<String, Long> out = new LinkedHashMap<>();
-        for (int i = 0; i < 7; i++) out.put(List.of("spend", "messages", "phones", "orders", "dso_after", "impressions", "clicks").get(i), Math.round(t[i]));
+        for (int i = 0; i < 7; i++)
+            out.put(List.of("spend", "messages", "phones", "orders", "dso_after", "impressions", "clicks").get(i), Math.round(t[i]));
         return out;
     }
 
     // ------------------------------------------------------------------ Kiểm tra dữ liệu
 
     /** Cài đặt đã qua kiểm tra: chỉ các khoá được gửi (mật khẩu trống = giữ mật khẩu cũ) */
-    public record ConfigValue(Boolean enabled, String mode, List<Integer> slots, Integer leadMin, String baseUrl, String email, String password,
-                              List<CompanyConfig.Team> teams) {}
+    public record ConfigValue(Boolean enabled, String mode, List<Integer> slots, Integer leadMin, String baseUrl,
+            String email, String password, List<CompanyConfig.Team> teams) {}
 
     /** JS Number(x) cho giá trị JSON đã đọc thành Object */
     static double jsNumber(Object v) {
@@ -134,7 +142,8 @@ public final class CompanyRules {
         if (p.has("slots")) {
             LinkedHashSet<Double> s = new LinkedHashSet<>();
             if (p.getSlots() != null) for (Object x : p.getSlots()) s.add(jsNumber(x));
-            if (s.stream().anyMatch(x -> !SLOTS.contains((int) (double) x) || x != Math.rint(x))) e.put("slots", "Mốc báo cáo không hợp lệ");
+            if (s.stream().anyMatch(x -> !SLOTS.contains((int) (double) x) || x != Math.rint(x)))
+                e.put("slots", "Mốc báo cáo không hợp lệ");
             else slots = SLOTS.stream().filter(x -> s.contains((double) x)).toList();
         }
         if (p.has("leadMin")) {
@@ -148,7 +157,8 @@ public final class CompanyRules {
             boolean ok = false;
             try {
                 URI x = new URI(u);
-                ok = "https".equals(x.getScheme()) && x.getHost() != null && x.getRawUserInfo() == null && (x.getRawPath() == null || x.getRawPath().isEmpty() || x.getRawPath().equals("/"))
+                ok = "https".equals(x.getScheme()) && x.getHost() != null && x.getRawUserInfo() == null
+                        && (x.getRawPath() == null || x.getRawPath().isEmpty() || x.getRawPath().equals("/"))
                         && x.getRawQuery() == null && x.getRawFragment() == null;
             } catch (Exception ignored) { /* sai dạng */ }
             if (ok) baseUrl = u; else e.put("baseUrl", "Địa chỉ hệ thống phải là https://tên-miền (không kèm đường dẫn)");
@@ -168,20 +178,33 @@ public final class CompanyRules {
             else {
                 List<CompanyConfig.Team> out = new ArrayList<>();
                 for (int i = 0; i < raw.size(); i++) {
-                    CompanyConfigPatch.TeamRequest t = raw.get(i) == null ? new CompanyConfigPatch.TeamRequest(null, null, null, null, null) : raw.get(i);
+                    CompanyConfigPatch.TeamRequest t = raw.get(i) == null
+                            ? new CompanyConfigPatch.TeamRequest(null, null, null, null, null) : raw.get(i);
                     String id = (t.id() == null ? "" : t.id()).trim();
-                    String lb = t.code() != null && !t.code().isEmpty() ? t.code() : t.name() != null && !t.name().isEmpty() ? t.name() : "Team " + (i + 1);
+                    String lb = t.code() != null && !t.code().isEmpty() ? t.code()
+                            : t.name() != null && !t.name().isEmpty() ? t.name()
+                            : "Team " + (i + 1);
                     String label = lb.length() > 40 ? lb.substring(0, 40) : lb;
                     if (!TEAM_ID.matcher(id).matches()) { e.put("teams", label + ": hãy chọn Team của hệ thống công ty"); break; }
                     if (out.stream().anyMatch(x -> x.id().equals(id))) { e.put("teams", label + " bị chọn hai lần"); break; }
                     LinkedHashSet<String> accs = new LinkedHashSet<>();
-                    if (t.accountIds() != null) for (String a : t.accountIds()) { String v = (a == null ? "" : a).trim().replaceFirst("(?i)^act_", ""); if (!v.isEmpty()) accs.add(v); }
-                    if (accs.stream().anyMatch(a -> !ACCOUNT_ID.matcher(a).matches())) { e.put("teams", label + ": tài khoản quảng cáo không hợp lệ"); break; }
+                    if (t.accountIds() != null) for (String a : t.accountIds()) {
+                        String v = (a == null ? "" : a).trim().replaceFirst("(?i)^act_", "");
+                        if (!v.isEmpty()) accs.add(v);
+                    }
+                    if (accs.stream().anyMatch(a -> !ACCOUNT_ID.matcher(a).matches())) {
+                        e.put("teams", label + ": tài khoản quảng cáo không hợp lệ");
+                        break;
+                    }
                     String match = String.join(", ", matchWords(t.match()));
                     if (match.length() > 300) { e.put("teams", label + ": từ khoá tên chiến dịch quá dài"); break; }
-                    if (accs.isEmpty() && match.isEmpty()) { e.put("teams", label + ": hãy chọn tài khoản quảng cáo hoặc nhập từ khoá tên chiến dịch"); break; }
+                    if (accs.isEmpty() && match.isEmpty()) {
+                        e.put("teams", label + ": hãy chọn tài khoản quảng cáo hoặc nhập từ khoá tên chiến dịch");
+                        break;
+                    }
                     String code = (t.code() == null ? "" : t.code()).trim(), name = (t.name() == null ? "" : t.name()).trim();
-                    out.add(new CompanyConfig.Team(id, code.length() > 40 ? code.substring(0, 40) : code, name.length() > 120 ? name.substring(0, 120) : name,
+                    out.add(new CompanyConfig.Team(id, code.length() > 40 ? code.substring(0, 40) : code,
+                            name.length() > 120 ? name.substring(0, 120) : name,
                             new ArrayList<>(accs), match));
                 }
                 if (!e.containsKey("teams")) teams = out;
@@ -235,7 +258,8 @@ public final class CompanyRules {
         if (!miss.isEmpty()) out.add("Còn thiếu " + String.join(", ", miss.stream().map(MetricDef::label).toList()));
         if (r.getCampaigns() == null || r.getCampaigns().isEmpty()) out.add("Team không khớp chiến dịch nào (kiểm tra cấu hình Team)");
         Long orders = r.getMetrics().get("orders"), dso = r.getMetrics().get("dso_after");
-        if (orders != null && orders > 0 && !(dso != null && dso > 0)) out.add("Có đơn nhưng doanh thu bằng 0 (tài khoản chưa báo giá trị đơn về Facebook)");
+        if (orders != null && orders > 0 && !(dso != null && dso > 0))
+            out.add("Có đơn nhưng doanh thu bằng 0 (tài khoản chưa báo giá trị đơn về Facebook)");
         return out;
     }
 

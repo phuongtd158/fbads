@@ -59,7 +59,8 @@ public class AlertWatch {
     /** Lần kiểm tra gần nhất của mỗi workspace. Không lưu: khởi động lại thì kiểm tra ngay lượt đầu */
     private final Map<Long, Long> lastAt = new ConcurrentHashMap<>();
 
-    public AlertWatch(SettingsService settings, FacebookService fb, RateLimits limits, LogService logs, EventBus events, WsState state, EngineClock clock) {
+    public AlertWatch(SettingsService settings, FacebookService fb, RateLimits limits, LogService logs, EventBus events,
+            WsState state, EngineClock clock) {
         this.settings = settings;
         this.fb = fb;
         this.limits = limits;
@@ -73,7 +74,14 @@ public class AlertWatch {
 
     private void alert(String name, String detail, String text, boolean ok) {
         String mode = settings.get().mode();
-        logs.log(l -> { l.setKind("system"); l.setSource("Cảnh báo"); l.setName(name); l.setDetail(detail); l.setOk(ok); l.setMode(mode); });
+        logs.log(l -> {
+            l.setKind("system");
+            l.setSource("Cảnh báo");
+            l.setName(name);
+            l.setDetail(detail);
+            l.setOk(ok);
+            l.setMode(mode);
+        });
         events.publish(AppEvent.TELEGRAM_TEXT, "alerts", true, Map.of("text", text));
     }
 
@@ -93,7 +101,8 @@ public class AlertWatch {
     /** Mỗi lượt, trong workspace hiện tại */
     public void tick() {
         AppSettings s = settings.get();
-        if (s.isMock() || s.getAccessToken() == null || s.getAccessToken().isEmpty() || (!s.isAlertAccount() && !s.isAlertDisapproved() && !s.isAlertSpike())) return;
+        if (s.isMock() || s.getAccessToken() == null || s.getAccessToken().isEmpty()
+                || (!s.isAlertAccount() && !s.isAlertDisapproved() && !s.isAlertSpike())) return;
         long ws = WorkspaceContext.require();
         Long last = lastAt.get(ws);
         if (last != null && clock.millis() - last < EVERY_MS) return;
@@ -115,7 +124,10 @@ public class AlertWatch {
     private void checkAccount(String id, State st, AppSettings s, String today) {
         FacebookService.AccountHealth h = fb.accountHealth(id);
         String nm = h.name();
-        String cur = fb.accounts().stream().filter(a -> id.equals(a.get("id"))).map(a -> String.valueOf(a.get("currency"))).findFirst().orElse("");
+        String cur = fb.accounts().stream()
+                .filter(a -> id.equals(a.get("id")))
+                .map(a -> String.valueOf(a.get("currency")))
+                .findFirst().orElse("");
 
         if (s.isAlertAccount()) {
             Integer prev = st.acc().get(id);
@@ -124,7 +136,8 @@ public class AlertWatch {
                         "🚫 <b>Tài khoản quảng cáo có vấn đề</b>\n" + esc(nm) + " (" + esc(id) + "): <b>" + esc(h.statusText()) + "</b>.\n"
                                 + "Quảng cáo trong tài khoản này có thể đã ngừng chạy. Kiểm tra trong Trình quản lý quảng cáo.", false);
             } else if (h.active() && prev != null && prev != 1) {
-                alert(nm, "Tài khoản quảng cáo đã hoạt động lại.", "✅ <b>Tài khoản quảng cáo đã hoạt động lại</b>\n" + esc(nm) + " (" + esc(id) + ").", true);
+                alert(nm, "Tài khoản quảng cáo đã hoạt động lại.",
+                        "✅ <b>Tài khoản quảng cáo đã hoạt động lại</b>\n" + esc(nm) + " (" + esc(id) + ").", true);
             }
         }
         st.acc().put(id, h.status());
@@ -133,12 +146,15 @@ public class AlertWatch {
             List<DisapprovedAd> ads = fb.disapprovedAds(id);
             Set<String> seen = new HashSet<>(st.ads().getOrDefault(id, List.of()));
             List<DisapprovedAd> fresh = ads.stream().filter(a -> !seen.contains(a.id())).toList();
-            st.ads().put(id, new ArrayList<>(ads.stream().map(DisapprovedAd::id).toList())); // được duyệt lại thì bỏ khỏi danh sách → bị từ chối lần nữa sẽ báo lại
+            // được duyệt lại thì bỏ khỏi danh sách → bị từ chối lần nữa sẽ báo lại
+            st.ads().put(id, new ArrayList<>(ads.stream().map(DisapprovedAd::id).toList()));
             if (!fresh.isEmpty()) {
                 List<String> lines = fresh.stream().limit(MAX_LINES).map(a -> "• " + esc(a.name()) + " (camp " + esc(a.campaign())
-                        + (a.adset().isEmpty() ? "" : ", nhóm " + esc(a.adset())) + ")" + (a.reason().isEmpty() ? "" : ": " + esc(a.reason()))).toList();
+                        + (a.adset().isEmpty() ? "" : ", nhóm " + esc(a.adset())) + ")"
+                                + (a.reason().isEmpty() ? "" : ": " + esc(a.reason()))).toList();
                 String more = fresh.size() > MAX_LINES ? "\n…và " + (fresh.size() - MAX_LINES) + " quảng cáo khác" : "";
-                alert(nm, fresh.size() + " quảng cáo bị từ chối: " + String.join(", ", fresh.stream().limit(5).map(DisapprovedAd::name).toList()) + (fresh.size() > 5 ? "…" : ""),
+                alert(nm, fresh.size() + " quảng cáo bị từ chối: "
+                        + String.join(", ", fresh.stream().limit(5).map(DisapprovedAd::name).toList()) + (fresh.size() > 5 ? "…" : ""),
                         "⛔ <b>" + fresh.size() + " quảng cáo bị từ chối</b> ở " + esc(nm) + "\n" + String.join("\n", lines) + more, false);
             }
         }
@@ -150,9 +166,11 @@ public class AlertWatch {
                 if (sp != null) {
                     st.spike().put(id, today);
                     String until = String.format("%02d:00", sp.hour() + 1);
-                    alert(nm, "Chi tiêu hôm nay tới " + until + " là " + Fmt.money(sp.now()) + " " + cur + ", cao hơn " + sp.up() + "% so với cùng giờ hôm qua ("
+                    alert(nm, "Chi tiêu hôm nay tới " + until + " là " + Fmt.money(sp.now()) + " " + cur + ", cao hơn " + sp.up()
+                            + "% so với cùng giờ hôm qua ("
                                     + Fmt.money(sp.before()) + " " + cur + ").",
-                            "📈 <b>Chi tiêu tăng vọt</b> ở " + esc(nm) + "\nHôm nay tới " + until + ": <b>" + Fmt.money(sp.now()) + " " + esc(cur) + "</b>, cao hơn "
+                            "📈 <b>Chi tiêu tăng vọt</b> ở " + esc(nm) + "\nHôm nay tới " + until + ": <b>" + Fmt.money(sp.now())
+                                    + " " + esc(cur) + "</b>, cao hơn "
                                     + sp.up() + "% so với cùng giờ hôm qua (" + Fmt.money(sp.before()) + " " + esc(cur) + ").", false);
                 }
             }

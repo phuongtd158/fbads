@@ -23,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 /** Chạy rule theo chu kỳ, bật lại camp theo hẹn, xem trước rule và thống kê hoạt động của rule. */
 @Service
@@ -74,7 +75,8 @@ public class RuleRunner {
     private static void extras(Map<String, Object> m, RuleEvaluator.CondEval c) {
         if (c.compareRange() != null) m.put("compareRange", c.compareRange());
         if (c.tierMetric() != null) {
-            m.put("tierMetric", c.tierMetric()); m.put("tierCount", c.tierCount()); m.put("tierAt", c.tier() != null ? c.tier().count() : null);
+            m.put("tierMetric", c.tierMetric()); m.put("tierCount", c.tierCount());
+            m.put("tierAt", c.tier() != null ? c.tier().count() : null);
         }
         if (c.ladderNeed() != null && c.ladderNeed() != 0) { m.put("ladderStep", c.ladderStep()); m.put("ladderNeed", c.ladderNeed()); }
     }
@@ -96,14 +98,18 @@ public class RuleRunner {
                 String range = d.range.equals("today") ? "" : " " + Labels.range(d.range);
                 RuleEvaluator.CondEval c0 = d.conds.getFirst();
                 String what = d.ladder != null
-                        ? "Bậc " + (d.ladder.step() + 1) + ": có " + Fmt.num(d.ladder.count()) + " " + RuleEvaluator.unitWord(d.ladder.metric())
+                        ? "Bậc " + (d.ladder.step() + 1) + ": có " + Fmt.num(d.ladder.count()) + " "
+                                + RuleEvaluator.unitWord(d.ladder.metric())
                         : d.conds.size() == 1
                         ? Labels.metric(c0.metric()) + range + " " + Labels.show(c0.actual(), c0.metric())
-                        : String.join(" · ", d.conds.stream().map(c -> Labels.metric(c.metric()) + " " + Labels.show(c.actual(), c.metric())).toList())
+                        : String.join(" · ", d.conds.stream()
+                                .map(c -> Labels.metric(c.metric()) + " " + Labels.show(c.actual(), c.metric())).toList())
                           + (range.isEmpty() ? "" : " –" + range);
                 String r = executor.act(d.obj, d.action, "Rule: " + rule.getName() + " [" + what + "]",
-                        (d.planCtx != null ? d.planCtx : ActCtx.of("rule", rule.getId(), rule.getName())).withCondition(condition(rule, d, c0)));
-                if (d.ladder != null && "ok".equals(r)) state.setLadder(rule.getId(), d.obj.id, clock.now().date(), d.ladder.step(), clock.millis());
+                        (d.planCtx != null ? d.planCtx : ActCtx.of("rule", rule.getId(),
+                                rule.getName())).withCondition(condition(rule, d, c0)));
+                if (d.ladder != null && "ok".equals(r))
+                    state.setLadder(rule.getId(), d.obj.id, clock.now().date(), d.ladder.step(), clock.millis());
                 // Rule tắt có hẹn bật lại: ghi nhớ để bật lại vào giờ hẹn ngày hôm sau (chạy thử thì camp không bị tắt thật nên không cần)
                 if ("ok".equals(r) && "off".equals(d.action.type()) && "nextday".equals(rule.getResume()) && !settings.get().isDry())
                     state.addResume(rule.getId(), d.obj.id, clock.now().date());
@@ -124,7 +130,8 @@ public class RuleRunner {
             m.put("metric", x.metric()); m.put("op", x.op());
             if (x.vs() != null) m.put("vs", x.vs());
             if (x.factor() != null) m.put("factor", x.factor());
-            m.put("threshold", x.threshold()); m.put("actual", finite(x.actual())); m.put("actualInf", x.actual() == Double.POSITIVE_INFINITY);
+            m.put("threshold", x.threshold()); m.put("actual", finite(x.actual()));
+            m.put("actualInf", x.actual() == Double.POSITIVE_INFINITY);
             m.put("hit", x.hit()); m.put("unknown", x.unknown());
             extras(m, x);
             list.add(m);
@@ -132,7 +139,8 @@ public class RuleRunner {
         c.put("conditions", list);
         if (d.ladder != null) {
             Map<String, Object> l = new LinkedHashMap<>();
-            l.put("step", d.ladder.step() + 1); l.put("count", d.ladder.count()); l.put("need", d.ladder.need()); l.put("metric", d.ladder.metric());
+            l.put("step", d.ladder.step() + 1); l.put("count", d.ladder.count()); l.put("need", d.ladder.need());
+            l.put("metric", d.ladder.metric());
             l.put("total", rule.getSteps() == null ? 0 : rule.getSteps().size());
             c.put("ladder", l);
         }
@@ -149,7 +157,10 @@ public class RuleRunner {
         List<RuleResume> due = new ArrayList<>();
         for (RuleResume p : pending) {
             Rule rule = byId.get(p.getKey().ruleId());
-            if (rule == null || !"pause".equals(rule.getAction()) || !"nextday".equals(rule.getResume())) { state.removeResume(p.getKey()); continue; }
+            if (rule == null || !"pause".equals(rule.getAction()) || !"nextday".equals(rule.getResume())) {
+                state.removeResume(p.getKey());
+                continue;
+            }
             String at = rule.getResumeAt() == null || rule.getResumeAt().isEmpty() ? "06:00" : rule.getResumeAt();
             if (now.date().compareTo(p.getOffDate()) > 0 && now.minutes() >= EngineClock.toMin(at)) due.add(p);
         }
@@ -163,7 +174,8 @@ public class RuleRunner {
             state.setLastRun(rule.getId(), p.getKey().objId(), 0); // ngày mới: rule được xét lại ngay
             if (obj == null || "ACTIVE".equals(obj.status)) continue;
             String at = rule.getResumeAt() == null || rule.getResumeAt().isEmpty() ? "06:00" : rule.getResumeAt();
-            executor.act(obj, Action.on(), "Rule: " + rule.getName() + " [bật lại theo hẹn " + at + "]", ActCtx.of("rule", rule.getId(), rule.getName()));
+            executor.act(obj, Action.on(), "Rule: " + rule.getName() + " [bật lại theo hẹn " + at + "]",
+                    ActCtx.of("rule", rule.getId(), rule.getName()));
         }
     }
 
@@ -182,8 +194,10 @@ public class RuleRunner {
             List<Map<String, Object>> conds = new ArrayList<>();
             for (RuleEvaluator.CondEval c : d.conds) {
                 Map<String, Object> m = new LinkedHashMap<>();
-                m.put("metric", c.metric()); m.put("op", c.op()); m.put("vs", c.vs()); m.put("factor", c.factor()); m.put("threshold", c.threshold());
-                m.put("actual", finite(c.actual())); m.put("inf", c.actual() == Double.POSITIVE_INFINITY); m.put("hit", c.hit()); m.put("unknown", c.unknown());
+                m.put("metric", c.metric()); m.put("op", c.op()); m.put("vs", c.vs()); m.put("factor", c.factor());
+                m.put("threshold", c.threshold());
+                m.put("actual", finite(c.actual())); m.put("inf", c.actual() == Double.POSITIVE_INFINITY);
+                m.put("hit", c.hit()); m.put("unknown", c.unknown());
                 extras(m, c);
                 conds.add(m);
             }
@@ -201,11 +215,14 @@ public class RuleRunner {
         return out;
     }
 
-    /** Hoạt động gần đây của mỗi rule: số lần tác động / lỗi trong 7 ngày, lần gần nhất, số mục đang chờ bật lại. Không tính dòng "Bỏ qua". */
+    /**
+     * Hoạt động gần đây của mỗi rule: số lần tác động / lỗi trong 7 ngày, lần gần nhất, số mục đang chờ bật lại. Không
+     * tính dòng "Bỏ qua".
+     */
     public Map<String, Object> activity() {
         long since = System.currentTimeMillis() - 7 * 86_400_000L;
         Map<String, Map<String, Object>> out = new LinkedHashMap<>();
-        java.util.function.Function<String, Map<String, Object>> get = id -> out.computeIfAbsent(id, k -> {
+        Function<String, Map<String, Object>> get = id -> out.computeIfAbsent(id, k -> {
             Map<String, Object> a = new LinkedHashMap<>();
             a.put("acts", 0); a.put("errors", 0); a.put("last", null); a.put("resumePending", 0);
             return a;

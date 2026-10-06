@@ -24,7 +24,8 @@ import java.util.Map;
 @Entity
 @Table(name = "schedules")
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@JsonPropertyOrder({"id", "name", "action", "time", "times", "days", "window", "targetMode", "targets", "filter", "exclude", "mode", "value", "enabled", "max", "min"})
+@JsonPropertyOrder({"id", "name", "action", "time", "times", "days", "window", "targetMode", "targets", "filter", "exclude",
+        "mode", "value", "enabled", "max", "min"})
 public class Schedule {
     @Id
     private String id;

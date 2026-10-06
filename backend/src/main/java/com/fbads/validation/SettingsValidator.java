@@ -9,6 +9,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Kiểm tra phần cài đặt người dùng gửi lên (bản Java của validateSettings trong shared/validate.mjs).
@@ -21,7 +22,7 @@ public final class SettingsValidator {
         Result.Collector c = new Result.Collector();
         Map<String, String> e = c.e;
         Map<String, Object> v = new LinkedHashMap<>();
-        java.util.function.Predicate<String> has = patch::has;
+        Predicate<String> has = patch::has;
 
         if (has.test("timezone")) {
             String t = Json.str(patch.timezone()).trim();
@@ -50,7 +51,8 @@ public final class SettingsValidator {
         // Tài khoản quảng cáo: quản lý được nhiều tài khoản. adAccountId = tài khoản đầu tiên, giữ cho phần cũ.
         if (has.test("adAccountIds") || has.test("adAccountId")) {
             List<String> raw = has.test("adAccountIds") ? Json.strings(patch.adAccountIds()) : List.of(Json.str(patch.adAccountId()));
-            List<String> ids = new ArrayList<>(new LinkedHashSet<>(raw.stream().map(Checks::cleanAccountId).filter(s -> !s.isEmpty()).toList()));
+            List<String> ids = new ArrayList<>(new LinkedHashSet<>(
+                    raw.stream().map(Checks::cleanAccountId).filter(s -> !s.isEmpty()).toList()));
             String bad = ids.stream().filter(a -> !Checks.checkAccountId(a).isEmpty()).findFirst().orElse(null);
             if (bad != null) e.put("adAccountId", Checks.checkAccountId(bad) + " — \"" + bad + "\"");
             else if (ids.size() > Checks.ACCOUNTS_MAX) e.put("adAccountId", "Tối đa " + Checks.ACCOUNTS_MAX + " tài khoản quảng cáo");
@@ -75,7 +77,8 @@ public final class SettingsValidator {
         if (has.test("dailyChangeCapPct")) {
             double n = Json.num(patch.dailyChangeCapPct());
             if (n != Math.rint(n) || n < Checks.CAP_PCT_MIN || n > Checks.CAP_PCT_MAX)
-                e.put("dailyChangeCapPct", "Giới hạn thay đổi ngân sách mỗi ngày từ " + Checks.CAP_PCT_MIN + "% đến " + Checks.CAP_PCT_MAX + "%");
+                e.put("dailyChangeCapPct", "Giới hạn thay đổi ngân sách mỗi ngày từ " + Checks.CAP_PCT_MIN + "% đến "
+                        + Checks.CAP_PCT_MAX + "%");
             else v.put("dailyChangeCapPct", (int) n);
         }
         if (has.test("killSwitchEnabled")) v.put("killSwitchEnabled", Boolean.TRUE.equals(patch.killSwitchEnabled()));
@@ -96,7 +99,8 @@ public final class SettingsValidator {
         }
         if (has.test("dailySpendLimit")) {
             double n = patch.dailySpendLimit() == null ? 0 : patch.dailySpendLimit();
-            if (!Double.isFinite(n) || n < 0 || n > Checks.BUDGET_MAX) e.put("dailySpendLimit", "Mức chi tiêu tối đa mỗi ngày phải là số không âm");
+            if (!Double.isFinite(n) || n < 0 || n > Checks.BUDGET_MAX)
+                e.put("dailySpendLimit", "Mức chi tiêu tối đa mỗi ngày phải là số không âm");
             else v.put("dailySpendLimit", Math.round(n));
         }
         if (has.test("killScope")) {
@@ -120,16 +124,24 @@ public final class SettingsValidator {
                     if (!id.matches("^[A-Za-z0-9_]{1,40}$")) { e.put("accountTargets", "Mã tài khoản không hợp lệ: " + sid); break; }
                     Map<String, Number> o = new LinkedHashMap<>();
                     for (String k : cap.keySet()) {
-                        Double x = t == null ? null : switch (k) { case "cpa" -> t.cpa(); case "roas" -> t.roas(); default -> t.dailySpendLimit(); };
+                        Double x = t == null ? null : switch (k) {
+                            case "cpa" -> t.cpa();
+                            case "roas" -> t.roas();
+                            default -> t.dailySpendLimit();
+                        };
                         double n = x == null ? 0 : x;
                         if (!Double.isFinite(n) || n < 0 || n > cap.get(k)) {
-                            e.put("accountTargets", label.get(k) + " của tài khoản " + sid + " phải là số không âm" + (k.equals("roas") ? " (tối đa 100)" : ""));
+                            e.put("accountTargets", label.get(k) + " của tài khoản " + sid + " phải là số không âm"
+                                    + (k.equals("roas") ? " (tối đa 100)" : ""));
                             break outer;
                         }
                         if (n > 0) o.put(k, k.equals("roas") ? Math.round(n * 100) / 100.0 : Math.round(n));
                     }
                     if (!o.isEmpty()) out.put(id, o);
-                    if (out.size() > Checks.ACCOUNTS_MAX) { e.put("accountTargets", "Tối đa " + Checks.ACCOUNTS_MAX + " tài khoản"); break; }
+                    if (out.size() > Checks.ACCOUNTS_MAX) {
+                        e.put("accountTargets", "Tối đa " + Checks.ACCOUNTS_MAX + " tài khoản");
+                        break;
+                    }
                 }
             }
             if (!e.containsKey("accountTargets")) v.put("accountTargets", out);
@@ -142,9 +154,11 @@ public final class SettingsValidator {
         double limit = v.containsKey("dailySpendLimit") ? ((Number) v.get("dailySpendLimit")).doubleValue() : current.getDailySpendLimit();
         String scope = v.containsKey("killScope") ? (String) v.get("killScope") : current.getKillScope();
         @SuppressWarnings("unchecked")
-        Map<String, Map<String, Number>> targets = v.containsKey("accountTargets") ? (Map<String, Map<String, Number>>) v.get("accountTargets") : current.getAccountTargets();
+        Map<String, Map<String, Number>> targets = v.containsKey("accountTargets")
+                ? (Map<String, Map<String, Number>>) v.get("accountTargets") : current.getAccountTargets();
         boolean ownLimit = "account".equals(scope) && targets != null
-                && targets.values().stream().anyMatch(t -> t != null && t.get("dailySpendLimit") != null && t.get("dailySpendLimit").doubleValue() > 0);
+                && targets.values().stream().anyMatch(t -> t != null && t.get("dailySpendLimit") != null
+                        && t.get("dailySpendLimit").doubleValue() > 0);
         if ((has.test("killSwitchEnabled") || has.test("dailySpendLimit") || has.test("killScope") || has.test("accountTargets"))
                 && !e.containsKey("dailySpendLimit") && killOn && !(limit > 0) && !ownLimit)
             e.put("dailySpendLimit", "account".equals(scope)
@@ -155,7 +169,8 @@ public final class SettingsValidator {
             String token = v.containsKey("accessToken") ? (String) v.get("accessToken") : current.getAccessToken();
             @SuppressWarnings("unchecked")
             List<String> ids = v.containsKey("adAccountIds") ? (List<String>) v.get("adAccountIds") : current.accountIds();
-            if (!mock && (token == null || token.isEmpty() || ids.isEmpty())) e.put("mock", "Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.");
+            if (!mock && (token == null || token.isEmpty() || ids.isEmpty()))
+                e.put("mock", "Cần kết nối Facebook (token và tài khoản quảng cáo) trước khi dùng dữ liệu thật.");
         }
         return c.done(v);
     }

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 /**
  * Kiểm tra lịch trước khi lưu (bản Java của validateSchedule trong shared/validate.mjs).
@@ -77,25 +78,34 @@ public final class ScheduleValidator {
         Set<String> sel = new HashSet<>(targets);
         Map<String, AdObject> byId = new LinkedHashMap<>();
         for (AdObject o : objs) byId.put(o.id, o);
-        java.util.function.Predicate<AdObject> live = o -> !"ARCHIVED".equals(o.effective) && !"DELETED".equals(o.effective);
+        Predicate<AdObject> live = o -> !"ARCHIVED".equals(o.effective) && !"DELETED".equals(o.effective);
         if (turnsOn) {
             List<String> emptyCamps = targets.stream().filter(id -> {
                 AdObject o = byId.get(id);
                 if (o == null || !o.isCampaign()) return false;
-                List<AdObject> sets = objs.stream().filter(a -> "adset".equals(a.level) && id.equals(a.campaignId) && live.test(a)).toList();
+                List<AdObject> sets = objs.stream().filter(a -> "adset".equals(a.level) && id.equals(a.campaignId)
+                        && live.test(a)).toList();
                 return !sets.isEmpty() && sets.stream().allMatch(a -> "PAUSED".equals(a.status) && !sel.contains(a.id));
             }).toList();
-            if (!emptyCamps.isEmpty()) w.add("Mọi nhóm QC trong " + list(objs, emptyCamps) + " đang tắt, bật chiến dịch xong vẫn không chạy. Hãy chọn thêm nhóm QC cần bật.");
+            if (!emptyCamps.isEmpty())
+                w.add("Mọi nhóm QC trong " + list(objs, emptyCamps)
+                        + " đang tắt, bật chiến dịch xong vẫn không chạy. Hãy chọn thêm nhóm QC cần bật.");
             List<String> offParent = targets.stream().filter(id -> {
                 AdObject o = byId.get(id);
                 AdObject c = o != null && "adset".equals(o.level) ? byId.get(o.campaignId) : null;
                 return c != null && "PAUSED".equals(c.status) && !sel.contains(c.id);
             }).toList();
-            if (!offParent.isEmpty()) w.add(list(objs, offParent) + " thuộc chiến dịch đang tắt, bật nhóm QC xong vẫn không chạy. Hãy chọn thêm chiến dịch đó.");
+            if (!offParent.isEmpty())
+                w.add(list(objs, offParent) + " thuộc chiến dịch đang tắt, bật nhóm QC xong vẫn không chạy. Hãy chọn thêm chiến dịch đó.");
         }
-        List<String> dup = targets.stream().filter(id -> { AdObject o = byId.get(id); return o != null && "adset".equals(o.level) && sel.contains(o.campaignId); }).toList();
+        List<String> dup = targets.stream().filter(id -> {
+            AdObject o = byId.get(id);
+            return o != null && "adset".equals(o.level) && sel.contains(o.campaignId);
+        }).toList();
         if (!dup.isEmpty() && !turnsOn)
-            w.add("Đã chọn cả chiến dịch lẫn nhóm QC bên trong nó (" + list(objs, dup) + "). Tắt chiến dịch là đủ; nếu tắt cả nhóm QC thì lịch bật lại cũng phải chọn các nhóm QC đó, nếu không camp bật lên vẫn không chạy.");
+            w.add("Đã chọn cả chiến dịch lẫn nhóm QC bên trong nó (" + list(objs, dup)
+                    + "). Tắt chiến dịch là đủ; nếu tắt cả nhóm QC thì lịch bật lại cũng phải chọn các nhóm QC đó, nếu "
+                            + "không camp bật lên vẫn không chạy.");
         return w;
     }
 
@@ -121,7 +131,8 @@ public final class ScheduleValidator {
             if (!Checks.isTime(on) || !Checks.isTime(off)) e.put("time", "Chọn giờ bật và giờ tắt (dạng HH:MM, ví dụ 06:00)");
             else if (on.equals(off)) e.put("time", "Giờ tắt phải khác giờ bật");
             times = e.containsKey("time") ? List.of() : new ArrayList<>(new TreeSet<>(List.of(on, off)));
-            if (!e.containsKey("time") && off.compareTo(on) < 0) c.warn("Giờ tắt " + off + " sớm hơn giờ bật nên camp tắt vào " + off + " sáng hôm sau.");
+            if (!e.containsKey("time") && off.compareTo(on) < 0)
+                c.warn("Giờ tắt " + off + " sớm hơn giờ bật nên camp tắt vào " + off + " sáng hôm sau.");
         } else {
             List<String> rawTimes = input.times() != null ? Json.strings(input.times())
                     : Json.truthy(input.time()) ? List.of(input.time()) : List.of();
@@ -149,14 +160,18 @@ public final class ScheduleValidator {
             if (!fe.isEmpty()) e.put("filter", fe.values().iterator().next());
             exclude = uniq(Json.strings(input.exclude()));
             if (exclude.size() > 2000) exclude = exclude.subList(0, 2000);
-            if (!e.containsKey("filter") && "any".equals(filter.get("op")) && "".equals(filter.get("name")) && "all".equals(filter.get("status")))
-                c.warn("Điều kiện đang khớp " + ("adset".equals(filter.get("level")) ? "mọi nhóm QC" : "mọi chiến dịch") + " trên tài khoản.");
+            if (!e.containsKey("filter") && "any".equals(filter.get("op")) && "".equals(filter.get("name"))
+                    && "all".equals(filter.get("status")))
+                c.warn("Điều kiện đang khớp " + ("adset".equals(filter.get("level")) ? "mọi nhóm QC" : "mọi chiến dịch")
+                        + " trên tài khoản.");
         } else {
             targets = uniq(Json.strings(input.targets()));
             if (targets.isEmpty()) e.put("targets", "Hãy chọn ít nhất 1 chiến dịch hoặc nhóm QC");
             else if (objs != null) {
                 List<String> unknown = targets.stream().filter(id -> objs.stream().noneMatch(o -> o.id.equals(id))).toList();
-                if (!unknown.isEmpty()) e.put("targets", "Có mục không còn tồn tại trên tài khoản: " + String.join(", ", unknown.stream().limit(3).toList()) + ". Hãy bỏ chọn chúng.");
+                if (!unknown.isEmpty())
+                    e.put("targets", "Có mục không còn tồn tại trên tài khoản: "
+                            + String.join(", ", unknown.stream().limit(3).toList()) + ". Hãy bỏ chọn chúng.");
             }
         }
 
@@ -170,23 +185,29 @@ public final class ScheduleValidator {
                 else if (Math.abs(value) > Checks.BUDGET_MAX) e.put("value", "Số tiền quá lớn, hãy kiểm tra lại số 0");
                 else value = Math.round(value);
                 if (!e.containsKey("value") && !e.containsKey("time") && times.size() > 1)
-                    c.warn("Ngân sách sẽ " + (value > 0 ? "cộng" : "trừ") + " " + Fmt.money(Math.abs(value)) + " " + times.size() + " lần mỗi ngày và cộng dồn.");
+                    c.warn("Ngân sách sẽ " + (value > 0 ? "cộng" : "trừ") + " " + Fmt.money(Math.abs(value)) + " " + times.size()
+                            + " lần mỗi ngày và cộng dồn.");
             } else if (mode.equals("percent")) {
                 if (value == 0) e.put("value", "Phần trăm phải khác 0");
                 else if (value <= -100) e.put("value", "Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -90%.");
                 else if (value < -Checks.RULE_PCT_DECREASE_MAX) e.put("value", "Giảm tối đa " + Checks.RULE_PCT_DECREASE_MAX + "% mỗi lần");
                 else if (value > Checks.SCHEDULE_SET_PCT_MAX) e.put("value", "Tăng tối đa " + Checks.SCHEDULE_SET_PCT_MAX + "% mỗi lần");
-                else if (Math.abs(value) >= 50) c.warn((value > 0 ? "Tăng" : "Giảm") + " " + Fmt.num(Math.abs(value)) + "% một lần là thay đổi lớn, Facebook có thể học lại từ đầu.");
+                else if (Math.abs(value) >= 50)
+                    c.warn((value > 0 ? "Tăng" : "Giảm") + " " + Fmt.num(Math.abs(value))
+                            + "% một lần là thay đổi lớn, Facebook có thể học lại từ đầu.");
                 if (!e.containsKey("value") && !e.containsKey("time") && times.size() > 1)
                     c.warn("Ngân sách sẽ " + (value > 0 ? "tăng" : "giảm") + " " + Fmt.num(Math.abs(value)) + "% " + times.size()
-                            + " lần mỗi ngày và cộng dồn (lần sau tính trên ngân sách đã đổi). Nên đặt trần/sàn ngân sách hoặc dùng số tiền cố định.");
+                            + " lần mỗi ngày và cộng dồn (lần sau tính trên ngân sách đã đổi). Nên đặt trần/sàn ngân "
+                                    + "sách hoặc dùng số tiền cố định.");
             } else {
                 if (value <= 0) e.put("value", "Ngân sách phải lớn hơn 0");
                 else if (value > Checks.BUDGET_MAX) e.put("value", "Ngân sách quá lớn, hãy kiểm tra lại số 0");
                 else value = Math.round(value);
             }
             if (targetMode.equals("list") && !e.containsKey("targets") && objs != null) {
-                List<String> cbo = targets.stream().filter(id -> objs.stream().anyMatch(o -> o.id.equals(id) && o.dailyBudget == null)).toList();
+                List<String> cbo = targets.stream()
+                        .filter(id -> objs.stream().anyMatch(o -> o.id.equals(id) && o.dailyBudget == null))
+                        .toList();
                 if (!cbo.isEmpty())
                     e.put("targets", "Các mục sau không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO): "
                             + String.join(", ", cbo.stream().limit(3).map(id -> nameOf(objs, id)).toList()) + (cbo.size() > 3 ? "…" : "")
@@ -199,7 +220,8 @@ public final class ScheduleValidator {
         if (targetMode.equals("filter") && filter != null && !e.containsKey("filter")) {
             Object st = filter.get("status");
             if ("window".equals(action) && !"all".equals(st))
-                e.put("filter", "Lịch khung giờ theo điều kiện cần trạng thái “Tất cả”: tool lọc lại lúc bật và lúc tắt, lọc “Đang chạy”/“Đang tắt” sẽ ra 2 danh sách khác nhau.");
+                e.put("filter", "Lịch khung giờ theo điều kiện cần trạng thái “Tất cả”: tool lọc lại lúc bật và lúc "
+                        + "tắt, lọc “Đang chạy”/“Đang tắt” sẽ ra 2 danh sách khác nhau.");
             else if ("on".equals(action) && "running".equals(st))
                 c.warn("Lịch bật nhưng điều kiện chỉ lấy mục đang chạy nên không có gì để bật. Chọn trạng thái “Đang tắt” hoặc “Tất cả”.");
             else if ("off".equals(action) && "off".equals(st))
@@ -210,7 +232,8 @@ public final class ScheduleValidator {
         // Xung đột với các lịch đang bật (so từng lần chạy); lịch theo điều kiện không có danh sách cố định nên không so được
         boolean enabled = !Boolean.FALSE.equals(input.enabled());
         String inputId = Json.truthy(input.id()) ? input.id() : null;
-        if (enabled && targetMode.equals("list") && !e.containsKey("time") && !e.containsKey("days") && !e.containsKey("targets") && !e.containsKey("action")) {
+        if (enabled && targetMode.equals("list") && !e.containsKey("time") && !e.containsKey("days") && !e.containsKey("targets")
+                && !e.containsKey("action")) {
             Schedule mineS = new Schedule();
             mineS.setAction(action);
             mineS.setTimes(times);
@@ -225,7 +248,8 @@ public final class ScheduleValidator {
                 if (sharedDays.isEmpty() || sharedTargets.isEmpty()) continue;
                 String names = String.join(", ", sharedTargets.stream().limit(2).map(id -> nameOf(objs, id)).toList());
                 List<ScheduleRunner.Event[]> clash = new ArrayList<>();
-                for (ScheduleRunner.Event a : mine) for (ScheduleRunner.Event b : theirs) if (b.time().equals(a.time())) clash.add(new ScheduleRunner.Event[]{a, b});
+                for (ScheduleRunner.Event a : mine)
+                    for (ScheduleRunner.Event b : theirs) if (b.time().equals(a.time())) clash.add(new ScheduleRunner.Event[]{a, b});
                 ScheduleRunner.Event[] opp = clash.stream().filter(p -> ("on".equals(p[0].action()) && "off".equals(p[1].action()))
                         || ("off".equals(p[0].action()) && "on".equals(p[1].action()))).findFirst().orElse(null);
                 if (opp != null) {
@@ -236,8 +260,10 @@ public final class ScheduleValidator {
                 boolean sameTargets = sameSet(days, o.getDays()) && sameSet(targets, o.getTargets() == null ? List.of() : o.getTargets());
                 String oMode = "set".equals(o.getMode()) || "add".equals(o.getMode()) ? o.getMode() : "percent";
                 boolean identical = Objects.equals(action, o.getAction()) && sameTargets && ("window".equals(action)
-                        ? o.getWindow() != null && Objects.equals(o.windowOn(), win.get("on")) && Objects.equals(o.windowOff(), win.get("off"))
-                        : (!"budget".equals(action) || (mode.equals(oMode) && o.getValue() == value)) && sameSet(times, ScheduleRunner.times(o)));
+                        ? o.getWindow() != null && Objects.equals(o.windowOn(), win.get("on"))
+                                && Objects.equals(o.windowOff(), win.get("off"))
+                        : (!"budget".equals(action) || (mode.equals(oMode) && o.getValue() == value))
+                                && sameSet(times, ScheduleRunner.times(o)));
                 if (identical) { e.put("conflict", "Đã có lịch giống hệt: “" + o.getName() + "”."); break; }
                 String at = String.join(", ", new LinkedHashSet<>(clash.stream().map(p -> p[0].time()).toList()));
                 if ("budget".equals(action) && "budget".equals(o.getAction()) && !clash.isEmpty())

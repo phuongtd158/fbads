@@ -66,7 +66,8 @@ public class ApiExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     ResponseEntity<Map<String, Object>> unreadable(HttpMessageNotReadableException e) {
-        if (!(e.getMostSpecificCause() instanceof MismatchedInputException m)) return error(400, "Dữ liệu gửi lên không đọc được (JSON không hợp lệ).");
+        if (!(e.getMostSpecificCause() instanceof MismatchedInputException m))
+            return error(400, "Dữ liệu gửi lên không đọc được (JSON không hợp lệ).");
         String field = fieldPath(m);
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("error", field.isEmpty() ? WRONG_TYPE : field + ": " + WRONG_TYPE);

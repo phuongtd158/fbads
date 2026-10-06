@@ -45,7 +45,8 @@ public class LoginAttempts {
             String xf = req.getHeader("x-forwarded-for");
             if (xf != null && !xf.isBlank()) {
                 String[] parts = xf.split(",");
-                for (int i = parts.length - 1; i >= 0; i--) if (!parts[i].isBlank()) return parts[i].trim(); // phần tử CUỐI do proxy gần nhất thêm
+                // phần tử CUỐI do proxy gần nhất thêm
+                for (int i = parts.length - 1; i >= 0; i--) if (!parts[i].isBlank()) return parts[i].trim();
             }
         }
         return req.getRemoteAddr();

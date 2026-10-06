@@ -28,7 +28,8 @@ public class EngineClock {
     public long millis() { return clock.millis(); }
 
     public ZoneId zone() {
-        try { return ZoneId.of(settings.get().getTimezone()); } catch (RuntimeException e) { return ZoneId.of(DEFAULT_TZ); } // múi giờ sai → mặc định
+        // múi giờ sai → mặc định
+        try { return ZoneId.of(settings.get().getTimezone()); } catch (RuntimeException e) { return ZoneId.of(DEFAULT_TZ); }
     }
 
     public Now now() {

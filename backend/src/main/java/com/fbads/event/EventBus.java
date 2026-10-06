@@ -38,7 +38,8 @@ public class EventBus {
      */
     public void publish(String type, String key, boolean telegram, Object data) {
         Long ws = WorkspaceContext.current();
-        AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, ws == null ? key : ws + ":" + key, clock.millis(), telegram, json.valueToTree(data), ws);
+        AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, ws == null ? key : ws + ":" + key, clock.millis(),
+                telegram, json.valueToTree(data), ws);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

@@ -17,7 +17,8 @@ import java.util.function.Consumer;
 
 /**
  * Lập kế hoạch (plan) và thực thi (act) một hành động lên camp/nhóm QC, tôn trọng chế độ chạy thử,
- * ghi nhật ký (Telegram do consumer của sự kiện log.created gửi, xem service/TelegramNotifier). Bản Java của plan()/act()/record() trong lib/engine.js.
+ * ghi nhật ký (Telegram do consumer của sự kiện log.created gửi, xem service/TelegramNotifier). Bản Java của
+ * plan()/act()/record() trong lib/engine.js.
  */
 @Service
 public class ActionExecutor {
@@ -77,7 +78,8 @@ public class ActionExecutor {
 
     /** Kế hoạch cho một hành động (không gọi Facebook, không ghi trạng thái) */
     public Plan plan(AdObject obj, Action action, ActCtx ctx) {
-        if (action.isNotify()) return Plan.notifyIt(action.message() != null && !action.message().isEmpty() ? action.message() : "Cảnh báo");
+        if (action.isNotify())
+            return Plan.notifyIt(action.message() != null && !action.message().isEmpty() ? action.message() : "Cảnh báo");
         if (action.type().equals("on") || action.type().equals("off")) {
             boolean want = action.type().equals("on");
             if (obj.isActive() == want) return Plan.noop(); // đã đúng trạng thái
@@ -92,14 +94,18 @@ public class ActionExecutor {
         if (isRule && s.isSkipLearning() && obj.learning && !ctx.includeLearning())
             return Plan.skip("learning", "Đang trong giai đoạn học nên tạm không đổi ngân sách (tránh làm Facebook học lại từ đầu).");
         double cur = obj.dailyBudget;
-        double next = "percent".equals(action.mode()) ? cur * (1 + action.value() / 100) : "add".equals(action.mode()) ? cur + action.value() : action.value();
+        double next = "percent".equals(action.mode()) ? cur * (1 + action.value() / 100)
+                : "add".equals(action.mode()) ? cur + action.value()
+                : action.value();
         if (action.max() != 0) next = Math.min(next, action.max());
         if (action.min() != 0) next = Math.max(next, action.min());
         next = Math.round(next);
         if (!(next > 0)) return Plan.error("Ngân sách mới sẽ là " + Fmt.money(next) + " (không lớn hơn 0) nên không đổi.");
         boolean capped = false;
         double base = cur;
-        if (isRule && !ctx.noCap()) { // giới hạn tổng thay đổi mỗi ngày (chỉ áp dụng cho rule; lịch là ý định rõ ràng của bạn; rule tăng theo bậc không dùng vì đã bắt buộc có trần)
+        // giới hạn tổng thay đổi mỗi ngày (chỉ áp dụng cho rule; lịch là ý định rõ ràng của bạn; rule tăng theo bậc
+        // không dùng vì đã bắt buộc có trần)
+        if (isRule && !ctx.noCap()) {
             Double b = budgetBase(obj.id);
             base = b != null ? b : cur;
             double lo = Math.round(base * (1 - capPct / 100.0)), hi = Math.round(base * (1 + capPct / 100.0));
@@ -107,11 +113,13 @@ public class ActionExecutor {
             if (c != next) { capped = true; next = c; }
         }
         if (next == Math.round(cur)) {
-            return capped ? Plan.skip("cap", "Đã đạt giới hạn thay đổi " + capPct + "% mỗi ngày (ngân sách gốc hôm nay " + Fmt.money(base) + ").") : Plan.noop();
+            return capped ? Plan.skip("cap", "Đã đạt giới hạn thay đổi " + capPct + "% mỗi ngày (ngân sách gốc hôm nay "
+                    + Fmt.money(base) + ").") : Plan.noop();
         }
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("dailyBudget", next);
-        return Plan.doIt("Ngân sách " + Fmt.money(cur) + " → " + Fmt.money(next) + (capped ? " (chạm giới hạn " + capPct + "%/ngày)" : ""), after, next, capped);
+        return Plan.doIt("Ngân sách " + Fmt.money(cur) + " → " + Fmt.money(next)
+                + (capped ? " (chạm giới hạn " + capPct + "%/ngày)" : ""), after, next, capped);
     }
 
     /**
@@ -146,7 +154,13 @@ public class ActionExecutor {
             return "skip";
         }
         if (p.is("error")) {
-            record(ctx.silent(), e -> { base.accept(e); e.setDetail(p.detail()); e.setOk(false); e.setDry(dry); e.setError(Map.of("message", p.detail())); });
+            record(ctx.silent(), e -> {
+                base.accept(e);
+                e.setDetail(p.detail());
+                e.setOk(false);
+                e.setDry(dry);
+                e.setError(Map.of("message", p.detail()));
+            });
             return "error";
         }
         try {
@@ -163,10 +177,22 @@ public class ActionExecutor {
                     obj.dailyBudget = p.next();
                 }
             }
-            record(ctx.silent(), e -> { base.accept(e); e.setDetail(p.detail()); e.setOk(true); e.setDry(!isNotify && dry); e.setAfter(p.after()); });
+            record(ctx.silent(), e -> {
+                base.accept(e);
+                e.setDetail(p.detail());
+                e.setOk(true);
+                e.setDry(!isNotify && dry);
+                e.setAfter(p.after());
+            });
             return "ok";
         } catch (RuntimeException ex) {
-            record(ctx.silent(), e -> { base.accept(e); e.setDetail(ex.getMessage()); e.setOk(false); e.setDry(dry); e.setError(FbException.describe(ex)); });
+            record(ctx.silent(), e -> {
+                base.accept(e);
+                e.setDetail(ex.getMessage());
+                e.setOk(false);
+                e.setDry(dry);
+                e.setError(FbException.describe(ex));
+            });
             return "fail";
         }
     }

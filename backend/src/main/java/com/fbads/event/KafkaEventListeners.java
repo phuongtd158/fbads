@@ -88,7 +88,8 @@ public class KafkaEventListeners {
         } catch (BadEventException ex) {
             what = "hỏng, " + payload.length() + " byte";
         }
-        log.error("Bỏ tin Telegram (sự kiện {}) sau khi thử lại không được: {}. Bản ghi còn ở topic {}", what, error, EventTopics.TELEGRAM_DLT);
+        log.error("Bỏ tin Telegram (sự kiện {}) sau khi thử lại không được: {}. Bản ghi còn ở topic {}", what, error,
+                EventTopics.TELEGRAM_DLT);
     }
 
     @KafkaListener(id = "fbads-stats", groupId = "fbads-stats", topics = EventTopics.EVENTS)

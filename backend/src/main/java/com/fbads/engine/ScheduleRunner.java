@@ -83,9 +83,11 @@ public class ScheduleRunner {
                     // Facebook đang giới hạn và lịch chưa làm gì: thử lại ở lượt sau trong thời gian chạy bù; hết thời gian thì ghi lỗi
                     if (now.minutes() - at < GRACE_MIN) state.releaseRun(key);
                     else executor.record(false, e -> {
-                        e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource("Lịch: " + sch.getName()); e.setName("-");
+                        e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName());
+                        e.setSource("Lịch: " + sch.getName()); e.setName("-");
                         e.setMode(settings.get().mode()); e.setOk(false);
-                        e.setDetail("Không chạy được lượt " + ev.time() + ": Facebook giới hạn số lần gọi suốt " + GRACE_MIN + " phút sau giờ hẹn.");
+                        e.setDetail("Không chạy được lượt " + ev.time() + ": Facebook giới hạn số lần gọi suốt " + GRACE_MIN
+                                + " phút sau giờ hẹn.");
                         e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
                     });
                 }
@@ -116,7 +118,8 @@ public class ScheduleRunner {
                 Action a = action;
                 executor.record(false, e -> {
                     e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(id);
-                    e.setDetail("Không tìm thấy đối tượng"); e.setOk(false); e.setMode(settings.get().mode()); e.setTarget(Map.of("id", id));
+                    e.setDetail("Không tìm thấy đối tượng"); e.setOk(false); e.setMode(settings.get().mode());
+                    e.setTarget(Map.of("id", id));
                     Map<String, Object> aj = new LinkedHashMap<>();
                     aj.put("type", a.type()); aj.put("mode", sch.getMode()); aj.put("value", sch.getValue());
                     e.setAction(aj);

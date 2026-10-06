@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 
 public interface LogRepository extends JpaRepository<LogEntry, String> {
@@ -15,7 +16,7 @@ public interface LogRepository extends JpaRepository<LogEntry, String> {
 
     List<LogEntry> findByKindOrderBySeqDesc(String kind);
 
-    List<LogEntry> findByTsGreaterThanEqualOrderBySeqAsc(java.time.Instant ts);
+    List<LogEntry> findByTsGreaterThanEqualOrderBySeqAsc(Instant ts);
 
     /** SQL thuần không qua bộ lọc @TenantId nên phải ghi rõ workspace */
     @Query(value = "SELECT seq FROM logs WHERE workspace_id = :workspaceId ORDER BY seq DESC LIMIT 1 OFFSET :keep", nativeQuery = true)

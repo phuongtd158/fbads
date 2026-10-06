@@ -50,8 +50,9 @@ public class DataImporter implements ApplicationRunner {
     private final RestClient.Builder http;
     private final AuthService auth;
 
-    public DataImporter(AppProperties props, AuthService auth, SettingsService settings, ScheduleRepository schedules, RuleRepository rules, LogRepository logs,
-                        EngineState state, TransactionTemplate tx, JsonMapper mapper, RestClient.Builder http) {
+    public DataImporter(AppProperties props, AuthService auth, SettingsService settings,
+            ScheduleRepository schedules, RuleRepository rules, LogRepository logs, EngineState state,
+            TransactionTemplate tx, JsonMapper mapper, RestClient.Builder http) {
         this.props = props;
         this.auth = auth;
         this.settings = settings;
@@ -78,7 +79,8 @@ public class DataImporter implements ApplicationRunner {
     }
 
     private String fetchUpstash(AppProperties.Import cfg) {
-        if (cfg.dataKey() == null || cfg.dataKey().length() < 16) throw new IllegalStateException("Thiếu DATA_KEY (ít nhất 16 ký tự) để giải mã dữ liệu trên Upstash.");
+        if (cfg.dataKey() == null || cfg.dataKey().length() < 16)
+            throw new IllegalStateException("Thiếu DATA_KEY (ít nhất 16 ký tự) để giải mã dữ liệu trên Upstash.");
         JsonNode res = http.build().post().uri(cfg.upstashUrl().replaceAll("/+$", ""))
                 .header("Authorization", "Bearer " + cfg.upstashToken())
                 .contentType(MediaType.APPLICATION_JSON)
@@ -102,7 +104,8 @@ public class DataImporter implements ApplicationRunner {
                 settings.update(x -> {
                     mapper.updateValue(x, s);
                     // dữ liệu cũ chỉ có 1 tài khoản quảng cáo → chuyển sang danh sách
-                    if ((x.getAdAccountIds() == null || x.getAdAccountIds().isEmpty()) && x.getAdAccountId() != null && !x.getAdAccountId().isEmpty())
+                    if ((x.getAdAccountIds() == null || x.getAdAccountIds().isEmpty()) && x.getAdAccountId() != null
+                            && !x.getAdAccountId().isEmpty())
                         x.setAdAccountIds(new ArrayList<>(List.of(x.getAdAccountId())));
                 });
             }

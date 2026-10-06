@@ -35,11 +35,13 @@ public class WorkspaceFilter {
     public static final String ROLE = "fbads.role", USER_ID = "fbads.userId";
 
     /** Không cần workspace: đăng nhập / đăng ký, callback của Facebook (tự lấy workspace từ state) */
-    static final Set<String> NO_WORKSPACE = Set.of("/api/auth", "/api/health", "/api/login", "/api/logout", "/api/setup", "/api/register", "/api/fb/callback");
+    static final Set<String> NO_WORKSPACE = Set.of("/api/auth", "/api/health", "/api/login", "/api/logout", "/api/setup",
+            "/api/register", "/api/fb/callback");
     /** Việc của riêng người dùng, không phụ thuộc quyền trong workspace đang chọn */
     static final Set<String> PERSONAL = Set.of("/api/password", "/api/workspaces", "/api/workspaces/switch");
     /** Ghi vào đây cần quyền OWNER */
-    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/telegram/", "/api/members", "/api/workspace", "/api/company/config");
+    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/telegram/", "/api/members",
+            "/api/workspace", "/api/company/config");
 
     /** Quyền tối thiểu để gọi; null = không cần kiểm tra quyền */
     static Role required(String method, String path) {
@@ -65,7 +67,8 @@ public class WorkspaceFilter {
         }
 
         @Override
-        protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res, FilterChain chain) throws ServletException, IOException {
+        protected void doFilterInternal(HttpServletRequest req, HttpServletResponse res,
+                FilterChain chain) throws ServletException, IOException {
             String path = req.getRequestURI();
             Long ws;
             Role role;
@@ -97,7 +100,10 @@ public class WorkspaceFilter {
             }
             Role need = required(req.getMethod(), path);
             if (need != null) {
-                if (ws == null) { ApiFilters.json(res, 403, "Bạn chưa thuộc workspace nào. Nhờ chủ workspace thêm bạn vào, hoặc tạo workspace mới."); return; }
+                if (ws == null) {
+                    ApiFilters.json(res, 403, "Bạn chưa thuộc workspace nào. Nhờ chủ workspace thêm bạn vào, hoặc tạo workspace mới.");
+                    return;
+                }
                 if (!role.atLeast(need)) { ApiFilters.json(res, 403, deny(need)); return; }
             }
             req.setAttribute(ROLE, role);

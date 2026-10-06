@@ -26,7 +26,8 @@ public @interface StrongPassword {
     Class<? extends Payload>[] payload() default {};
 
     class Validator implements ConstraintValidator<StrongPassword, String> {
-        static final List<String> WEAK = List.of("12345678", "123456789", "1234567890", "password", "matkhau123", "qwertyui", "11111111", "00000000", "abcd1234");
+        static final List<String> WEAK = List.of("12345678", "123456789", "1234567890", "password", "matkhau123", "qwertyui",
+                "11111111", "00000000", "abcd1234");
 
         /** Lý do mật khẩu yếu, chuỗi rỗng = đạt */
         public static String problem(String n) {

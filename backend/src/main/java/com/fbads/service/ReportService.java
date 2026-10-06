@@ -18,6 +18,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.function.ToDoubleFunction;
 
 /**
@@ -61,7 +62,8 @@ public class ReportService {
             String cur = multi && list.getFirst().currency != null ? " " + list.getFirst().currency : "";
             List<String> lines = active.stream().limit(multi ? 10 : 15)
                     .map(o -> "• " + o.name + ": " + Fmt.money(o.metrics.spend()) + " | KQ " + Fmt.num(o.metrics.results())).toList();
-            String head = multi ? "\n🏷 <b>" + (list.getFirst().accountName != null ? list.getFirst().accountName : list.getFirst().accountId) + "</b>\n" : "";
+            String head = multi ? "\n🏷 <b>" + (list.getFirst().accountName != null ? list.getFirst().accountName
+                    : list.getFirst().accountId) + "</b>\n" : "";
             parts.add(head + "Đang chạy: " + active.size() + "/" + list.size() + " camp\nChi tiêu hôm nay: " + Fmt.money(spend) + cur
                     + "\nKết quả: " + Fmt.num(results) + (results > 0 ? " | CPA " + Fmt.money(spend / results) + cur : "")
                     + (lines.isEmpty() ? "" : "\n" + String.join("\n", lines)));
@@ -96,7 +98,8 @@ public class ReportService {
     }
 
     private Map<String, Metrics> weekData(String since, String until) {
-        return fb.rangeData(new FacebookService.RangeQuery("r:" + since + "_" + until, Map.of("time_range", "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}"), 7), false).data();
+        return fb.rangeData(new FacebookService.RangeQuery("r:" + since + "_" + until,
+                Map.of("time_range", "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}"), 7), false).data();
     }
 
     private static String change(double a, double b) { return b > 0 ? (a >= b ? "+" : "") + Math.round((a / b - 1) * 100) + "%" : ""; }
@@ -112,7 +115,10 @@ public class ReportService {
     /** Camp tốt nhất: CPA thấp nhất (có kết quả). Tệ nhất: chi tiêu mà không có kết quả, rồi tới CPA cao nhất. */
     public static Ranked rankCamps(List<Row> rows) {
         List<Row> spent = rows.stream().filter(r -> r.m().spend() > 0).toList();
-        List<Row> best = spent.stream().filter(r -> r.m().results() > 0).sorted(Comparator.comparingDouble(r -> cpaOf(r.m()))).limit(3).toList();
+        List<Row> best = spent.stream()
+                .filter(r -> r.m().results() > 0)
+                .sorted(Comparator.comparingDouble(r -> cpaOf(r.m())))
+                .limit(3).toList();
         ToDoubleFunction<Row> cost = r -> r.m().results() > 0 ? cpaOf(r.m()) : Double.POSITIVE_INFINITY;
         List<Row> worst = spent.stream().filter(r -> !best.contains(r))
                 .sorted((a, b) -> {
@@ -131,7 +137,8 @@ public class ReportService {
         ZoneId zone = clock.zone();
         for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
             Object type = l.getAction() == null ? null : l.getAction().get("type");
-            if (!List.of("rule", "schedule", "system").contains(l.getKind()) || !Boolean.TRUE.equals(l.getOk()) || Boolean.TRUE.equals(l.getDry())
+            if (!List.of("rule", "schedule", "system").contains(l.getKind()) || !Boolean.TRUE.equals(l.getOk())
+                    || Boolean.TRUE.equals(l.getDry())
                     || "mock".equals(l.getMode()) != mock || !(type instanceof String t) || !n.containsKey(t)) continue;
             String d = l.getTs().atZone(zone).toLocalDate().toString();
             if (d.compareTo(since) >= 0 && d.compareTo(until) <= 0) n.merge(t, 1, Integer::sum);
@@ -160,25 +167,33 @@ public class ReportService {
         List<String> parts = new ArrayList<>();
         for (List<AdObject> list : groups.values()) {
             Sum c = sum(list, cur), p = sum(list, prev);
-            String unit = list.getFirst().currency != null && !list.getFirst().currency.isEmpty() ? " " + esc(list.getFirst().currency) : "";
+            String unit = list.getFirst().currency != null
+                    && !list.getFirst().currency.isEmpty() ? " " + esc(list.getFirst().currency) : "";
             Double cpa = c.results() > 0 ? c.spend() / c.results() : null, pcpa = p.results() > 0 ? p.spend() / p.results() : null;
             List<String> lines = new ArrayList<>();
-            lines.add("Chi tiêu: <b>" + Fmt.money(c.spend()) + unit + "</b>" + (p.spend() > 0 ? " (" + change(c.spend(), p.spend()) + " so với tuần trước)" : ""));
-            lines.add("Kết quả: <b>" + Fmt.num(c.results()) + "</b>" + (p.results() > 0 ? " (" + change(c.results(), p.results()) + ")" : ""));
-            if (cpa != null) lines.add("CPA: <b>" + Fmt.money(cpa) + unit + "</b>" + (pcpa != null && pcpa > 0 ? " (" + change(cpa, pcpa) + ")" : ""));
+            lines.add("Chi tiêu: <b>" + Fmt.money(c.spend()) + unit + "</b>"
+                    + (p.spend() > 0 ? " (" + change(c.spend(), p.spend()) + " so với tuần trước)" : ""));
+            lines.add("Kết quả: <b>" + Fmt.num(c.results()) + "</b>"
+                    + (p.results() > 0 ? " (" + change(c.results(), p.results()) + ")" : ""));
+            if (cpa != null)
+                lines.add("CPA: <b>" + Fmt.money(cpa) + unit + "</b>" + (pcpa != null && pcpa > 0 ? " (" + change(cpa, pcpa) + ")" : ""));
             if (c.revenue() > 0 && c.spend() > 0)
-                lines.add("ROAS: <b>" + Fmt.fixed2(c.revenue() / c.spend()) + "</b>" + (p.revenue() > 0 && p.spend() > 0 ? " (tuần trước " + Fmt.fixed2(p.revenue() / p.spend()) + ")" : ""));
+                lines.add("ROAS: <b>" + Fmt.fixed2(c.revenue() / c.spend()) + "</b>"
+                        + (p.revenue() > 0 && p.spend() > 0 ? " (tuần trước " + Fmt.fixed2(p.revenue() / p.spend()) + ")" : ""));
             Ranked r = rankCamps(list.stream().filter(o -> cur.containsKey(o.id)).map(o -> new Row(o, cur.get(o.id))).toList());
-            java.util.function.Function<Row, String> row = x -> "• " + esc(x.o().name) + ": "
-                    + (x.m().results() > 0 ? "CPA " + Fmt.money(cpaOf(x.m())) + ", " + Fmt.num(x.m().results()) + " KQ" : "chi " + Fmt.money(x.m().spend()) + ", chưa có KQ");
+            Function<Row, String> row = x -> "• " + esc(x.o().name) + ": "
+                    + (x.m().results() > 0 ? "CPA " + Fmt.money(cpaOf(x.m())) + ", " + Fmt.num(x.m().results()) + " KQ"
+                            : "chi " + Fmt.money(x.m().spend()) + ", chưa có KQ");
             if (!r.best().isEmpty()) lines.add("👍 Tốt nhất:\n" + String.join("\n", r.best().stream().map(row).toList()));
             if (!r.worst().isEmpty()) lines.add("👎 Cần xem lại:\n" + String.join("\n", r.worst().stream().map(row).toList()));
             AdObject f = list.getFirst();
-            parts.add((multi ? "\n🏷 <b>" + esc(f.accountName != null ? f.accountName : f.accountId) + "</b>\n" : "") + String.join("\n", lines));
+            parts.add((multi ? "\n🏷 <b>" + esc(f.accountName != null ? f.accountName : f.accountId) + "</b>\n" : "")
+                    + String.join("\n", lines));
         }
         Map<String, Integer> n = toolActions(w.since(), w.until());
         int total = n.get("on") + n.get("off") + n.get("budget");
-        String acts = total > 0 ? "\n\n🤖 Tool đã tự thao tác " + total + " lần: bật " + n.get("on") + ", tắt " + n.get("off") + ", đổi ngân sách " + n.get("budget") + "."
+        String acts = total > 0 ? "\n\n🤖 Tool đã tự thao tác " + total + " lần: bật " + n.get("on") + ", tắt " + n.get("off")
+                + ", đổi ngân sách " + n.get("budget") + "."
                 : "\n\n🤖 Tuần qua tool không tự thao tác lần nào.";
         String body = groups.isEmpty() ? "Chưa có camp nào." : String.join("\n", parts);
         return "🗓 <b>Báo cáo tuần " + dm(w.since()) + " – " + dm(w.until()) + "</b>\n" + body + acts;

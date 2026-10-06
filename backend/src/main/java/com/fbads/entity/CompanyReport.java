@@ -92,7 +92,9 @@ public class CompanyReport {
         public String convertToDatabaseColumn(Remote v) { return v == null ? null : M.writeValueAsString(v); }
 
         @Override
-        public Remote convertToEntityAttribute(String s) { return s == null || s.isBlank() ? null : M.readValue(s, new TypeReference<Remote>() {}); }
+        public Remote convertToEntityAttribute(String s) {
+            return s == null || s.isBlank() ? null : M.readValue(s, new TypeReference<Remote>() {});
+        }
     }
 
     /** Đã có trên công ty mà chưa khoá → bấm "Cập nhật lên công ty" được */

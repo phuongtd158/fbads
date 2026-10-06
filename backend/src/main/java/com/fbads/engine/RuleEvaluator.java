@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Đánh giá một rule trên danh sách camp/nhóm QC (không thay đổi gì; dùng cho cả chạy thật lẫn Xem trước).
@@ -28,9 +29,11 @@ public class RuleEvaluator {
      * Kết quả xét 1 điều kiện cho 1 camp. tierMetric/tierCount/tier: ngưỡng chi tiêu nâng theo số kết quả (bậc đã đạt, null = ngưỡng gốc);
      * ladderStep/ladderNeed: rule tăng theo bậc (bậc đạt được, số kết quả cần).
      */
-    public record CondEval(String metric, String op, String vs, Double factor, String compareRange, double actual, Double threshold, boolean unknown, boolean hit,
-                           String tierMetric, Double tierCount, Condition.Tier tier, Integer ladderStep, Integer ladderNeed) {
-        CondEval(String metric, String op, String vs, Double factor, String compareRange, double actual, Double threshold, boolean unknown, boolean hit) {
+    public record CondEval(String metric, String op, String vs, Double factor, String compareRange,
+            double actual, Double threshold, boolean unknown, boolean hit, String tierMetric, Double tierCount,
+            Condition.Tier tier, Integer ladderStep, Integer ladderNeed) {
+        CondEval(String metric, String op, String vs, Double factor, String compareRange, double actual, Double threshold,
+                boolean unknown, boolean hit) {
             this(metric, op, vs, factor, compareRange, actual, threshold, unknown, hit, null, null, null, null, null);
         }
     }
@@ -124,13 +127,15 @@ public class RuleEvaluator {
         if ("target".equals(c.vs())) return " (" + Fmt.num(c.factor()) + "% " + ("spend".equals(c.metric()) ? "CPA " : "") + "mục tiêu)";
         if ("range".equals(c.vs()))
             return " (" + Fmt.num(c.factor()) + "% " + Labels.metric(c.metric()) + " " + Labels.range(c.compareRange())
-                    + (RuleValidator.TOTAL_METRICS.contains(c.metric()) && RuleValidator.RANGE_DAYS.getOrDefault(c.compareRange(), 1) > 1 ? ", trung bình mỗi ngày" : "") + ")";
+                    + (RuleValidator.TOTAL_METRICS.contains(c.metric())
+                            && RuleValidator.RANGE_DAYS.getOrDefault(c.compareRange(), 1) > 1 ? ", trung bình mỗi ngày" : "") + ")";
         return "";
     }
 
     private static String tierText(CondEval c) {
         if (c.tierMetric() == null) return "";
-        return " (đã có " + Fmt.num(c.tierCount()) + " " + Labels.metric(c.tierMetric()) + (c.tier() != null ? ", đạt bậc từ " + Fmt.num(c.tier().count()) : "") + ")";
+        return " (đã có " + Fmt.num(c.tierCount()) + " " + Labels.metric(c.tierMetric())
+                + (c.tier() != null ? ", đạt bậc từ " + Fmt.num(c.tier().count()) : "") + ")";
     }
 
     static String condSentence(CondEval c, String range) {
@@ -145,7 +150,8 @@ public class RuleEvaluator {
         if ("pause".equals(rule.getAction())) return Action.off();
         if ("notify".equals(rule.getAction())) return new Action("notify", null, 0, 0, 0, null);
         int sign = "increase".equals(rule.getAction()) ? 1 : -1;
-        if ("amount".equals(rule.getBudgetMode())) return new Action("budget", "add", sign * rule.getAmount(), rule.getMaxBudget(), rule.getMinBudget(), null);
+        if ("amount".equals(rule.getBudgetMode()))
+            return new Action("budget", "add", sign * rule.getAmount(), rule.getMaxBudget(), rule.getMinBudget(), null);
         return new Action("budget", "percent", sign * rule.getPct(), rule.getMaxBudget(), rule.getMinBudget(), null);
     }
 
@@ -157,12 +163,14 @@ public class RuleEvaluator {
         if (map == null) map = Map.of();
         String level = rule.getLevel() == null || rule.getLevel().isEmpty() ? "campaign" : rule.getLevel();
         boolean hasWindow = !rule.getFrom().isEmpty() && !rule.getTo().isEmpty();
-        boolean outside = hasWindow && (now.minutes() < EngineClock.toMin(rule.getFrom()) || now.minutes() > EngineClock.toMin(rule.getTo()));
+        boolean outside = hasWindow && (now.minutes() < EngineClock.toMin(rule.getFrom())
+                || now.minutes() > EngineClock.toMin(rule.getTo()));
         List<String> accs = rule.getAccountIds() == null ? List.of() : rule.getAccountIds();
         // luôn xét cả effective: mục vừa bị rule trước tắt trong cùng lượt đã được cập nhật effective = PAUSED
-        java.util.function.Predicate<AdObject> isRunning = o -> o.isActive() && (running == null || running.running(o));
+        Predicate<AdObject> isRunning = o -> o.isActive() && (running == null || running.running(o));
         List<AdObject> list = rule.isAllActive()
-                ? objs.stream().filter(o -> level.equals(o.level) && isRunning.test(o) && (accs.isEmpty() || accs.contains(o.accountId))).toList()
+                ? objs.stream().filter(o -> level.equals(o.level) && isRunning.test(o)
+                        && (accs.isEmpty() || accs.contains(o.accountId))).toList()
                 : objs.stream().filter(o -> rule.getTargets() != null && rule.getTargets().contains(o.id)).toList();
         List<Condition> conditions = rule.conditionList();
         boolean any = "any".equals(rule.getMatch());
@@ -177,13 +185,15 @@ public class RuleEvaluator {
             out.add(d);
             if (!isRunning.test(obj)) {
                 String why = running != null ? running.label(obj) : "";
-                d.skip("inactive", ("camp".equals(obj.unit()) ? "Camp" : "Nhóm QC") + " không đang chạy" + (why.isEmpty() ? "" : " (" + why + ")"));
+                d.skip("inactive", ("camp".equals(obj.unit()) ? "Camp" : "Nhóm QC") + " không đang chạy"
+                        + (why.isEmpty() ? "" : " (" + why + ")"));
                 continue;
             }
             if (action.isBudget() && obj.dailyBudget == null) { d.skip("nobudget", ActionExecutor.noBudgetReason(obj)); continue; }
             if (outside) { d.skip("window", "Ngoài khung giờ của rule (" + rule.getFrom() + "–" + rule.getTo() + ")"); continue; }
             if (d.metrics.spend() < rule.getMinSpend()) {
-                d.skip("minspend", "Chưa đủ chi tiêu tối thiểu (" + Fmt.money(d.metrics.spend()) + " < " + Fmt.money(rule.getMinSpend()) + ")");
+                d.skip("minspend", "Chưa đủ chi tiêu tối thiểu (" + Fmt.money(d.metrics.spend()) + " < "
+                        + Fmt.money(rule.getMinSpend()) + ")");
                 continue;
             }
             if (rule.isLadder()) { evaluateLadder(rule, obj, d, now, nowMs); continue; }
@@ -216,23 +226,37 @@ public class RuleEvaluator {
                         d.skip("notarget", "Tài khoản " + acc + " chưa đặt mục tiêu " + String.join(", ", need) + " (Cài đặt → Mục tiêu)");
                     } else {
                         LinkedHashSet<String> what = new LinkedHashSet<>();
-                        for (CondEval c : conds) if (c.unknown()) what.add(Labels.metric(c.metric()) + " " + Labels.range(c.compareRange()));
-                        d.skip("nobaseline", "Chưa có số liệu " + String.join(", ", what) + " để so sánh (" + obj.unit() + " chưa chi tiêu trong khoảng đó)");
+                        for (CondEval c : conds)
+                            if (c.unknown()) what.add(Labels.metric(c.metric()) + " " + Labels.range(c.compareRange()));
+                        d.skip("nobaseline", "Chưa có số liệu " + String.join(", ", what) + " để so sánh (" + obj.unit()
+                                + " chưa chi tiêu trong khoảng đó)");
                     }
                 }
                 continue;
             }
             RuleMark mark = state.mark(rule.getId() == null ? "" : rule.getId(), obj.id);
             long holdLeft = mark.holdUntil() - nowMs;
-            if (holdLeft > 0) { d.skip("hold", "Tạm hoãn sau khi bạn hoàn tác (còn " + (long) Math.ceil(holdLeft / 3600e3) + " giờ)"); continue; }
+            if (holdLeft > 0) {
+                d.skip("hold", "Tạm hoãn sau khi bạn hoàn tác (còn " + (long) Math.ceil(holdLeft / 3600e3) + " giờ)");
+                continue;
+            }
             long left = mark.lastRun() + (long) (rule.getCooldownHours() * 3600e3) - nowMs;
-            if (left > 0) { d.skip("cooldown", "Đang nghỉ giữa hai lần (còn khoảng " + (long) Math.ceil(left / 3600e3) + " giờ)"); continue; }
+            if (left > 0) {
+                d.skip("cooldown", "Đang nghỉ giữa hai lần (còn khoảng " + (long) Math.ceil(left / 3600e3) + " giờ)");
+                continue;
+            }
             d.eligible = true;
             d.action = action.isNotify()
-                    ? action.withMessage(String.join(any ? " HOẶC " : " VÀ ", conds.stream().filter(CondEval::hit).map(c -> condSentence(c, range)).toList()))
+                    ? action.withMessage(String.join(any ? " HOẶC " : " VÀ ",
+                            conds.stream().filter(CondEval::hit).map(c -> condSentence(c, range)).toList()))
                     : action;
             d.plan = executor.plan(obj, d.action, ActCtx.of("rule", rule.getId(), rule.getName()));
-            d.status = switch (d.plan.kind()) { case "do" -> "match"; case "skip" -> "skip"; case "error" -> "error"; default -> "nochange"; };
+            d.status = switch (d.plan.kind()) {
+                case "do" -> "match";
+                case "skip" -> "skip";
+                case "error" -> "error";
+                default -> "nochange";
+            };
             if (d.plan.is("skip")) { d.code = d.plan.code(); d.reason = d.plan.reason(); }
             if (d.plan.is("noop")) d.reason = "Không có gì để thay đổi (đã ở trạng thái/ngân sách mong muốn)";
             if (d.plan.is("error")) d.reason = d.plan.reason();
@@ -252,7 +276,8 @@ public class RuleEvaluator {
         for (int i = 0; i < steps.size(); i++) if (count >= steps.get(i).count()) h = i;
         double refCount = steps.isEmpty() ? 1 : steps.get(Math.max(h, 0)).count();
         d.value = count;
-        d.conds = List.of(new CondEval(m, ">", null, null, null, count, refCount - 1, false, h >= 0, null, null, null, h + 1, (int) refCount));
+        d.conds = List.of(new CondEval(m, ">", null, null, null, count, refCount - 1, false, h >= 0, null, null, null, h + 1,
+                (int) refCount));
         if (h < 0) { d.reason = "Chưa có " + Fmt.num(refCount) + " " + unitWord(m) + " (đang có " + Fmt.num(count) + ")"; return; }
         d.hit = true;
         d.ladder = new Ladder(h, count, steps.get(h).count(), m);
@@ -262,12 +287,17 @@ public class RuleEvaluator {
             double every = h == steps.size() - 1 && steps.get(h).everyHours() != null ? steps.get(h).everyHours() : 0;
             if (every <= 0) {
                 Rule.Step next = h + 1 < steps.size() ? steps.get(h + 1) : null;
-                d.skip("ladderdone", next != null ? "Hôm nay đã tăng bậc " + (h + 1) + ", chờ có " + Fmt.num(next.count()) + " " + unitWord(m) + " để lên bậc " + (h + 2)
+                d.skip("ladderdone", next != null ? "Hôm nay đã tăng bậc " + (h + 1) + ", chờ có " + Fmt.num(next.count()) + " "
+                        + unitWord(m) + " để lên bậc " + (h + 2)
                         : "Hôm nay đã tăng bậc cuối (bậc " + (h + 1) + ")");
                 return;
             }
             long left = mark.ladderAt(now.date()) + (long) (every * 3600e3) - nowMs;
-            if (left > 0) { d.skip("ladderwait", "Đã tăng bậc " + (h + 1) + ", lần tăng tiếp theo sau khoảng " + (long) Math.ceil(left / 60e3) + " phút"); return; }
+            if (left > 0) {
+                d.skip("ladderwait", "Đã tăng bậc " + (h + 1) + ", lần tăng tiếp theo sau khoảng "
+                        + (long) Math.ceil(left / 60e3) + " phút");
+                return;
+            }
         }
         long holdLeft = mark.holdUntil() - nowMs;
         if (holdLeft > 0) { d.skip("hold", "Tạm hoãn sau khi bạn hoàn tác (còn " + (long) Math.ceil(holdLeft / 3600e3) + " giờ)"); return; }

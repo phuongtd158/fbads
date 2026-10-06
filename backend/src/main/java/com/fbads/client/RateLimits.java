@@ -46,7 +46,8 @@ public class RateLimits {
                     for (JsonNode arr : j.values()) { if (arr.isArray()) arr.forEach(rows::add); else rows.add(arr); }
                 } else rows.add(j);
                 for (JsonNode r : rows) {
-                    double m = Math.max(p == null ? 0 : p, Math.max(r.path("call_count").asDouble(0), Math.max(r.path("total_cputime").asDouble(0),
+                    double m = Math.max(p == null ? 0 : p, Math.max(r.path("call_count").asDouble(0),
+                            Math.max(r.path("total_cputime").asDouble(0),
                             Math.max(r.path("total_time").asDouble(0), r.path("acc_id_util_pct").asDouble(0)))));
                     p = m;
                     regainMin = Math.max(regainMin, r.path("estimated_time_to_regain_access").asDouble(0));

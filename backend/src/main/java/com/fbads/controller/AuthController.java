@@ -1,5 +1,6 @@
 package com.fbads.controller;
 
+import com.fbads.common.ApiException;
 import com.fbads.dto.Requests;
 import com.fbads.entity.Role;
 import com.fbads.entity.User;
@@ -44,8 +45,8 @@ public class AuthController {
     private final SecurityContextRepository contextRepo;
     private final FindByIndexNameSessionRepository<? extends Session> sessions;
 
-    public AuthController(AuthService auth, LoginAttempts attempts, AuthenticationManager authManager, SecurityContextRepository contextRepo,
-                          FindByIndexNameSessionRepository<? extends Session> sessions) {
+    public AuthController(AuthService auth, LoginAttempts attempts, AuthenticationManager authManager,
+            SecurityContextRepository contextRepo, FindByIndexNameSessionRepository<? extends Session> sessions) {
         this.auth = auth;
         this.attempts = attempts;
         this.authManager = authManager;
@@ -74,7 +75,9 @@ public class AuthController {
                 : user.map(u -> auth.memberships(u.getId())).orElse(List.of());
         HttpSession s = req.getSession(false);
         Long chosen = s == null ? null : (Long) s.getAttribute(WorkspaceFilter.SESSION_WS);
-        AuthService.Membership cur = list.stream().filter(x -> chosen != null && x.id() == chosen).findFirst().orElse(list.isEmpty() ? null : list.getFirst());
+        AuthService.Membership cur = list.stream()
+                .filter(x -> chosen != null && x.id() == chosen)
+                .findFirst().orElse(list.isEmpty() ? null : list.getFirst());
         m.put("workspace", cur);
         m.put("workspaces", list);
         return m;
@@ -92,14 +95,16 @@ public class AuthController {
 
     /** { username, password }. Bỏ trống username = "admin" (giao diện cũ chỉ gửi mật khẩu). */
     @PostMapping("/login")
-    ResponseEntity<?> login(@RequestBody(required = false) Requests.Login body, HttpServletRequest req, HttpServletResponse res) throws InterruptedException {
+    ResponseEntity<?> login(@RequestBody(required = false) Requests.Login body, HttpServletRequest req,
+            HttpServletResponse res) throws InterruptedException {
         Requests.Login b = body == null ? Requests.Login.EMPTY : body;
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) return ApiExceptionHandler.error(429, "Nhập sai quá nhiều lần. Thử lại sau " + wait + " phút.");
         if (auth.openMode()) return ResponseEntity.ok(OK);
         String username = b.username().isBlank() ? AuthService.ADMIN : b.username();
         try {
-            Authentication a = authManager.authenticate(UsernamePasswordAuthenticationToken.unauthenticated(AuthService.normalize(username), b.password()));
+            Authentication a = authManager.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated(AuthService.normalize(username), b.password()));
             attempts.clear(req);
             signIn(a, req, res);
             return ResponseEntity.ok(OK);
@@ -131,7 +136,7 @@ public class AuthController {
     @PostMapping("/register")
     Map<String, Object> register(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
         int wait = attempts.lockedMinutes(req);
-        if (wait > 0) throw new com.fbads.common.ApiException(429, "Thử quá nhiều lần. Thử lại sau " + wait + " phút.");
+        if (wait > 0) throw new ApiException(429, "Thử quá nhiều lần. Thử lại sau " + wait + " phút.");
         Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
         User u = auth.register(b.username(), b.name(), b.password(), b.workspaceName());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
@@ -154,7 +159,8 @@ public class AuthController {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         // Spring Session đánh chỉ mục phiên theo tên người dùng: xoá các phiên khác của người này
         HttpSession mine = req.getSession(false);
-        for (String id : sessions.findByPrincipalName(username).keySet()) if (mine == null || !id.equals(mine.getId())) sessions.deleteById(id);
+        for (String id : sessions.findByPrincipalName(username).keySet())
+            if (mine == null || !id.equals(mine.getId())) sessions.deleteById(id);
         Long ws = mine == null ? null : (Long) mine.getAttribute(WorkspaceFilter.SESSION_WS);
         signIn(PasswordAuthProvider.signedIn(username), req, res);
         if (ws != null) req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, ws);

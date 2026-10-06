@@ -53,7 +53,8 @@ public class ScheduleService {
     public void runNow(String id) {
         Schedule s = repo.findById(id).orElseThrow(() -> new ApiException(404, "Không tìm thấy lịch"));
         if (ScheduleRunner.BLOCKED.equals(lock.run(() -> runner.run(s, null))))
-            throw new ApiException(429, "Facebook đang giới hạn số lần gọi nên lịch chưa chạy. Thử lại sau vài phút.").with("rateLimited", true);
+            throw new ApiException(429, "Facebook đang giới hạn số lần gọi nên lịch chưa chạy. Thử lại sau vài phút.").with("rateLimited",
+                    true);
     }
 
     static ApiException tooMany() {

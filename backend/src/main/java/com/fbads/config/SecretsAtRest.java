@@ -44,6 +44,7 @@ public class SecretsAtRest implements ApplicationRunner {
         }
         if (plain == 0) return;
         if (secrets.enabled()) log.info("Đã mã hoá {} token đang lưu nguyên văn trong DB.", plain);
-        else log.warn("DB đang lưu {} token Facebook/Telegram nguyên văn. Đặt biến môi trường SECRET_KEY (chuỗi ngẫu nhiên dài, giữ bí mật) để mã hoá.", plain);
+        else log.warn("DB đang lưu {} token Facebook/Telegram nguyên văn. Đặt biến môi trường SECRET_KEY (chuỗi ngẫu "
+                + "nhiên dài, giữ bí mật) để mã hoá.", plain);
     }
 }

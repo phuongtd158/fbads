@@ -65,7 +65,8 @@ public class EngineWatch {
     private volatile Long busyWs;
     private volatile long lastDoneLocal;
 
-    public EngineWatch(SettingsService settings, FacebookService fb, LogService logs, EventBus events, WsState state, EngineClock clock, StringRedisTemplate redis) {
+    public EngineWatch(SettingsService settings, FacebookService fb, LogService logs, EventBus events, WsState state,
+            EngineClock clock, StringRedisTemplate redis) {
         this.settings = settings;
         this.fb = fb;
         this.logs = logs;
@@ -81,7 +82,14 @@ public class EngineWatch {
     /** Ghi nhật ký (nguồn "Hệ thống") và gửi Telegram của workspace hiện tại */
     void alert(String name, String detail, String text, boolean ok) {
         String mode = settings.get().mode();
-        logs.log(l -> { l.setKind("system"); l.setSource("Hệ thống"); l.setName(name); l.setDetail(detail); l.setOk(ok); l.setMode(mode); });
+        logs.log(l -> {
+            l.setKind("system");
+            l.setSource("Hệ thống");
+            l.setName(name);
+            l.setDetail(detail);
+            l.setOk(ok);
+            l.setMode(mode);
+        });
         telegram(text);
     }
 
@@ -110,20 +118,25 @@ public class EngineWatch {
         }
         ta = new TokenAlert(fp, ta.bad(), today);
         state.put("tokenAlert", ta);
-        if (!Boolean.TRUE.equals(t.get("valid"))) { bad(ta, "Facebook báo token không hợp lệ (có thể đã bị thu hồi hoặc đổi mật khẩu)."); return; }
+        if (!Boolean.TRUE.equals(t.get("valid"))) {
+            bad(ta, "Facebook báo token không hợp lệ (có thể đã bị thu hồi hoặc đổi mật khẩu).");
+            return;
+        }
         if (!(t.get("daysLeft") instanceof Number n) || n.longValue() > TOKEN_WARN_DAYS) return;
         long days = n.longValue();
         String when = days >= 1 ? "Còn " + days + " ngày" : "Hết hạn trong hôm nay";
         String on = SHORT.format(Instant.ofEpochMilli(((Number) t.get("expiresAt")).longValue()).atZone(clock.zone()));
         alert("Token Facebook", "Token sắp hết hạn: " + when.toLowerCase() + " (" + on + ").",
-                "⏳ <b>Token Facebook sắp hết hạn</b>\n" + when + " (" + on + "). Vào Cài đặt → Kết nối để tạo token mới, nếu không lịch và rule sẽ ngừng.", false);
+                "⏳ <b>Token Facebook sắp hết hạn</b>\n" + when + " (" + on
+                        + "). Vào Cài đặt → Kết nối để tạo token mới, nếu không lịch và rule sẽ ngừng.", false);
     }
 
     private void bad(TokenAlert ta, String why) {
         if (Boolean.TRUE.equals(ta.bad())) return;
         state.put("tokenAlert", new TokenAlert(ta.fp(), true, ta.date()));
         alert("Token Facebook", "Token không còn dùng được: " + why,
-                "❌ <b>Token Facebook không còn dùng được</b>\n" + why + "\nLịch và rule sẽ không chạy được. Vào Cài đặt → Kết nối để dán token mới.", false);
+                "❌ <b>Token Facebook không còn dùng được</b>\n" + why
+                        + "\nLịch và rule sẽ không chạy được. Vào Cài đặt → Kết nối để dán token mới.", false);
     }
 
     // ------------------------------------------------------------------ Vòng tự động
@@ -145,7 +158,8 @@ public class EngineWatch {
             r.lastError = err.getMessage() == null ? err.toString() : err.getMessage();
             if (r.errorsInRow >= ERRORS_ALERT && !r.errorAlerted) {
                 r.errorAlerted = true;
-                telegram("⚠️ <b>Vòng tự động lỗi " + r.errorsInRow + " lượt liên tiếp</b>\n" + r.lastError + "\nLịch và rule có thể không chạy. Xem Nhật ký để biết chi tiết.");
+                telegram("⚠️ <b>Vòng tự động lỗi " + r.errorsInRow + " lượt liên tiếp</b>\n" + r.lastError
+                        + "\nLịch và rule có thể không chạy. Xem Nhật ký để biết chi tiết.");
             }
             return;
         }

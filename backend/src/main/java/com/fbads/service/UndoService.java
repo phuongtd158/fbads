@@ -46,8 +46,10 @@ public class UndoService {
         if (!List.of("on", "off", "budget").contains(type)) return "Loại thao tác này không hoàn tác được.";
         if (l.getBefore() == null || l.getAfter() == null || l.getTarget() == null || l.getTarget().get("id") == null)
             return "Dòng nhật ký cũ không lưu đủ dữ liệu để hoàn tác.";
-        if (!l.getAfter().containsKey("status") && !l.getAfter().containsKey("dailyBudget")) return "Dòng nhật ký không ghi lại thay đổi nào để hoàn tác.";
-        if (l.getTs() != null && nowMs - l.getTs().toEpochMilli() > maxDays * 86_400_000L) return "Đã quá " + maxDays + " ngày, dữ liệu lúc đó có thể không còn phù hợp.";
+        if (!l.getAfter().containsKey("status") && !l.getAfter().containsKey("dailyBudget"))
+            return "Dòng nhật ký không ghi lại thay đổi nào để hoàn tác.";
+        if (l.getTs() != null && nowMs - l.getTs().toEpochMilli() > maxDays * 86_400_000L)
+            return "Đã quá " + maxDays + " ngày, dữ liệu lúc đó có thể không còn phù hợp.";
         return "";
     }
 
@@ -59,7 +61,8 @@ public class UndoService {
         if (!why.isEmpty()) throw new ApiException(400, why);
         AppSettings s = settings.get();
         if ("mock".equals(l.getMode()) != s.isMock())
-            throw new ApiException(400, "Dòng nhật ký này được ghi ở chế độ khác (Dùng thử/Thật) nên không thể hoàn tác ở chế độ hiện tại.");
+            throw new ApiException(400, "Dòng nhật ký này được ghi ở chế độ khác (Dùng thử/Thật) nên không thể hoàn tác "
+                    + "ở chế độ hiện tại.");
         String targetId = String.valueOf(l.getTarget().get("id"));
         AdObject cur = fb.listObjects(true).stream().filter(o -> o.id.equals(targetId)).findFirst()
                 .orElseThrow(() -> new ApiException(404, "Không tìm thấy camp/nhóm này trên tài khoản (có thể đã bị xoá)."));
@@ -69,10 +72,12 @@ public class UndoService {
         Map<String, Object> after = l.getAfter(), before = l.getBefore();
         if (after.containsKey("status") && !String.valueOf(after.get("status")).equals(cur.status))
             drift.add("trạng thái hiện tại là “" + ("ACTIVE".equals(cur.status) ? "Đang chạy" : "Tạm dừng") + "”");
-        if (after.containsKey("dailyBudget") && cur.dailyBudget != null && Math.round(cur.dailyBudget) != Math.round(num(after.get("dailyBudget"))))
+        if (after.containsKey("dailyBudget") && cur.dailyBudget != null
+                && Math.round(cur.dailyBudget) != Math.round(num(after.get("dailyBudget"))))
             drift.add("ngân sách hiện tại là " + Fmt.money(cur.dailyBudget));
         if (!drift.isEmpty() && !force)
-            throw new ApiException(409, "Camp đã thay đổi kể từ lúc đó (" + String.join(", ", drift) + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").with("drift", true);
+            throw new ApiException(409, "Camp đã thay đổi kể từ lúc đó (" + String.join(", ", drift)
+                    + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").with("drift", true);
 
         Map<String, Object> snapshot = FacebookService.snapshot(cur);
         Map<String, Object> actionJson = new LinkedHashMap<>(l.getAction());
@@ -95,14 +100,17 @@ public class UndoService {
             }
         } catch (RuntimeException ex) {
             executor.record(false, e -> {
-                e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId()); e.setTarget(l.getTarget()); e.setMode(mode);
-                e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(ex.getMessage()); e.setOk(false); e.setError(FbException.describe(ex));
+                e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
+                e.setTarget(l.getTarget()); e.setMode(mode);
+                e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(ex.getMessage()); e.setOk(false);
+                e.setError(FbException.describe(ex));
             });
             throw ex;
         }
         String fDetail = detail;
         LogEntry entry = executor.record(false, e -> {
-            e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId()); e.setTarget(l.getTarget()); e.setMode(mode);
+            e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
+            e.setTarget(l.getTarget()); e.setMode(mode);
             e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(fDetail); e.setOk(true); e.setAfter(newAfter);
         });
         l.setUndone(Map.of("at", entry.getTs().toString(), "logId", entry.getId()));

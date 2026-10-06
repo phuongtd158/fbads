@@ -24,9 +24,9 @@ import java.util.List;
  */
 @Entity
 @Table(name = "rules")
-@JsonPropertyOrder({"id", "name", "metric", "op", "value", "conditions", "match", "range", "minSpend", "action", "pct", "budgetMode", "amount",
-        "maxBudget", "minBudget", "cooldownHours", "resume", "resumeAt", "from", "to", "allActive", "level", "accountIds", "targets", "enabled",
-        "ladderMetric", "steps", "includeLearning"})
+@JsonPropertyOrder({"id", "name", "metric", "op", "value", "conditions", "match", "range", "minSpend", "action", "pct",
+        "budgetMode", "amount", "maxBudget", "minBudget", "cooldownHours", "resume", "resumeAt", "from", "to", "allActive",
+        "level", "accountIds", "targets", "enabled", "ladderMetric", "steps", "includeLearning"})
 public class Rule {
     @Id
     private String id;
@@ -81,7 +81,10 @@ public class Rule {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private Boolean includeLearning;
 
-    /** Một bậc của rule tăng theo bậc: có từ count kết quả thì tăng value (mode percent: %, amount: số tiền); everyHours = lặp lại (bậc cuối) */
+    /**
+     * Một bậc của rule tăng theo bậc: có từ count kết quả thì tăng value (mode percent: %, amount: số tiền);
+     * everyHours = lặp lại (bậc cuối)
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record Step(double count, String mode, double value, Double everyHours) {}
 

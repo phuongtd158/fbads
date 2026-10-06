@@ -1,6 +1,7 @@
 package com.fbads.engine;
 
 import com.fbads.client.FbException;
+import com.fbads.company.CompanyReportService;
 import com.fbads.repository.WorkspaceRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
@@ -20,11 +21,13 @@ import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Map;
 
 /**
  * Vòng lặp của engine: 30 giây một lần (@Scheduled, fixedDelay = đợi lượt trước xong rồi mới tính giờ lượt sau).
- * Mỗi lượt chạy lần lượt từng workspace, trong WorkspaceContext của workspace đó: cài đặt, lịch, rule, token Facebook đều là của workspace ấy.
+ * Mỗi lượt chạy lần lượt từng workspace, trong WorkspaceContext của workspace đó: cài đặt, lịch, rule, token Facebook
+ * đều là của workspace ấy.
  * Mỗi phần chạy trong try/catch riêng: lịch lỗi không làm mất lượt kiểm tra rule và báo cáo (bản Node thì mất cả lượt).
  * @SchedulerLock (ShedLock, khoá ở Redis): chạy nhiều bản tool thì mỗi lượt chỉ 1 bản chạy; lượt nào không lấy được khoá thì bỏ qua.
  * Tắt bằng ENGINE_ENABLED=false (vd khi kiểm thử).
@@ -50,12 +53,12 @@ public class EngineTicker {
     private final EngineLock lock;
     private final EngineWatch watch;
     private final AlertWatch alerts;
-    private final com.fbads.company.CompanyReportService company;
+    private final CompanyReportService company;
 
-    public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
-                        LogService logs, EngineState state, EngineClock clock, EventBus events,
-                        EventStatsService stats, EngineWatch watch, AlertWatch alerts,
-                        com.fbads.company.CompanyReportService company) {
+    public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis,
+            ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
+            LogService logs, EngineState state, EngineClock clock, EventBus events, EventStatsService stats,
+            EngineWatch watch, AlertWatch alerts, CompanyReportService company) {
         this.watch = watch;
         this.alerts = alerts;
         this.company = company;
@@ -120,7 +123,7 @@ public class EngineTicker {
     @SchedulerLock(name = "fbads-stats-cleanup", lockAtMostFor = "10m")
     public void cleanupStats() {
         try {
-            stats.cleanup(LocalDate.now(java.time.ZoneOffset.UTC).minusDays(7).toString());
+            stats.cleanup(LocalDate.now(ZoneOffset.UTC).minusDays(7).toString());
         } catch (RuntimeException e) {
             log.warn("Không dọn được event_stats_seen: {}", e.getMessage());
         }
@@ -136,7 +139,8 @@ public class EngineTicker {
             String mode = settings.get().mode();
             try {
                 logs.log(l -> {
-                    l.setKind("system"); l.setSource("Hệ thống"); l.setName("-"); l.setDetail(e.getMessage()); l.setOk(false); l.setMode(mode);
+                    l.setKind("system"); l.setSource("Hệ thống"); l.setName("-"); l.setDetail(e.getMessage());
+                    l.setOk(false); l.setMode(mode);
                     l.setError(FbException.describe(e));
                 });
             } catch (RuntimeException ignored) { /* DB lỗi: đã ghi log ra console */ }

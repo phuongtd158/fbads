@@ -32,7 +32,8 @@ public class SettingsController {
     private final FacebookService fb;
     private final TelegramService telegram;
 
-    public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules, FacebookService fb, TelegramService telegram) {
+    public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules, FacebookService fb,
+            TelegramService telegram) {
         this.settings = settings;
         this.schedules = schedules;
         this.rules = rules;

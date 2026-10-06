@@ -22,12 +22,14 @@ import java.util.regex.Pattern;
  * Logger theo tầng: fbads.calls.controller, fbads.calls.service, fbads.calls.engine, fbads.calls.repository.
  *
  * Không lộ bí mật: tham số hay trường JSON có tên chứa password/token/secret (vd. accessToken, telegramToken,
- * appSecret, passwordHash), hoặc tên là pw, code (mã đăng nhập Facebook)… in ra "***". Giá trị dài quá {@value #MAX} ký tự bị cắt, danh sách chỉ in {@value #MAX_ITEMS} phần tử đầu.
+ * appSecret, passwordHash), hoặc tên là pw, code (mã đăng nhập Facebook)… in ra "***". Giá trị dài quá {@value #MAX}
+ * ký tự bị cắt, danh sách chỉ in {@value #MAX_ITEMS} phần tử đầu.
  */
 public class CallLogger {
     static final int MAX = 300;
     static final int MAX_ITEMS = 5;
-    private static final Pattern SECRET = Pattern.compile("(?i).*(password|passwd|token|secret|credential|apikey).*|pw|pwd|pass|code|encoded");
+    private static final Pattern SECRET =
+            Pattern.compile("(?i).*(password|passwd|token|secret|credential|apikey).*|pw|pwd|pass|code|encoded");
     private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
 
     private final ObjectProvider<JsonMapper> json;

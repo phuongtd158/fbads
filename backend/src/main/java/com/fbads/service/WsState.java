@@ -26,7 +26,8 @@ public class WsState {
 
     /** Giá trị của khoá, null nếu chưa có (hoặc không đọc được thành kiểu này) */
     public <T> T get(String key, Class<T> type) {
-        List<String> rows = jdbc.queryForList("SELECT v FROM workspace_state WHERE workspace_id = ? AND k = ?", String.class, WorkspaceContext.require(), key);
+        List<String> rows = jdbc.queryForList("SELECT v FROM workspace_state WHERE workspace_id = ? AND k = ?", String.class,
+                WorkspaceContext.require(), key);
         if (rows.isEmpty()) return null;
         try {
             return mapper.readValue(rows.getFirst(), type);
@@ -41,7 +42,8 @@ public class WsState {
     }
 
     public void put(String key, Object value) {
-        jdbc.update("INSERT INTO workspace_state (workspace_id, k, v, updated_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = VALUES(updated_at)",
+        jdbc.update("INSERT INTO workspace_state (workspace_id, k, v, updated_at) VALUES (?, ?, ?, ?) ON DUPLICATE KEY "
+                + "UPDATE v = VALUES(v), updated_at = VALUES(updated_at)",
                 WorkspaceContext.require(), key, mapper.writeValueAsString(value), Timestamp.from(Instant.now()));
     }
 

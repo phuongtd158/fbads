@@ -17,7 +17,8 @@ import java.util.Base64;
 
 /**
  * Mã hoá bí mật (token Facebook, App Secret, token Telegram) trước khi ghi vào DB: AES-256-GCM, khoá lấy từ SECRET_KEY.
- * Trong DB lưu dạng "enc:v1:<base64(iv 12 byte + dữ liệu mã hoá + tag)>"; ai đọc được DB (bản sao lưu, log SQL…) cũng không dùng được token.
+ * Trong DB lưu dạng "enc:v1:<base64(iv 12 byte + dữ liệu mã hoá + tag)>"; ai đọc được DB (bản sao lưu, log SQL…) cũng
+ * không dùng được token.
  *  - Chưa đặt SECRET_KEY: ghi nguyên văn như trước (vẫn chạy được, lúc khởi động có cảnh báo).
  *  - Đọc: giá trị không có tiền tố "enc:" là dữ liệu cũ chưa mã hoá → dùng nguyên văn; lần lưu sau sẽ được mã hoá.
  * Là bean Spring (Hibernate lấy converter qua Spring) nên đọc được cấu hình.
@@ -64,7 +65,8 @@ public class SecretConverter implements AttributeConverter<String, String> {
     @Override
     public String convertToEntityAttribute(String stored) {
         if (!isEncrypted(stored)) return stored;
-        if (key == null) throw new IllegalStateException("Token trong DB đã được mã hoá nhưng server chưa đặt SECRET_KEY. Đặt lại đúng SECRET_KEY cũ rồi khởi động lại.");
+        if (key == null) throw new IllegalStateException("Token trong DB đã được mã hoá nhưng server chưa đặt "
+                + "SECRET_KEY. Đặt lại đúng SECRET_KEY cũ rồi khởi động lại.");
         try {
             byte[] all = Base64.getDecoder().decode(stored.substring(PREFIX.length()));
             Cipher c = Cipher.getInstance("AES/GCM/NoPadding");

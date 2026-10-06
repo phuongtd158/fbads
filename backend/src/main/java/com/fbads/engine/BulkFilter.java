@@ -17,7 +17,10 @@ public final class BulkFilter {
 
     private static String str(Map<String, Object> f, String k) { Object v = f.get(k); return v == null ? "" : String.valueOf(v); }
 
-    private static double num(Map<String, Object> f, String k) { Object v = f.get(k); return v instanceof Number n ? n.doubleValue() : Double.NaN; }
+    private static double num(Map<String, Object> f, String k) {
+        Object v = f.get(k);
+        return v instanceof Number n ? n.doubleValue() : Double.NaN;
+    }
 
     public static String statusOf(Map<String, Object> f) {
         String s = str(f, "status");

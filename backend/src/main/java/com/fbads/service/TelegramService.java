@@ -11,6 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.net.http.HttpClient;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -89,7 +90,8 @@ public class TelegramService {
         if (code == 400 && d.contains("too long")) return "Tin nhắn quá dài.";
         if (code == 403 && d.contains("blocked")) return "Người này đã chặn bot.";
         if (code == 403 && d.contains("initiate conversation")) return "Người này chưa từng nhắn cho bot nên bot chưa gửi tin được.";
-        if (code == 403 && Pattern.compile("not a member|kicked|write|rights|deactivated").matcher(d).find()) return "Bot chưa ở trong nhóm/kênh này hoặc không có quyền gửi tin.";
+        if (code == 403 && Pattern.compile("not a member|kicked|write|rights|deactivated").matcher(d).find())
+            return "Bot chưa ở trong nhóm/kênh này hoặc không có quyền gửi tin.";
         if (code == 429) return "Telegram đang giới hạn tốc độ gửi, thử lại sau ít phút.";
         return desc != null && !desc.isEmpty() ? "Telegram báo: " + desc : ("Lỗi Telegram " + (code == 0 ? "" : code)).trim();
     }
@@ -110,7 +112,7 @@ public class TelegramService {
                     });
         } catch (RuntimeException e) {
             for (Throwable t = e; t != null; t = t.getCause())
-                if (t instanceof java.net.http.HttpTimeoutException)
+                if (t instanceof HttpTimeoutException)
                     return new Result(id, false, "Telegram không trả lời sau " + Math.round(timeout.toMillis() / 1000.0) + " giây.", true);
             return new Result(id, false, "Không kết nối được tới Telegram. Kiểm tra mạng internet.", true);
         }

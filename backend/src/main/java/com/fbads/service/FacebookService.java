@@ -22,7 +22,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import tools.jackson.databind.JsonNode;
 
+import java.lang.reflect.RecordComponent;
+import java.net.SocketTimeoutException;
 import java.net.URI;
+import java.net.http.HttpTimeoutException;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -38,6 +42,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Client cho Facebook Marketing API + chế độ giả lập (mock). Bản Java của lib/fb.js.
@@ -51,11 +57,14 @@ public class FacebookService {
     private static final Set<String> SECRET_KEYS = Set.of("access_token", "client_secret", "fb_exchange_token", "input_token", "code");
     static final long FORCE_MIN_MS = 15_000, TTL_MS = 120_000, TTL_BUSY_MS = 300_000, RANGE_TTL_MS = 240_000, MOCK_TTL_MS = 45_000;
     private static final Map<String, List<String>> RESULT_ALIASES = Map.of(
-            "purchase", List.of("omni_purchase", "purchase", "onsite_conversion.purchase", "offsite_conversion.fb_pixel_purchase", "onsite_web_purchase"),
+            "purchase", List.of("omni_purchase", "purchase", "onsite_conversion.purchase",
+                    "offsite_conversion.fb_pixel_purchase", "onsite_web_purchase"),
             "lead", List.of("lead", "onsite_conversion.lead_grouped", "offsite_conversion.fb_pixel_lead", "onsite_web_lead"),
-            "initiate_checkout", List.of("omni_initiated_checkout", "initiate_checkout", "onsite_conversion.initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout"));
-    private static final Map<Integer, String> ACC_STATUS = Map.of(1, "Đang hoạt động", 2, "Bị vô hiệu hoá", 3, "Nợ thanh toán", 7, "Đang xét duyệt rủi ro",
-            8, "Đang xử lý thanh toán", 9, "Trong thời gian gia hạn", 100, "Đang chờ đóng", 101, "Đã đóng", 201, "Đang chờ", 202, "Đã đóng");
+            "initiate_checkout", List.of("omni_initiated_checkout", "initiate_checkout", "onsite_conversion.initiate_checkout",
+                    "offsite_conversion.fb_pixel_initiate_checkout"));
+    private static final Map<Integer, String> ACC_STATUS = Map.of(1, "Đang hoạt động", 2, "Bị vô hiệu hoá", 3,
+            "Nợ thanh toán", 7, "Đang xét duyệt rủi ro", 8, "Đang xử lý thanh toán", 9,
+            "Trong thời gian gia hạn", 100, "Đang chờ đóng", 101, "Đã đóng", 201, "Đang chờ", 202, "Đã đóng");
     public static final List<String> NEED_SCOPES = List.of("ads_management", "ads_read");
     private static final Map<String, Integer> ENGINE_DAYS = Map.of("yesterday", 1, "last_3d", 3, "last_7d", 7);
 
@@ -208,7 +217,8 @@ public class FacebookService {
                 fb.put("timeout", true);
                 long sec = Math.round(graph.timeout().toMillis() / 1000.0);
                 throw new FbException(read ? "Facebook không trả lời sau " + sec + " giây."
-                        : "Facebook không trả lời sau " + sec + " giây. Không rõ thao tác đã được thực hiện chưa, hãy bấm Làm mới để xem trạng thái thật trên Facebook.", fb);
+                        : "Facebook không trả lời sau " + sec + " giây. Không rõ thao tác đã được thực hiện chưa, hãy "
+                                + "bấm Làm mới để xem trạng thái thật trên Facebook.", fb);
             }
             fb.put("systemMessage", String.valueOf(e.getMostSpecificCause().getMessage()));
             throw new FbException("Không kết nối được tới Facebook. Kiểm tra mạng internet.", fb);
@@ -217,7 +227,7 @@ public class FacebookService {
 
     static boolean isTimeout(Throwable e) {
         for (Throwable t = e; t != null; t = t.getCause())
-            if (t instanceof java.net.http.HttpTimeoutException || t instanceof java.net.SocketTimeoutException) return true;
+            if (t instanceof HttpTimeoutException || t instanceof SocketTimeoutException) return true;
         return false;
     }
 
@@ -246,7 +256,8 @@ public class FacebookService {
         AccInfo c = ws().accInfo.get(id);
         if (c != null && System.currentTimeMillis() - c.at() < 3_600_000) return c;
         JsonNode r = call("GET", actOf(id), Map.of("fields", "name,currency,account_status"), null);
-        AccInfo info = new AccInfo(r.path("name").asString(""), r.path("currency").asString(""), r.path("account_status").asInt(0), System.currentTimeMillis());
+        AccInfo info = new AccInfo(r.path("name").asString(""), r.path("currency").asString(""),
+                r.path("account_status").asInt(0), System.currentTimeMillis());
         ws().accInfo.put(id, info);
         return info;
     }
@@ -270,10 +281,14 @@ public class FacebookService {
     /** Quảng cáo đang bị từ chối của một tài khoản, kèm camp/nhóm QC chứa nó và lý do (nếu Facebook cho biết) */
     public List<DisapprovedAd> disapprovedAds(String id) {
         List<DisapprovedAd> out = new ArrayList<>();
-        Map<String, String> p = Map.of("fields", "id,name,campaign{name},adset{name},ad_review_feedback", "effective_status", "[\"DISAPPROVED\"]");
+        Map<String, String> p = Map.of("fields", "id,name,campaign{name},adset{name},ad_review_feedback", "effective_status",
+                "[\"DISAPPROVED\"]");
         for (JsonNode a : callAll(actOf(id) + "/ads", p, null)) {
             List<String> reasons = new ArrayList<>();
-            for (JsonNode v : a.path("ad_review_feedback").path("global").values()) { String t = v.asString(""); if (!t.isEmpty()) reasons.add(t); }
+            for (JsonNode v : a.path("ad_review_feedback").path("global").values()) {
+                String t = v.asString("");
+                if (!t.isEmpty()) reasons.add(t);
+            }
             String reason = String.join("; ", reasons);
             out.add(new DisapprovedAd(a.path("id").asString(""), a.path("name").asString(""), a.path("campaign").path("name").asString(""),
                     a.path("adset").path("name").asString(""), reason.length() > 300 ? reason.substring(0, 300) : reason));
@@ -284,9 +299,10 @@ public class FacebookService {
     /** Chi tiêu theo từng giờ của cả tài khoản (giờ theo múi giờ của tài khoản), preset = today | yesterday */
     public List<HourSpend> hourlySpend(String id, String preset) {
         List<HourSpend> out = new ArrayList<>();
-        Map<String, String> p = Map.of("level", "account", "date_preset", preset, "fields", "spend", "breakdowns", "hourly_stats_aggregated_by_advertiser_time_zone");
+        Map<String, String> p = Map.of("level", "account", "date_preset", preset, "fields", "spend", "breakdowns",
+                "hourly_stats_aggregated_by_advertiser_time_zone");
         for (JsonNode r : callAll(actOf(id) + "/insights", p, null)) {
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^\\s*(\\d+)").matcher(r.path("hourly_stats_aggregated_by_advertiser_time_zone").asString("0"));
+            Matcher m = Pattern.compile("^\\s*(\\d+)").matcher(r.path("hourly_stats_aggregated_by_advertiser_time_zone").asString("0"));
             out.add(new HourSpend(m.find() ? Integer.parseInt(m.group(1)) : 0, parseNum(r.path("spend"))));
         }
         return out;
@@ -300,7 +316,8 @@ public class FacebookService {
     }
 
     private static double parseNum(JsonNode v) {
-        try { return v == null || v.isNull() || v.isMissingNode() ? 0 : Double.parseDouble(v.asString()); } catch (NumberFormatException e) { return 0; }
+        try { return v == null || v.isNull() || v.isMissingNode() ? 0
+                : Double.parseDouble(v.asString()); } catch (NumberFormatException e) { return 0; }
     }
 
     /** Một dòng Insights → số liệu. Loại "kết quả" có nhiều tên tuỳ nơi phát sinh: lấy tên ĐẦU TIÊN có trong số liệu (không cộng dồn). */
@@ -308,7 +325,8 @@ public class FacebookService {
         double spend = parseNum(row.path("spend"));
         List<String> names = RESULT_ALIASES.getOrDefault(resultAction, List.of(resultAction));
         double results = pick(row.get("actions"), names), value = pick(row.get("action_values"), names);
-        return new Metrics(spend, (long) parseNum(row.path("impressions")), (long) parseNum(row.path("reach")), (long) parseNum(row.path("clicks")), results,
+        return new Metrics(spend, (long) parseNum(row.path("impressions")), (long) parseNum(row.path("reach")),
+                (long) parseNum(row.path("clicks")), results,
                 results > 0 ? spend / results : null, value, spend > 0 ? value / spend : null,
                 pick(row.get("actions"), List.of("onsite_conversion.messaging_conversation_started_7d")),
                 pick(row.get("actions"), RESULT_ALIASES.get("initiate_checkout")),
@@ -332,24 +350,31 @@ public class FacebookService {
         AccInfo info = accountInfo(id);
         String act = actOf(id);
         try (ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<List<JsonNode>> fCamps = ex.submit(() -> callAll(act + "/campaigns", Map.of("fields", "id,name,status,effective_status,daily_budget"), null));
-            // learning_stage_info là thông tin phụ: Facebook từ chối trường này thì vẫn lấy danh sách như cũ (bị giới hạn thì không thử lại)
+            Future<List<JsonNode>> fCamps = ex.submit(() -> callAll(act + "/campaigns",
+                    Map.of("fields", "id,name,status,effective_status,daily_budget"), null));
+            // learning_stage_info là thông tin phụ: Facebook từ chối trường này thì vẫn lấy danh sách như cũ (bị giới
+            // hạn thì không thử lại)
             Future<List<JsonNode>> fSets = ex.submit(() -> {
                 try {
-                    return callAll(act + "/adsets", Map.of("fields", "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time,learning_stage_info"), null);
+                    return callAll(act + "/adsets", Map.of("fields",
+                            "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time,learning_stage_info"), null);
                 } catch (FbException e) {
                     if (e.isRateLimit()) throw e;
-                    return callAll(act + "/adsets", Map.of("fields", "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time"), null);
+                    return callAll(act + "/adsets", Map.of("fields",
+                            "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time"), null);
                 }
             });
-            Future<List<JsonNode>> fIc = ex.submit(() -> callAll(act + "/insights", Map.of("level", "campaign", "date_preset", "today", "fields", "campaign_id," + INSIGHT_FIELDS), null));
-            Future<List<JsonNode>> fIa = ex.submit(() -> callAll(act + "/insights", Map.of("level", "adset", "date_preset", "today", "fields", "adset_id," + INSIGHT_FIELDS), null));
+            Future<List<JsonNode>> fIc = ex.submit(() -> callAll(act + "/insights",
+                    Map.of("level", "campaign", "date_preset", "today", "fields", "campaign_id," + INSIGHT_FIELDS), null));
+            Future<List<JsonNode>> fIa = ex.submit(() -> callAll(act + "/insights",
+                    Map.of("level", "adset", "date_preset", "today", "fields", "adset_id," + INSIGHT_FIELDS), null));
             List<JsonNode> camps = get(fCamps), adsets = get(fSets), ic = get(fIc), ia = get(fIa);
 
             Map<String, Metrics> mc = new LinkedHashMap<>(), ma = new LinkedHashMap<>();
             for (JsonNode r : ic) mc.put(r.path("campaign_id").asString(), metricsFrom(r, resultAction));
             for (JsonNode r : ia) ma.put(r.path("adset_id").asString(), metricsFrom(r, resultAction));
-            Function<JsonNode, Double> conv = v -> v == null || v.isNull() || v.isMissingNode() || v.asString().isEmpty() ? null : Long.parseLong(v.asString()) / offsetOf(info.currency());
+            Function<JsonNode, Double> conv = v -> v == null || v.isNull() || v.isMissingNode()
+                    || v.asString().isEmpty() ? null : Long.parseLong(v.asString()) / offsetOf(info.currency());
             Function<JsonNode, Boolean> isLearning = a -> "LEARNING".equals(a.path("learning_stage_info").path("status").asString(""));
             Set<String> learningCamps = new HashSet<>();
             for (JsonNode a : adsets) if (isLearning.apply(a)) learningCamps.add(a.path("campaign_id").asString());
@@ -450,7 +475,10 @@ public class FacebookService {
             long ttl = force ? FORCE_MIN_MS : limits.pct() >= 60 ? TTL_BUSY_MS : TTL_MS;
             if (ws().cache.data() != null && age < ttl) return ws().cache.data();
             if (limits.blocked()) {
-                if (ws().cache.data() != null) { ws().cache = new Cache0(ws().cache.at(), ws().cache.data(), true); return ws().cache.data(); }
+                if (ws().cache.data() != null) {
+                    ws().cache = new Cache0(ws().cache.at(), ws().cache.data(), true);
+                    return ws().cache.data();
+                }
                 throw rateLimitError();
             }
             try {
@@ -458,7 +486,10 @@ public class FacebookService {
                 ws().cache = new Cache0(System.currentTimeMillis(), data, false);
                 saveToRedis();
             } catch (FbException e) {
-                if (ws().cache.data() != null && e.isRateLimit()) { ws().cache = new Cache0(ws().cache.at(), ws().cache.data(), true); return ws().cache.data(); }
+                if (ws().cache.data() != null && e.isRateLimit()) {
+                    ws().cache = new Cache0(ws().cache.at(), ws().cache.data(), true);
+                    return ws().cache.data();
+                }
                 throw e;
             }
             return ws().cache.data();
@@ -512,11 +543,13 @@ public class FacebookService {
     public List<Map<String, Object>> accounts() {
         List<Map<String, Object>> out = new ArrayList<>();
         if (isMock()) {
-            for (MockAds.Account a : MockAds.ACCOUNTS) out.add(new LinkedHashMap<>(Map.of("id", a.accountId(), "name", a.accountName(), "currency", a.currency())));
+            for (MockAds.Account a : MockAds.ACCOUNTS)
+                out.add(new LinkedHashMap<>(Map.of("id", a.accountId(), "name", a.accountName(), "currency", a.currency())));
         } else {
             for (String id : settings.get().accountIds()) {
                 AccInfo ai = ws().accInfo.get(id);
-                out.add(new LinkedHashMap<>(Map.of("id", id, "name", ai != null ? ai.name() : id, "currency", ai != null ? ai.currency() : "")));
+                out.add(new LinkedHashMap<>(Map.of("id", id, "name", ai != null ? ai.name() : id, "currency",
+                        ai != null ? ai.currency() : "")));
             }
         }
         return out;
@@ -567,7 +600,8 @@ public class FacebookService {
                 pc.putAll(fbParams);
                 Map<String, String> pa = new LinkedHashMap<>(Map.of("level", "adset", "fields", "adset_id," + INSIGHT_FIELDS));
                 pa.putAll(fbParams);
-                for (JsonNode r : callAll(actOf(id) + "/insights", pc, null)) data.put(r.path("campaign_id").asString(), metricsFrom(r, rs));
+                for (JsonNode r : callAll(actOf(id) + "/insights", pc, null))
+                    data.put(r.path("campaign_id").asString(), metricsFrom(r, rs));
                 for (JsonNode r : callAll(actOf(id) + "/insights", pa, null)) data.put(r.path("adset_id").asString(), metricsFrom(r, rs));
             } catch (FbException e) {
                 if (e.isRateLimit()) throw e; // tài khoản lỗi khác: bỏ qua (đã báo ở danh sách camp)
@@ -592,7 +626,8 @@ public class FacebookService {
             RangeEntry c = ws().rangeCache.get(q.key());
             if (c == null) { // vừa khởi động: lấy bản đã lưu ở Redis
                 FbSnapshots.Range saved = get(rangesL2, l2Key, FbSnapshots.Range.class);
-                if (saved != null && saved.data() != null) ws().rangeCache.put(q.key(), c = new RangeEntry(saved.at(), saved.data(), saved.mock()));
+                if (saved != null && saved.data() != null)
+                    ws().rangeCache.put(q.key(), c = new RangeEntry(saved.at(), saved.data(), saved.mock()));
             }
             long ttl = force ? FORCE_MIN_MS : limits.pct() >= 60 ? TTL_BUSY_MS : RANGE_TTL_MS;
             if (c != null && c.mock == isMock && now - c.at < ttl) return new RangeResult(c.data, c.at, c.stale);
@@ -635,7 +670,8 @@ public class FacebookService {
         Map<String, Object> row = new LinkedHashMap<>();
         row.put("date", date);
         try {
-            for (java.lang.reflect.RecordComponent rc : Metrics.class.getRecordComponents()) row.put(rc.getName(), rc.getAccessor().invoke(m));
+            for (RecordComponent rc : Metrics.class.getRecordComponents())
+                row.put(rc.getName(), rc.getAccessor().invoke(m));
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }
@@ -643,8 +679,10 @@ public class FacebookService {
     }
 
     /**
-     * Số liệu từng ngày của một camp/nhóm QC từ since tới until (YYYY-MM-DD, theo múi giờ tài khoản). Ngày không chạy (Facebook không trả dòng nào)
-     * được điền số 0. Giữ trong bộ nhớ 1 giờ, bấm Làm mới thì hỏi lại (vẫn dùng lại nếu vừa tải trong 15 giây). Bị giới hạn số lần gọi thì dùng số cũ nếu có.
+     * Số liệu từng ngày của một camp/nhóm QC từ since tới until (YYYY-MM-DD, theo múi giờ tài khoản). Ngày không chạy
+     * (Facebook không trả dòng nào)
+     * được điền số 0. Giữ trong bộ nhớ 1 giờ, bấm Làm mới thì hỏi lại (vẫn dùng lại nếu vừa tải trong 15 giây). Bị
+     * giới hạn số lần gọi thì dùng số cũ nếu có.
      */
     public TrendResult dailyTrend(String id, String since, String until, boolean force) {
         boolean mock = isMock();
@@ -653,7 +691,8 @@ public class FacebookService {
         long now = System.currentTimeMillis();
         if (c != null && now - c.at < (force ? FORCE_MIN_MS : TREND_TTL_MS)) return new TrendResult(c.days, c.at, c.stale);
         List<String> dates = new ArrayList<>();
-        for (java.time.LocalDate d = java.time.LocalDate.parse(since), end = java.time.LocalDate.parse(until); !d.isAfter(end); d = d.plusDays(1)) dates.add(d.toString());
+        for (LocalDate d = LocalDate.parse(since),
+                end = LocalDate.parse(until); !d.isAfter(end); d = d.plusDays(1)) dates.add(d.toString());
         List<Map<String, Object>> days = new ArrayList<>();
         if (mock) {
             List<Map.Entry<String, Metrics>> rows = ws().mock.trend(id, dates);
@@ -666,7 +705,8 @@ public class FacebookService {
             }
             List<JsonNode> rows;
             try {
-                rows = callAll(id + "/insights", Map.of("time_range", "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}", "time_increment", "1",
+                rows = callAll(id + "/insights", Map.of("time_range",
+                        "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}", "time_increment", "1",
                         "fields", "spend,impressions,reach,clicks,actions,action_values"), null);
             } catch (FbException e) {
                 if (c != null && e.isRateLimit()) { c.stale = true; return new TrendResult(c.days, c.at, true); }
@@ -761,7 +801,9 @@ public class FacebookService {
 
     /** Đổi token ngắn hạn (vài giờ) thành token dài hạn (~60 ngày) */
     public String extendToken(String appId, String appSecret, String token) {
-        return call("GET", "oauth/access_token", Map.of("grant_type", "fb_exchange_token", "client_id", appId, "client_secret", appSecret, "fb_exchange_token", token), token)
+        return call("GET", "oauth/access_token",
+                Map.of("grant_type", "fb_exchange_token", "client_id", appId, "client_secret", appSecret, "fb_exchange_token",
+                token), token)
                 .path("access_token").asString(null);
     }
 
@@ -780,7 +822,8 @@ public class FacebookService {
     /** Đổi code lấy token rồi gia hạn lên ~60 ngày (gia hạn lỗi thì vẫn dùng token ngắn hạn) */
     public String exchangeCode(String appId, String appSecret, String redirectUri, String code) {
         String appToken = appId + "|" + appSecret;
-        JsonNode r = call("GET", "oauth/access_token", Map.of("client_id", appId, "client_secret", appSecret, "redirect_uri", redirectUri, "code", code), appToken);
+        JsonNode r = call("GET", "oauth/access_token",
+                Map.of("client_id", appId, "client_secret", appSecret, "redirect_uri", redirectUri, "code", code), appToken);
         String t = r.path("access_token").asString(null);
         if (t == null) throw new FbException("Facebook không trả về token.", null);
         try {
@@ -792,7 +835,8 @@ public class FacebookService {
     }
 
     public Map<String, Object> testConnection() {
-        if (isMock()) return new LinkedHashMap<>(Map.of("ok", true, "mock", true, "name", "Chế độ dùng thử (dữ liệu giả)", "currency", "VND"));
+        if (isMock())
+            return new LinkedHashMap<>(Map.of("ok", true, "mock", true, "name", "Chế độ dùng thử (dữ liệu giả)", "currency", "VND"));
         AppSettings s = settings.get();
         List<String> ids = s.accountIds();
         if (s.getAccessToken().isEmpty()) throw new FbException("Chưa có Access Token.", null);
@@ -806,7 +850,8 @@ public class FacebookService {
             try {
                 JsonNode r = call("GET", actOf(id), Map.of("fields", "name,currency,account_status"), null);
                 int st = r.path("account_status").asInt(0);
-                ws().accInfo.put(id, new AccInfo(r.path("name").asString(""), r.path("currency").asString(""), st, System.currentTimeMillis()));
+                ws().accInfo.put(id, new AccInfo(r.path("name").asString(""), r.path("currency").asString(""), st,
+                        System.currentTimeMillis()));
                 a.put("name", r.path("name").asString(""));
                 a.put("currency", r.path("currency").asString(""));
                 a.put("status", ACC_STATUS.getOrDefault(st, String.valueOf(st)));

@@ -156,9 +156,11 @@ public class FacebookController {
         String appId = b.appId();
         if (appId.isEmpty()) appId = s.getFbAppId() == null ? "" : s.getFbAppId();
         String appSecret = b.appSecret();
-        if (appSecret.isEmpty()) appSecret = appId.equals(s.getFbAppId()) && s.getFbAppSecret() != null ? s.getFbAppSecret() : ""; // đổi ứng dụng thì phải nhập secret mới
+        // đổi ứng dụng thì phải nhập secret mới
+        if (appSecret.isEmpty()) appSecret = appId.equals(s.getFbAppId()) && s.getFbAppSecret() != null ? s.getFbAppSecret() : "";
         String configId = b.configId() != null ? b.configId() : (s.getFbConfigId() == null ? "" : s.getFbConfigId());
-        String em = firstError(Checks.checkAppId(appId), appSecret.isEmpty() ? "Hãy nhập App Secret" : Checks.checkAppSecret(appSecret), Checks.checkConfigId(configId));
+        String em = firstError(Checks.checkAppId(appId),
+                appSecret.isEmpty() ? "Hãy nhập App Secret" : Checks.checkAppSecret(appSecret), Checks.checkConfigId(configId));
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
         String fAppId = appId, fSecret = appSecret, fConfig = configId;
         settings.update(x -> { x.setFbAppId(fAppId); x.setFbAppSecret(fSecret); x.setFbConfigId(fConfig); });

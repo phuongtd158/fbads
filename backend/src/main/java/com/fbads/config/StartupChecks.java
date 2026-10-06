@@ -13,7 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Lúc khởi động: tạo/cập nhật tài khoản admin theo APP_PASSWORD; mở ra mạng mà chưa có tài khoản nào thì từ chối chạy; báo nơi phục vụ giao diện. */
+/**
+ * Lúc khởi động: tạo/cập nhật tài khoản admin theo APP_PASSWORD; mở ra mạng mà chưa có tài khoản nào thì từ chối chạy;
+ * báo nơi phục vụ giao diện.
+ */
 @Component
 @Order(100) // sau khi nhập dữ liệu cũ (mật khẩu có thể nằm trong dữ liệu đó)
 public class StartupChecks implements ApplicationRunner {
@@ -24,7 +27,8 @@ public class StartupChecks implements ApplicationRunner {
     private final String host;
     private final int port;
 
-    public StartupChecks(AuthService auth, AppProperties props, @Value("${server.address:127.0.0.1}") String host, @Value("${server.port:3000}") int port) {
+    public StartupChecks(AuthService auth, AppProperties props, @Value("${server.address:127.0.0.1}") String host,
+            @Value("${server.port:3000}") int port) {
         this.auth = auth;
         this.props = props;
         this.host = host;
@@ -35,9 +39,12 @@ public class StartupChecks implements ApplicationRunner {
     public void run(ApplicationArguments args) {
         auth.syncEnvAdmin();
         if (!List.of("127.0.0.1", "localhost", "::1").contains(host) && !auth.enabled())
-            throw new IllegalStateException("HOST mở ra mạng nhưng chưa có tài khoản nào. Hãy đặt biến môi trường APP_PASSWORD (tối thiểu 8 ký tự, tạo tài khoản admin) rồi chạy lại.");
+            throw new IllegalStateException("HOST mở ra mạng nhưng chưa có tài khoản nào. Hãy đặt biến môi trường "
+                    + "APP_PASSWORD (tối thiểu 8 ký tự, tạo tài khoản admin) rồi chạy lại.");
         if (!Files.exists(Path.of(props.publicDir(), "index.html")))
-            log.warn("Chưa có bản build giao diện ở {}. Chạy: cd frontend && npm install && npm run build (hoặc đặt PUBLIC_DIR).", Path.of(props.publicDir()).toAbsolutePath());
-        log.info("Facebook Ads Auto Tool đang chạy: http://{}:{}  | Đăng nhập: {}", host.equals("0.0.0.0") ? "localhost" : host, port, auth.enabled() ? "BẬT" : "tắt (chỉ dùng trên máy này)");
+            log.warn("Chưa có bản build giao diện ở {}. Chạy: cd frontend && npm install && npm run build (hoặc đặt PUBLIC_DIR).",
+                    Path.of(props.publicDir()).toAbsolutePath());
+        log.info("Facebook Ads Auto Tool đang chạy: http://{}:{}  | Đăng nhập: {}", host.equals("0.0.0.0") ? "localhost" : host,
+                port, auth.enabled() ? "BẬT" : "tắt (chỉ dùng trên máy này)");
     }
 }

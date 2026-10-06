@@ -5,6 +5,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -18,6 +19,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.function.Predicate;
 
 /**
  * Gửi 1 yêu cầu HTTP tới Graph API bằng RestClient, đọc mức dùng (RateLimits) và đổi lỗi Facebook thành FbException tiếng Việt.
@@ -58,15 +60,16 @@ public class GraphClient {
     /** Chuỗi query/body dạng form: a=1&b=2 (mã hoá URL) */
     public static String form(Map<String, String> params) {
         StringJoiner j = new StringJoiner("&");
-        params.forEach((k, v) -> j.add(URLEncoder.encode(k, StandardCharsets.UTF_8) + "=" + URLEncoder.encode(v == null ? "" : v, StandardCharsets.UTF_8)));
+        params.forEach((k, v) -> j.add(URLEncoder.encode(k, StandardCharsets.UTF_8) + "="
+                + URLEncoder.encode(v == null ? "" : v, StandardCharsets.UTF_8)));
         return j.toString();
     }
 
     /** Lỗi tạm thời, thử lại có thể được: lỗi mạng, hết giờ, Facebook lỗi 5xx (trừ khi đang bị giới hạn số lần gọi) */
-    public static final class Transient implements java.util.function.Predicate<Throwable> {
+    public static final class Transient implements Predicate<Throwable> {
         @Override
         public boolean test(Throwable e) {
-            if (e instanceof org.springframework.web.client.ResourceAccessException) return true;
+            if (e instanceof ResourceAccessException) return true;
             return e instanceof FbException f && !f.isRateLimit() && f.fb().get("httpStatus") instanceof Number n && n.intValue() >= 500;
         }
     }
@@ -136,7 +139,8 @@ public class GraphClient {
     public static String friendly(int c, int sub, String raw, RateLimits limits) {
         if (c == 190) return "Token đã hết hạn hoặc không hợp lệ. Hãy tạo token mới và dán lại trong Cài đặt.";
         if (c == 10 || c == 200 || c == 294 || c == 278)
-            return "Token chưa đủ quyền. Cần tick quyền ads_management và ads_read, và tài khoản quảng cáo phải được gán cho token/người dùng này.";
+            return "Token chưa đủ quyền. Cần tick quyền ads_management và ads_read, và tài khoản quảng cáo phải được "
+                    + "gán cho token/người dùng này.";
         if (FbException.isRateLimitCode(c)) {
             long min = Math.max(1, (long) Math.ceil((limits.blockedUntil() - System.currentTimeMillis()) / 60000.0));
             return "Facebook đang giới hạn số lần gọi. Tool tạm ngưng gọi và tự thử lại sau khoảng " + min + " phút.";

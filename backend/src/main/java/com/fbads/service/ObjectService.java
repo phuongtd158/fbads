@@ -8,9 +8,15 @@ import com.fbads.dto.AdObject;
 import com.fbads.entity.LogEntry;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 /** Camp / nhóm QC: danh sách, số liệu theo khoảng ngày, bật/tắt và đặt ngân sách bằng tay (có ghi nhật ký). */
 @Service
@@ -38,7 +44,8 @@ public class ObjectService {
         DateRanges.Parsed parsed = DateRanges.parse(q, today);
         if (!parsed.ok()) throw new ApiException(400, parsed.error());
         DateRanges.Resolved range = DateRanges.resolve(parsed.spec(), today);
-        FacebookService.RangeResult got = fb.rangeData(new FacebookService.RangeQuery(parsed.key(), DateRanges.fbParams(parsed.spec(), today), range.days()),
+        FacebookService.RangeResult got = fb.rangeData(new FacebookService.RangeQuery(parsed.key(),
+                DateRanges.fbParams(parsed.spec(), today), range.days()),
                 "1".equals(q.get("refresh")));
         Map<String, Object> meta = fb.objectsMeta();
         Map<String, Object> m = new LinkedHashMap<>();
@@ -57,7 +64,7 @@ public class ObjectService {
     }
 
     static final int TREND_DAYS = 30;
-    private static final java.util.regex.Pattern OBJ_ID = java.util.regex.Pattern.compile("^[\\w-]{1,40}$");
+    private static final Pattern OBJ_ID = Pattern.compile("^[\\w-]{1,40}$");
 
     /**
      * Xu hướng theo ngày của một camp/nhóm QC (biểu đồ): ?days=30 (7–90), tính tới hôm nay theo múi giờ trong Cài đặt.
@@ -74,38 +81,43 @@ public class ObjectService {
             throw new ApiException(400, "Số ngày phải từ 7 đến 90");
         }
         var s = settings.get();
-        java.time.ZoneId zone;
-        try { zone = java.time.ZoneId.of(s.getTimezone()); } catch (RuntimeException e) { zone = java.time.ZoneId.systemDefault(); }
+        ZoneId zone;
+        try { zone = ZoneId.of(s.getTimezone()); } catch (RuntimeException e) { zone = ZoneId.systemDefault(); }
         String until = DateRanges.todayIn(s.getTimezone());
-        String since = java.time.LocalDate.parse(until).minusDays(n - 1).toString();
+        String since = LocalDate.parse(until).minusDays(n - 1).toString();
         FacebookService.TrendResult got = fb.dailyTrend(id, since, until, refresh);
-        java.util.List<Map<String, Object>> events = new java.util.ArrayList<>();
-        for (LogEntry l : logs.since(java.time.LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
+        List<Map<String, Object>> events = new ArrayList<>();
+        for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
             Object type = l.getAction() == null ? null : l.getAction().get("type");
-            if (l.getTarget() == null || !id.equals(l.getTarget().get("id")) || !Boolean.TRUE.equals(l.getOk()) || Boolean.TRUE.equals(l.getDry())
-                    || !java.util.List.of("on", "off", "budget").contains(type) || "mock".equals(l.getMode()) != s.isMock()) continue;
+            if (l.getTarget() == null || !id.equals(l.getTarget().get("id")) || !Boolean.TRUE.equals(l.getOk())
+                    || Boolean.TRUE.equals(l.getDry())
+                    || !List.of("on", "off", "budget").contains(type) || "mock".equals(l.getMode()) != s.isMock()) continue;
             String date = l.getTs().atZone(zone).toLocalDate().toString();
             if (date.compareTo(since) < 0 || date.compareTo(until) > 0) continue;
             Map<String, Object> e = new LinkedHashMap<>();
-            e.put("ts", l.getTs().toString()); e.put("date", date); e.put("type", type); e.put("source", l.getSource()); e.put("detail", l.getDetail());
+            e.put("ts", l.getTs().toString()); e.put("date", date); e.put("type", type); e.put("source", l.getSource());
+            e.put("detail", l.getDetail());
             events.add(e);
         }
-        events.sort(java.util.Comparator.comparing(e -> (String) e.get("ts")));
+        events.sort(Comparator.comparing(e -> (String) e.get("ts")));
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", id); m.put("since", since); m.put("until", until); m.put("days", got.days()); m.put("events", events);
-        m.put("at", got.at() == 0 ? null : got.at()); m.put("stale", got.stale()); m.put("blockedUntil", fb.objectsMeta().get("blockedUntil"));
+        m.put("at", got.at() == 0 ? null : got.at()); m.put("stale", got.stale());
+        m.put("blockedUntil", fb.objectsMeta().get("blockedUntil"));
         return m;
     }
 
     public void setStatus(String id, boolean on, String name) {
-        manual(id, name, Map.of("type", on ? "on" : "off"), on ? "Bật camp" : "Tắt camp", Map.of("status", on ? "ACTIVE" : "PAUSED"), () -> fb.setStatus(id, on));
+        manual(id, name, Map.of("type", on ? "on" : "off"), on ? "Bật camp" : "Tắt camp",
+                Map.of("status", on ? "ACTIVE" : "PAUSED"), () -> fb.setStatus(id, on));
     }
 
     public void setBudget(String id, double amount, String name) {
         long value = Math.round(amount);
         AdObject cur = fb.findCached(id);
         if (cur != null && cur.dailyBudget == null)
-            throw new ApiException(400, "Mục này không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO). Hãy chỉnh ở cấp có ngân sách.");
+            throw new ApiException(400, "Mục này không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO). Hãy "
+                    + "chỉnh ở cấp có ngân sách.");
         Map<String, Object> action = new LinkedHashMap<>();
         action.put("type", "budget"); action.put("mode", "set"); action.put("value", value);
         manual(id, name, action, "Đặt ngân sách " + Fmt.money(value), Map.of("dailyBudget", value), () -> fb.setBudget(id, value));
@@ -125,7 +137,8 @@ public class ObjectService {
         Map<String, Object> before = FacebookService.snapshot(cur);
         String mode = settings.get().mode();
         Consumer<LogEntry> base = e -> {
-            e.setKind("manual"); e.setSource("Thủ công"); e.setName(label); e.setTarget(target); e.setAction(action); e.setBefore(before); e.setMode(mode);
+            e.setKind("manual"); e.setSource("Thủ công"); e.setName(label); e.setTarget(target); e.setAction(action);
+            e.setBefore(before); e.setMode(mode);
         };
         try {
             fn.run();

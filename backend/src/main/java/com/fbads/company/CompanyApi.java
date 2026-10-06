@@ -7,6 +7,7 @@ import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.net.URI;
@@ -46,7 +47,10 @@ public class CompanyApi {
     private record Raw(int status, JsonNode json, List<String> cookies) {}
 
     private final JsonMapper mapper;
-    private final HttpClient http = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(10)).build();
+    private final HttpClient http = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NEVER)
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
     private final Map<Long, Session> sessions = new ConcurrentHashMap<>();
     private volatile Duration timeout = TIMEOUT;
 
@@ -61,7 +65,8 @@ public class CompanyApi {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(c.getBaseUrl() + "/api" + path)).timeout(timeout)
                 .header("Content-Type", "application/json").header("Accept", "application/json");
         if (auth != null) b.header("Cookie", COOKIE + "=" + auth.cookie()).header("X-CSRF-Token", auth.csrf());
-        b.method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));
+        b.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
+                : HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));
         HttpResponse<String> res;
         try {
             res = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
@@ -87,18 +92,24 @@ public class CompanyApi {
     private static String errOf(JsonNode json) { return json == null ? "" : json.path("error").asString(""); }
 
     public Session login(CompanyConfig c) {
-        if (c.getEmail().isEmpty() || c.getPassword().isEmpty()) throw new ApiException(400, "Chưa nhập email/mật khẩu hệ thống công ty (Cài đặt → Báo cáo công ty).");
+        if (c.getEmail().isEmpty() || c.getPassword().isEmpty())
+            throw new ApiException(400, "Chưa nhập email/mật khẩu hệ thống công ty (Cài đặt → Báo cáo công ty).");
         Raw r = raw(c, "/auth/login", "POST", Map.of("email", c.getEmail(), "password", c.getPassword()), null);
         String cookie = cookieFrom(r.cookies());
         String err = errOf(r.json());
-        if (r.status() == 401 || r.status() == 400) throw new ApiException(400, "Hệ thống công ty từ chối đăng nhập: " + (err.isEmpty() ? "sai email hoặc mật khẩu" : err) + ".");
-        if (r.status() == 429) throw new ApiException(429, "Hệ thống công ty đang chặn đăng nhập vì thử quá nhiều lần. Đợi vài phút rồi thử lại.");
-        if (r.status() < 200 || r.status() >= 300) throw new ApiException(502, "Đăng nhập hệ thống công ty lỗi " + r.status() + (err.isEmpty() ? "" : ": " + err) + ".");
+        if (r.status() == 401 || r.status() == 400)
+            throw new ApiException(400, "Hệ thống công ty từ chối đăng nhập: " + (err.isEmpty() ? "sai email hoặc mật khẩu" : err) + ".");
+        if (r.status() == 429)
+            throw new ApiException(429, "Hệ thống công ty đang chặn đăng nhập vì thử quá nhiều lần. Đợi vài phút rồi thử lại.");
+        if (r.status() < 200 || r.status() >= 300)
+            throw new ApiException(502, "Đăng nhập hệ thống công ty lỗi " + r.status() + (err.isEmpty() ? "" : ": " + err) + ".");
         String csrf = r.json() == null ? "" : r.json().path("csrf").asString("");
-        if (cookie.isEmpty() || csrf.isEmpty()) throw new ApiException(502, "Đăng nhập hệ thống công ty không trả về phiên làm việc (có thể API đã đổi).");
+        if (cookie.isEmpty() || csrf.isEmpty())
+            throw new ApiException(502, "Đăng nhập hệ thống công ty không trả về phiên làm việc (có thể API đã đổi).");
         JsonNode user = r.json().path("user");
         if (user.path("must_change").asBoolean(false))
-            throw new ApiException(400, "Tài khoản công ty đang bắt đổi mật khẩu. Hãy đăng nhập trên web công ty, đổi mật khẩu rồi nhập mật khẩu mới vào tool.");
+            throw new ApiException(400, "Tài khoản công ty đang bắt đổi mật khẩu. Hãy đăng nhập trên web công ty, đổi "
+                    + "mật khẩu rồi nhập mật khẩu mới vào tool.");
         Session s = new Session(keyOf(c), cookie, csrf, user.isObject() ? user : null);
         sessions.put(WorkspaceContext.require(), s);
         return s;
@@ -120,7 +131,8 @@ public class CompanyApi {
         }
         if (r.status() < 200 || r.status() >= 300) {
             String err = errOf(r.json());
-            throw new ApiException(r.status() >= 500 ? 502 : 400, "Hệ thống công ty báo lỗi" + (err.isEmpty() ? " " + r.status() : ": " + err));
+            throw new ApiException(r.status() >= 500 ? 502 : 400,
+                    "Hệ thống công ty báo lỗi" + (err.isEmpty() ? " " + r.status() : ": " + err));
         }
         return r.json();
     }
@@ -137,7 +149,8 @@ public class CompanyApi {
         JsonNode list = call(c, "/teams", "GET", null);
         List<Team> out = new ArrayList<>();
         if (list != null && list.isArray()) for (JsonNode t : list)
-            out.add(new Team(t.path("id").asString(""), t.path("code").asString(""), t.path("name").asString(""), t.path("status").asString("")));
+            out.add(new Team(t.path("id").asString(""), t.path("code").asString(""), t.path("name").asString(""),
+                    t.path("status").asString("")));
         return out;
     }
 
@@ -147,13 +160,14 @@ public class CompanyApi {
         String q = "from=" + enc(from) + "&to=" + enc(to) + "&team_id=" + enc(teamId);
         JsonNode list = call(c, "/reports?" + q, "GET", null);
         Session now = sessions.getOrDefault(WorkspaceContext.require(), s);
-        String me = now.user() == null || now.user().path("id").isMissingNode() || now.user().path("id").isNull() ? null : now.user().path("id").asString("");
+        String me = now.user() == null || now.user().path("id").isMissingNode()
+                || now.user().path("id").isNull() ? null : now.user().path("id").asString("");
         List<JsonNode> out = new ArrayList<>();
         if (list != null && list.isArray()) for (JsonNode r : list) {
             if (!teamId.equals(r.path("team_id").asString(""))) continue;
             JsonNode uid = r.path("user_id");
             if (me != null && !me.isEmpty() && !uid.isMissingNode() && !uid.isNull() && !me.equals(uid.asString(""))) continue;
-            tools.jackson.databind.node.ObjectNode x = ((tools.jackson.databind.node.ObjectNode) r).deepCopy();
+            ObjectNode x = ((ObjectNode) r).deepCopy();
             String d = r.path("date").asString("");
             x.put("date", d.length() > 10 ? d.substring(0, 10) : d);
             out.add(x);
@@ -163,7 +177,8 @@ public class CompanyApi {
 
     /** Báo cáo của chính tài khoản này cho Team/ngày/mốc đã có chưa → báo cáo đó hoặc null */
     public JsonNode findReport(CompanyConfig c, String teamId, String date, int slot) {
-        for (JsonNode r : listReports(c, teamId, date, date)) if (date.equals(r.path("date").asString("")) && r.path("slot").asDouble(-1) == slot) return r;
+        for (JsonNode r : listReports(c, teamId, date, date))
+            if (date.equals(r.path("date").asString("")) && r.path("slot").asDouble(-1) == slot) return r;
         return null;
     }
 

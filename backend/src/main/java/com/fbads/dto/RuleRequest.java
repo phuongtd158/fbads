@@ -58,7 +58,9 @@ public record RuleRequest(
                                    String compareRange, String tierMetric, List<TierRequest> tiers) {
         public static final ConditionRequest EMPTY = new ConditionRequest(null, null, null, null, null, null, null, null);
 
-        public ConditionRequest(String metric, String op, String vs, Double factor, Double value) { this(metric, op, vs, factor, value, null, null, null); }
+        public ConditionRequest(String metric, String op, String vs, Double factor, Double value) {
+            this(metric, op, vs, factor, value, null, null, null);
+        }
     }
 
     public record TierRequest(@JsNumber Double count, @JsNumber Double value) {}
@@ -67,7 +69,8 @@ public record RuleRequest(
 
     /** Bản sao đã bật (xem trước luôn xét như rule đang bật) */
     public RuleRequest enabledCopy() {
-        return new RuleRequest(id, name, conditions, metric, op, value, match, range, minSpend, action, budgetMode, pct, amount, maxBudget, minBudget,
-                cooldownHours, resume, resumeAt, from, to, level, allActive, targets, accountIds, true, ladderMetric, steps, includeLearning);
+        return new RuleRequest(id, name, conditions, metric, op, value, match, range, minSpend, action,
+                budgetMode, pct, amount, maxBudget, minBudget, cooldownHours, resume, resumeAt, from, to,
+                level, allActive, targets, accountIds, true, ladderMetric, steps, includeLearning);
     }
 }

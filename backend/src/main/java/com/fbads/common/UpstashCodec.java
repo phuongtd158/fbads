@@ -32,7 +32,8 @@ public final class UpstashCodec {
 
     public static String decode(String text, String secret) {
         if (text == null || !text.startsWith(PREFIX))
-            throw new IllegalStateException("Dữ liệu trên Upstash không đúng định dạng của tool này (khoá fbads:data bị ghi bởi chương trình khác?).");
+            throw new IllegalStateException("Dữ liệu trên Upstash không đúng định dạng của tool này (khoá fbads:data bị "
+                    + "ghi bởi chương trình khác?).");
         byte[] buf = Base64.getDecoder().decode(text.substring(PREFIX.length()));
         if (buf.length < 29) throw new IllegalStateException("Dữ liệu trên Upstash bị cắt cụt hoặc hỏng.");
         try {

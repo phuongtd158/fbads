@@ -95,7 +95,8 @@ public class AuthService {
     public Optional<User> authenticate(String username, String password) {
         Optional<User> u = users.findByUsername(normalize(username));
         if (u.isEmpty() || password == null || !encoder.matches(password, u.get().getPasswordHash())) {
-            if (u.isEmpty()) encoder.matches(password == null ? "" : password, DUMMY); // tốn thời gian như khi có tài khoản: không lộ tên nào tồn tại
+            // tốn thời gian như khi có tài khoản: không lộ tên nào tồn tại
+            if (u.isEmpty()) encoder.matches(password == null ? "" : password, DUMMY);
             return Optional.empty();
         }
         if (encoder.upgradeEncoding(u.get().getPasswordHash())) {
@@ -230,7 +231,8 @@ public class AuthService {
     }
 
     private WorkspaceMember member(long workspaceId, long userId) {
-        return members.findById(new WorkspaceMember.Key(workspaceId, userId)).orElseThrow(() -> new ApiException(404, "Không tìm thấy thành viên"));
+        return members.findById(new WorkspaceMember.Key(workspaceId, userId))
+                .orElseThrow(() -> new ApiException(404, "Không tìm thấy thành viên"));
     }
 
     @Transactional
@@ -256,8 +258,10 @@ public class AuthService {
     public void changePassword(long userId, String current, String next) {
         User u = users.findById(userId).orElseThrow(() -> new ApiException(401, "Cần đăng nhập"));
         if (isEnvAdmin(u))
-            throw new ApiException(400, "Mật khẩu của admin đang được đặt bằng biến môi trường APP_PASSWORD trên server, không đổi ở đây được.");
-        if (current == null || !encoder.matches(current, u.getPasswordHash())) throw field("currentPassword", "Mật khẩu hiện tại không đúng.");
+            throw new ApiException(400, "Mật khẩu của admin đang được đặt bằng biến môi trường APP_PASSWORD trên "
+                    + "server, không đổi ở đây được.");
+        if (current == null || !encoder.matches(current, u.getPasswordHash()))
+            throw field("currentPassword", "Mật khẩu hiện tại không đúng.");
         u.setPasswordHash(encoder.encode(next));
         users.save(u);
     }

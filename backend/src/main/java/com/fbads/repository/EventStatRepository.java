@@ -19,7 +19,8 @@ public interface EventStatRepository extends JpaRepository<EventStat, EventStat.
 
     /** Cộng 1 thao tác cho (workspace, ngày, nguồn); chưa có dòng thì tạo mới */
     @Modifying
-    @Query(value = "INSERT INTO event_stats (workspace_id, day, source, actions) VALUES (:workspaceId, :day, :source, 1) ON DUPLICATE KEY UPDATE actions = actions + 1",
+    @Query(value = "INSERT INTO event_stats (workspace_id, day, source, actions) VALUES (:workspaceId, :day, :source, "
+            + "1) ON DUPLICATE KEY UPDATE actions = actions + 1",
             nativeQuery = true)
     int increment(long workspaceId, String day, String source);
 

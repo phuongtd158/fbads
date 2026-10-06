@@ -3,6 +3,7 @@ package com.fbads.security;
 import org.bouncycastle.crypto.generators.SCrypt;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.HexFormat;
@@ -37,6 +38,6 @@ public class NodeScryptPasswordEncoder implements PasswordEncoder {
     }
 
     private static byte[] hash(CharSequence raw, byte[] salt) {
-        return SCrypt.generate(raw.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8), salt, N, R, P, KEY_LEN);
+        return SCrypt.generate(raw.toString().getBytes(StandardCharsets.UTF_8), salt, N, R, P, KEY_LEN);
     }
 }
