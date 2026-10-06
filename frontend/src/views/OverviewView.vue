@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX } from 'lucide-vue-next'
+import { RefreshCw, Search, Power, SearchX, PlugZap, Megaphone, ArrowUp, ArrowDown, ArrowUpDown, Wallet, Zap, ChevronDown, ChevronsDown, X, FilterX, FileSpreadsheet, ChartLine as LineChart } from 'lucide-vue-next'
 import { state, loadObjs } from '../stores/app'
 import { ov, rangeInfo, rangeReady, loadRange, setSpec, itemOf, clearFilters, todayISO, MAX_COL_W } from '../stores/overview'
 import { toast, toastError, confirm } from '../stores/ui'
@@ -10,7 +10,7 @@ import { fmt, fmtDec, fmtCompact } from '../lib/format'
 import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
 import { totals, runningBudget } from '../lib/metrics'
-import { isToday } from '../lib/dates'
+import { isToday, resolveRange } from '../lib/dates'
 import { colOf, cellValue, cellText, money } from '../lib/overviewColumns'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
@@ -25,6 +25,7 @@ import InfoTip from '../components/InfoTip.vue'
 import Callout from '../components/Callout.vue'
 import BulkBudget from '../components/BulkBudget.vue'
 import OnboardingCard from '../components/OnboardingCard.vue'
+import TrendPanel from '../components/TrendPanel.vue'
 import DateRangePicker from '../components/DateRangePicker.vue'
 import AccountFilter from '../components/AccountFilter.vue'
 import ColumnsMenu from '../components/ColumnsMenu.vue'
@@ -33,6 +34,8 @@ import { allDone, hidden as onboardHidden } from '../stores/onboarding'
 
 const route = useRoute()
 const q = ref(String(route.query.q || ''))
+const trendObj = ref(null) // camp/nhóm QC đang mở bảng xu hướng 30 ngày
+const trendOpen = computed({ get: () => !!trendObj.value, set: (v) => { if (!v) trendObj.value = null } })
 const busy = reactive({})
 const bulkText = ref('')
 const bulkBudget = ref(false) // hộp thoại đổi ngân sách hàng loạt
@@ -110,7 +113,7 @@ const byCur = computed(() => curGroups.value.map((g) => ({
   budget: budgetOf(g.items.filter((i) => isRunning(i.o))),
 })))
 const avgCpa = computed(() => (mixed.value ? null : T.value.cpa))
-const avgRoas = computed(() => (mixed.value ? null : T.value.roas))
+const avgRoas = computed(() => (mixed.value || !T.value.revenue ? null : T.value.roas)) // không có doanh thu → "–"
 const avgPerDay = computed(() => (!today.value && !mixed.value && rangeInfo.value.days && T.value.spend ? T.value.spend / rangeInfo.value.days : null))
 const top = computed(() => (mixed.value ? [] : [...campItems.value].filter((i) => i.m.spend > 0).sort((a, b) => b.m.spend - a.m.spend).slice(0, 3)))
 const topMax = computed(() => (top.value[0] ? top.value[0].m.spend : 1))
@@ -187,7 +190,7 @@ const tot = computed(() => totals(visible.value.map((i) => ({ m: i.m, budget: i.
 const totCell = (c) => {
   if (c.key === 'budget') return tot.value.budgetRows && !visMixed.value ? money(tot.value.budget, currency.value) : '–'
   if (c.money && visMixed.value) return '–'
-  if (c.key === 'roas') return tot.value.roas == null || visMixed.value ? '–' : fmtDec(tot.value.roas)
+  if (c.key === 'roas') return tot.value.roas == null || !tot.value.revenue || visMixed.value ? '–' : fmtDec(tot.value.roas)
   return cellText(c, tot.value[c.key], visCurs.value[0] ? visCurs.value[0].currency : fallbackCur.value)
 }
 const footSpend = computed(() => visCurs.value.map((g) => ({ currency: g.currency, s: g.items.reduce((t, i) => t + i.m.spend, 0) })))
@@ -267,7 +270,35 @@ const chips = computed(() => {
 })
 const clearAll = () => { clearFilters(); q.value = '' }
 
-const roasTone = (m) => (!m.spend || m.roas == null ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
+// ----- Xuất Excel: đúng như bảng đang xem (cấp, bộ lọc, thứ tự, cột, khoảng ngày) nhưng đủ mọi dòng -----
+const exporting = ref(false)
+async function exportXlsx() {
+  if (!visible.value.length) return toast(`Không có ${levelName.value} nào để xuất`)
+  exporting.value = true
+  try {
+    const { overviewSheets, exportFileName, downloadXlsx } = await import('../lib/exportXlsx')
+    const r = resolveRange(ov.spec, todayISO()), now = new Date()
+    const camps = new Map(state.objs.filter((o) => o.level === 'campaign').map((o) => [o.id, o.name]))
+    const sorted = sortKey.value ? `${sortMeta(sortKey.value).label}: ${dirText(sortKey.value, ov.sort.dir)}` : 'Mặc định (như Facebook)'
+    const info = [
+      ['Cấp', ov.level === 'adset' ? 'Nhóm quảng cáo' : 'Chiến dịch'],
+      ['Khoảng ngày', `${rangeInfo.value.title} (${rangeInfo.value.dates})`],
+      ...chips.value.map((c) => [c.k, c.v]),
+      ['Sắp xếp', sorted],
+      ['Số dòng', `${visible.value.length} / ${inLevel.value.length} ${levelName.value}`],
+      ['Xuất lúc', `${now.toLocaleDateString('vi-VN')} ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`],
+      ['Ghi chú', 'Chi tiêu, kết quả, CPA, ROAS… theo khoảng ngày ở trên. Ngân sách và Phân phối là hiện tại.'],
+    ]
+    const sheets = overviewSheets({
+      items: visible.value, cols: cols.value, level: ov.level, showAcc: showAccCol.value, mixed: visMixed.value, total: tot.value, info,
+      deliveryLabel: (o) => deliveryOf(o).label, currencyOf: cur, campaignName: (o) => camps.get(o.campaignId) || '',
+    })
+    downloadXlsx(sheets, exportFileName(ov.level, r.since, r.until))
+    toast(`Đã xuất ${visible.value.length} ${levelName.value} ra file Excel`)
+  } catch (e) { toastError(e) } finally { exporting.value = false }
+}
+
+const roasTone = (m) => (!m.spend || m.roas == null || !m.revenue ? null : m.roas >= 2 ? 'success' : m.roas < 1 ? 'danger' : 'warning')
 const settled = (o) => ['ACTIVE', 'PAUSED'].includes(o.effective)
 // Facebook không cho bật camp đã lưu trữ/bị từ chối → khoá công tắc và giải thích
 const locked = (o) => ['ARCHIVED', 'DELETED', 'DISAPPROVED'].includes(o.effective)
@@ -364,6 +395,9 @@ async function bulk(on) {
         <div class="search"><Search :size="16" /><input ref="searchEl" v-model="q" class="input" :placeholder="`Tìm ${levelName}${multiAcc ? ' hoặc tài khoản' : ''}…`" aria-label="Tìm kiếm" /><kbd>/</kbd></div>
         <span class="sp" />
         <ColumnsMenu v-model="ov.columns" :has-widths="hasWidths" @reset-widths="resetWidths" />
+        <button type="button" class="acb xb" aria-label="Xuất Excel" :disabled="!state.objsLoaded || exporting" title="Tải bảng đang xem về file Excel (.xlsx): đủ mọi dòng đã lọc, đúng các cột và khoảng ngày" @click="exportXlsx">
+          <FileSpreadsheet :size="16" /><span class="lb">Xuất Excel</span>
+        </button>
         <Popover v-model="actOpen" align="right" width="320px" label="Hành động hàng loạt">
           <template #trigger="{ toggle: tg }">
             <button type="button" class="acb" :class="{ on: actOpen }" :disabled="!state.objsLoaded" aria-haspopup="menu" :aria-expanded="actOpen" @click="tg">
@@ -439,7 +473,7 @@ async function bulk(on) {
           <TransitionGroup name="row" tag="div" :css="shown.length <= 40">
             <div v-for="it in shown" :key="it.o.id" class="row item" :class="{ off: it.o.status !== 'ACTIVE' }">
               <div class="c-sw"><Switch :model-value="it.o.status === 'ACTIVE'" :disabled="locked(it.o)" :title="locked(it.o) ? 'Camp đã lưu trữ hoặc bị từ chối, không thể bật' : ''" :loading="busy[it.o.id]" :label="'Bật/tắt ' + it.o.name" @update:model-value="(v) => toggle(it.o, v)" /></div>
-              <div class="c-nm"><b :title="it.o.name">{{ it.o.name }}</b><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
+              <div class="c-nm"><button type="button" class="nmb" :title="'Xem xu hướng 30 ngày: ' + it.o.name" @click="trendObj = it.o"><b>{{ it.o.name }}</b><LineChart :size="14" class="nmi" /></button><small v-if="showAccCol" class="acc faint" :title="'Tài khoản quảng cáo ID ' + it.o.accountId">{{ accountLabel(it.o) }}</small><span v-if="it.o.learning && it.o.level === 'campaign'" class="bdg"><Badge tone="info" title="Có nhóm quảng cáo đang trong giai đoạn học: rule sẽ không đổi ngân sách camp này">Đang học</Badge></span></div>
               <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + it.o.accountId"><b>{{ accountLabel(it.o) }}</b><small v-if="it.o.currency" class="faint">{{ it.o.currency }}</small></div>
               <div class="c-dl"><span class="dl" :class="deliveryOf(it.o).tone" :title="deliveryOf(it.o).label"><i />{{ deliveryOf(it.o).label }}</span></div>
               <div class="metrics">
@@ -479,6 +513,7 @@ async function bulk(on) {
       </div>
     </section>
     <BulkBudget v-model="bulkBudget" :level="ov.level" :account="singleAcc" />
+    <TrendPanel v-model="trendOpen" :obj="trendObj" />
   </div>
 </template>
 
@@ -577,6 +612,12 @@ async function bulk(on) {
 .hd .c-nm { flex-direction: row; align-items: center; padding: 0; }
 .c-nm b { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 620; }
 .item.off .c-nm b { color: var(--text-2); }
+.nmb { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.nmb b { min-width: 0; }
+.nmb .nmi { flex: none; color: var(--text-3); opacity: 0; transition: opacity .15s; }
+.nmb:hover b { color: var(--accent); }
+.nmb:hover .nmi, .nmb:focus-visible .nmi { opacity: 1; }
+@media (hover: none) { .nmb .nmi { opacity: .7; } }
 .bdg { display: flex; gap: 6px; flex-wrap: wrap; }
 .c-nm .acc { display: none; font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: -2px; }
 .c-ac { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 0; }
@@ -636,6 +677,7 @@ async function bulk(on) {
   .gbar { position: static; margin: 0 0 14px; padding: 0; background: none; backdrop-filter: none; }
   .search { max-width: none; flex: 1 1 100%; }
   .fbar .sp { display: none; }
+  .xb .lb { display: none; }
   .chips .cnt { margin-left: 0; width: 100%; }
   /* các lựa chọn Chiến dịch/Nhóm QC và Tất cả/Đang chạy/Không chạy trải hết chiều ngang */
   .frow { gap: 8px; }

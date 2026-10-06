@@ -1,5 +1,6 @@
 import { reactive, ref, computed, watch } from 'vue'
 import { ACCENTS } from '../lib/constants'
+import { cleanTabs, DEFAULT_TABS } from '../lib/nav'
 
 // ---------- Toast ----------
 export const toasts = reactive([])
@@ -45,3 +46,11 @@ watch([resolvedTheme, accent], () => {
 export function setThemeMode(m) { themeMode.value = m; write('theme', m) }
 export function setAccent(a) { accent.value = a; write('accent', a) }
 export function toggleTheme() { setThemeMode(resolvedTheme.value === 'dark' ? 'light' : 'dark') }
+
+// ---------- Thanh menu dưới (mobile): trang nào hiện, thứ tự nào. Lưu theo từng trình duyệt như sáng/tối ----------
+const readTabs = () => { try { const v = localStorage.getItem('mobileTabs'); return v ? cleanTabs(JSON.parse(v)) : [...DEFAULT_TABS] } catch { return [...DEFAULT_TABS] } }
+export const mobileTabs = ref(readTabs())
+export function setMobileTabs(list) {
+  mobileTabs.value = cleanTabs(list)
+  write('mobileTabs', JSON.stringify(mobileTabs.value))
+}

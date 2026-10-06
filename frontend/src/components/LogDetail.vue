@@ -82,10 +82,14 @@ const condHead = computed(() => {
 const cond = computed(() => {
   const c = l.value.condition
   if (!c) return null
+  if (c.ladder) return `Bậc ${c.ladder.step}/${c.ladder.total}: ${METRICS[c.ladder.metric] || c.ladder.metric} hôm nay = ${fmt(c.ladder.count)} (bậc này cần từ ${fmt(c.ladder.need)})` + spendTail(c)
   if (condLines.value.length) return condHead.value + spendTail(c)
   const val = c.actualInf ? '∞ (chưa có kết quả)' : c.actual == null ? '–' : c.metric === 'roas' ? fmtDec(c.actual) : fmt(c.actual)
   const th = c.metric === 'roas' ? c.threshold : fmt(c.threshold)
-  return `${METRICS[c.metric]} (${RANGE_LABEL[c.range || 'today']}) = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}` + spendTail(c)
+  // Ngưỡng chi tiêu nâng theo số kết quả: ghi số kết quả đã có để biết vì sao dùng ngưỡng này
+  const c0 = (c.conditions || [])[0] || {}
+  const tier = c0.tierMetric ? ` (đã có ${fmt(c0.tierCount || 0)} ${METRIC_SHORT[c0.tierMetric] || c0.tierMetric})` : ''
+  return `${METRICS[c.metric]} (${RANGE_LABEL[c.range || 'today']}) = ${val} ${c.op === '>' ? 'lớn hơn' : 'nhỏ hơn'} ngưỡng ${th}${tier}` + spendTail(c)
 })
 const stateText = (s) => (s ? ({ ACTIVE: 'Đang chạy', PAUSED: 'Tạm dừng' }[s] || s) : '–')
 const rows = computed(() => {

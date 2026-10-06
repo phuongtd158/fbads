@@ -1,12 +1,13 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target, Users } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target, Users, Building2 } from 'lucide-vue-next'
 import ConnectionPanel from './settings/ConnectionPanel.vue'
 import ModePanel from './settings/ModePanel.vue'
 import ProtectPanel from './settings/ProtectPanel.vue'
 import TargetsPanel from './settings/TargetsPanel.vue'
 import TelegramPanel from './settings/TelegramPanel.vue'
+import CompanyPanel from './settings/CompanyPanel.vue'
 import GeneralPanel from './settings/GeneralPanel.vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
 import SecurityPanel from './settings/SecurityPanel.vue'
@@ -20,6 +21,7 @@ const tabs = [
   { v: 'protect', label: 'Bảo vệ ngân sách', icon: ShieldAlert, comp: ProtectPanel },
   { v: 'targets', label: 'Mục tiêu', icon: Target, comp: TargetsPanel },
   { v: 'telegram', label: 'Telegram', icon: Send, comp: TelegramPanel },
+  { v: 'company', label: 'Báo cáo công ty', icon: Building2, comp: CompanyPanel },
   { v: 'general', label: 'Chung', icon: SlidersHorizontal, comp: GeneralPanel },
   { v: 'appearance', label: 'Giao diện', icon: Palette, comp: AppearancePanel },
   { v: 'members', label: 'Thành viên', icon: Users, comp: MembersPanel },

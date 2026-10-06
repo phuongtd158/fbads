@@ -28,6 +28,7 @@ function measure() {
 const onDown = (e) => { if (open.value && root.value && !root.value.contains(e.target) && !(panel.value && panel.value.contains(e.target))) open.value = false }
 const onKey = (e) => {
   if (e.key !== 'Escape' || !open.value) return
+  e.stopPropagation() // khung nổi nằm trong hộp thoại: Esc chỉ đóng khung nổi, không đóng luôn hộp thoại
   open.value = false
   const b = root.value && root.value.querySelector('button, [tabindex]')
   if (b) b.focus()

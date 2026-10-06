@@ -26,6 +26,12 @@ const routes = [
         meta: {title: 'Nhật ký', sub: 'Mọi thay đổi tool đã thực hiện'}
     },
     {
+        path: '/company',
+        name: 'company',
+        component: () => import('./views/CompanyView.vue'),
+        meta: {title: 'Báo cáo công ty', sub: 'Số Facebook theo Team ở từng mốc, kiểm tra rồi gửi lên hệ thống công ty'}
+    },
+    {
         path: '/settings/:tab?',
         name: 'settings',
         component: () => import('./views/SettingsView.vue'),

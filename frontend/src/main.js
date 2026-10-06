@@ -4,9 +4,11 @@ import './styles/tokens.css'
 import './styles/base.css'
 import App from './App.vue'
 import router from './router'
+import { initPwa } from './lib/pwa'
 
 const app = createApp(App)
 app.config.errorHandler = (err, instance, info) => {
   console.error('[vue]', info, instance && instance.$options && (instance.$options.__name || instance.$options.name), err && err.stack)
 }
+initPwa()
 app.use(router).mount('#app')

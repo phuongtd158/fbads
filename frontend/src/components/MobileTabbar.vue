@@ -1,22 +1,19 @@
 <script setup>
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { LayoutDashboard, CalendarClock, Zap, ScrollText, Settings } from 'lucide-vue-next'
+import { PAGE_BY_ID } from '../lib/nav'
+import { mobileTabs } from '../stores/ui'
 
 const route = useRoute()
-const items = [
-  { to: '/', name: 'overview', label: 'Tổng quan', icon: LayoutDashboard },
-  { to: '/schedules', name: 'schedules', label: 'Lịch', icon: CalendarClock },
-  { to: '/rules', name: 'rules', label: 'Rule', icon: Zap },
-  { to: '/logs', name: 'logs', label: 'Nhật ký', icon: ScrollText },
-  { to: '/settings', name: 'settings', label: 'Cài đặt', icon: Settings },
-]
+// Các mục do người dùng chọn ở Cài đặt → Giao diện (mặc định: Tổng quan, Lịch, Rule, Nhật ký, Cài đặt)
+const items = computed(() => mobileTabs.value.map((id) => PAGE_BY_ID[id]).filter(Boolean))
 </script>
 
 <template>
   <nav class="tabbar">
-    <RouterLink v-for="i in items" :key="i.name" :to="i.to" :class="{ on: route.name === i.name }">
+    <RouterLink v-for="i in items" :key="i.id" :to="i.to" :class="{ on: route.name === i.id }">
       <span class="pill"><component :is="i.icon" :size="20" /></span>
-      <small>{{ i.label }}</small>
+      <small>{{ i.short }}</small>
     </RouterLink>
   </nav>
 </template>
@@ -28,7 +25,7 @@ const items = [
 }
 a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; color: var(--text-3); text-decoration: none; font-weight: 600; }
 .pill { width: 46px; height: 30px; border-radius: 99px; display: grid; place-items: center; transition: .25s var(--ease); }
-small { font-size: 11px; }
+small { font-size: 11px; white-space: nowrap; }
 a.on { color: var(--accent); }
 a.on .pill { background: var(--accent-soft); }
 @media (max-width: 820px) { .tabbar { display: flex; } }
