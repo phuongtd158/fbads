@@ -56,6 +56,47 @@ public class ObjectService {
         return m;
     }
 
+    static final int TREND_DAYS = 30;
+    private static final java.util.regex.Pattern OBJ_ID = java.util.regex.Pattern.compile("^[\\w-]{1,40}$");
+
+    /**
+     * Xu hướng theo ngày của một camp/nhóm QC (biểu đồ): ?days=30 (7–90), tính tới hôm nay theo múi giờ trong Cài đặt.
+     * Kèm các lần bật/tắt/đổi ngân sách đã làm thật với mục này trong khoảng đó (lấy từ Nhật ký) để đánh dấu trên biểu đồ.
+     */
+    public Map<String, Object> trend(String id, String daysParam, boolean refresh) {
+        if (!OBJ_ID.matcher(id).matches()) throw new ApiException(400, "Mã camp không hợp lệ");
+        int n;
+        try {
+            double d = daysParam == null ? TREND_DAYS : Double.parseDouble(daysParam.trim().isEmpty() ? "0" : daysParam);
+            if (d != Math.rint(d) || d < 7 || d > 90) throw new NumberFormatException();
+            n = (int) d;
+        } catch (NumberFormatException e) {
+            throw new ApiException(400, "Số ngày phải từ 7 đến 90");
+        }
+        var s = settings.get();
+        java.time.ZoneId zone;
+        try { zone = java.time.ZoneId.of(s.getTimezone()); } catch (RuntimeException e) { zone = java.time.ZoneId.systemDefault(); }
+        String until = DateRanges.todayIn(s.getTimezone());
+        String since = java.time.LocalDate.parse(until).minusDays(n - 1).toString();
+        FacebookService.TrendResult got = fb.dailyTrend(id, since, until, refresh);
+        java.util.List<Map<String, Object>> events = new java.util.ArrayList<>();
+        for (LogEntry l : logs.since(java.time.LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
+            Object type = l.getAction() == null ? null : l.getAction().get("type");
+            if (l.getTarget() == null || !id.equals(l.getTarget().get("id")) || !Boolean.TRUE.equals(l.getOk()) || Boolean.TRUE.equals(l.getDry())
+                    || !java.util.List.of("on", "off", "budget").contains(type) || "mock".equals(l.getMode()) != s.isMock()) continue;
+            String date = l.getTs().atZone(zone).toLocalDate().toString();
+            if (date.compareTo(since) < 0 || date.compareTo(until) > 0) continue;
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("ts", l.getTs().toString()); e.put("date", date); e.put("type", type); e.put("source", l.getSource()); e.put("detail", l.getDetail());
+            events.add(e);
+        }
+        events.sort(java.util.Comparator.comparing(e -> (String) e.get("ts")));
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", id); m.put("since", since); m.put("until", until); m.put("days", got.days()); m.put("events", events);
+        m.put("at", got.at() == 0 ? null : got.at()); m.put("stale", got.stale()); m.put("blockedUntil", fb.objectsMeta().get("blockedUntil"));
+        return m;
+    }
+
     public void setStatus(String id, boolean on, String name) {
         manual(id, name, Map.of("type", on ? "on" : "off"), on ? "Bật camp" : "Tắt camp", Map.of("status", on ? "ACTIVE" : "PAUSED"), () -> fb.setStatus(id, on));
     }

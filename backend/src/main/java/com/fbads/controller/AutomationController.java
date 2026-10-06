@@ -89,4 +89,10 @@ public class AutomationController {
         TelegramService.Reply out = TelegramService.reply(report.send());
         return ResponseEntity.status(out.status()).body(out.body());
     }
+
+    @PostMapping("/report/weekly")
+    ResponseEntity<?> sendWeeklyReport() {
+        TelegramService.Reply out = TelegramService.reply(report.sendWeekly());
+        return ResponseEntity.status(out.status()).body(out.body());
+    }
 }

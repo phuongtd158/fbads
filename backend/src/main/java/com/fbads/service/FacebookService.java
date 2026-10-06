@@ -1,6 +1,7 @@
 package com.fbads.service;
 
 import com.fbads.client.FbException;
+import com.fbads.common.ApiException;
 import com.fbads.client.GraphClient;
 import com.fbads.client.MockAds;
 import com.fbads.client.RateLimits;
@@ -84,6 +85,7 @@ public class FacebookService {
         final ReentrantLock lock = new ReentrantLock();
         final Map<String, AccInfo> accInfo = new ConcurrentHashMap<>();
         final Map<String, RangeEntry> rangeCache = new ConcurrentHashMap<>();
+        final Map<String, TrendEntry> trendCache = new ConcurrentHashMap<>();
         volatile Cache0 cache = new Cache0(0, null, false);
         volatile List<Map<String, Object>> accErrors = List.of();
         volatile String currency = "VND";
@@ -547,6 +549,7 @@ public class FacebookService {
         ws().accErrors = List.of();
         ws().accInfo.clear();
         ws().rangeCache.clear();
+        ws().trendCache.clear();
         ws().tokenError = null;
     }
 
@@ -612,6 +615,71 @@ public class FacebookService {
         } finally {
             ws().lock.unlock();
         }
+    }
+
+    // ------------------------------------------------------------------ Xu hướng theo ngày (biểu đồ trên Tổng quan)
+    static final long TREND_TTL_MS = 3_600_000;
+
+    private static final class TrendEntry {
+        final long at;
+        final List<Map<String, Object>> days;
+        volatile boolean stale;
+
+        TrendEntry(long at, List<Map<String, Object>> days) { this.at = at; this.days = days; }
+    }
+
+    public record TrendResult(List<Map<String, Object>> days, long at, boolean stale) {}
+
+    /** { date, spend, impressions, … } như bản Node ({ date, ...metrics }) */
+    private static Map<String, Object> dayRow(String date, Metrics m) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("date", date);
+        try {
+            for (java.lang.reflect.RecordComponent rc : Metrics.class.getRecordComponents()) row.put(rc.getName(), rc.getAccessor().invoke(m));
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+        return row;
+    }
+
+    /**
+     * Số liệu từng ngày của một camp/nhóm QC từ since tới until (YYYY-MM-DD, theo múi giờ tài khoản). Ngày không chạy (Facebook không trả dòng nào)
+     * được điền số 0. Giữ trong bộ nhớ 1 giờ, bấm Làm mới thì hỏi lại (vẫn dùng lại nếu vừa tải trong 15 giây). Bị giới hạn số lần gọi thì dùng số cũ nếu có.
+     */
+    public TrendResult dailyTrend(String id, String since, String until, boolean force) {
+        boolean mock = isMock();
+        String key = (mock ? "m" : "r") + ":" + id + ":" + since + ":" + until;
+        TrendEntry c = ws().trendCache.get(key);
+        long now = System.currentTimeMillis();
+        if (c != null && now - c.at < (force ? FORCE_MIN_MS : TREND_TTL_MS)) return new TrendResult(c.days, c.at, c.stale);
+        List<String> dates = new ArrayList<>();
+        for (java.time.LocalDate d = java.time.LocalDate.parse(since), end = java.time.LocalDate.parse(until); !d.isAfter(end); d = d.plusDays(1)) dates.add(d.toString());
+        List<Map<String, Object>> days = new ArrayList<>();
+        if (mock) {
+            List<Map.Entry<String, Metrics>> rows = ws().mock.trend(id, dates);
+            if (rows == null) throw new ApiException(404, "Không tìm thấy camp hoặc nhóm quảng cáo này.");
+            for (Map.Entry<String, Metrics> r : rows) days.add(dayRow(r.getKey(), r.getValue()));
+        } else {
+            if (limits.blocked()) {
+                if (c != null) { c.stale = true; return new TrendResult(c.days, c.at, true); }
+                throw rateLimitError();
+            }
+            List<JsonNode> rows;
+            try {
+                rows = callAll(id + "/insights", Map.of("time_range", "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}", "time_increment", "1",
+                        "fields", "spend,impressions,reach,clicks,actions,action_values"), null);
+            } catch (FbException e) {
+                if (c != null && e.isRateLimit()) { c.stale = true; return new TrendResult(c.days, c.at, true); }
+                throw e;
+            }
+            String rs = settings.get().getResultAction();
+            Map<String, Metrics> byDate = new LinkedHashMap<>();
+            for (JsonNode r : rows) byDate.put(r.path("date_start").asString(""), metricsFrom(r, rs));
+            for (String d : dates) days.add(dayRow(d, byDate.getOrDefault(d, Metrics.EMPTY)));
+        }
+        TrendEntry e = new TrendEntry(System.currentTimeMillis(), days);
+        ws().trendCache.put(key, e);
+        return new TrendResult(days, e.at, false);
     }
 
     /** Cho rule: 'today' | 'yesterday' | 'last_3d' | 'last_7d' → { [id]: metrics } */

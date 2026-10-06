@@ -92,6 +92,21 @@ public class MockAds {
         return out;
     }
 
+    /** Số liệu giả từng ngày của một camp/nhóm QC: ổn định theo camp và ngày (mở lại thấy cùng số), chi tiêu dao động quanh ngân sách. null = không có mục này */
+    public synchronized List<Map.Entry<String, Metrics>> trend(String id, List<String> dates) {
+        AdObject o = objs().stream().filter(x -> x.id.equals(id)).findFirst().orElse(null);
+        if (o == null) return null;
+        List<Map.Entry<String, Metrics>> out = new ArrayList<>();
+        for (String date : dates) {
+            double n = java.time.LocalDate.parse(date).toEpochDay();
+            java.util.function.DoubleUnaryOperator wave = k -> (Math.sin(n * k + o.seed * 1.7) + 1) / 2; // 0..1
+            double spend = Math.round(o.dailyBudget * (0.55 + 0.45 * wave.applyAsDouble(0.9)));
+            double results = Math.floor(spend / ((60000 + o.seed * 25000 + (o.seed % 2) * 90000) * (0.75 + 0.5 * wave.applyAsDouble(0.37))));
+            out.add(Map.entry(date, metrics(spend, results, o.seed)));
+        }
+        return out;
+    }
+
     public synchronized void setStatus(String id, boolean on) {
         for (AdObject o : objs()) if (o.id.equals(id)) o.status = o.effective = on ? "ACTIVE" : "PAUSED";
     }

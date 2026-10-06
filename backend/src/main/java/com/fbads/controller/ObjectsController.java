@@ -40,6 +40,11 @@ public class ObjectsController {
     @GetMapping("/insights")
     Map<String, Object> insights(@RequestParam Map<String, String> q) { return objects.insights(q); }
 
+    @GetMapping("/objects/{id}/trend")
+    Map<String, Object> trend(@PathVariable String id, @RequestParam(required = false) String days, @RequestParam(required = false) String refresh) {
+        return objects.trend(id, days, "1".equals(refresh));
+    }
+
     @PostMapping("/objects/{id}/status")
     Map<String, Object> status(@PathVariable String id, @RequestBody(required = false) Requests.StatusChange body) {
         Requests.StatusChange b = body == null ? Requests.StatusChange.EMPTY : body;

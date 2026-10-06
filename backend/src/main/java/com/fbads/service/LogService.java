@@ -65,6 +65,9 @@ public class LogService {
 
     public List<LogEntry> ofKind(String kind) { return repo.findByKindOrderBySeqDesc(kind); }
 
+    /** Từ thời điểm ts tới nay, cũ nhất trước */
+    public List<LogEntry> since(java.time.Instant ts) { return repo.findByTsGreaterThanEqualOrderBySeqAsc(ts); }
+
     public Optional<LogEntry> find(String id) { return repo.findById(id); }
 
     /** Sửa dòng đã có (vd. đánh dấu đã hoàn tác): giao diện nhận bản mới qua WebSocket, thay theo id */
