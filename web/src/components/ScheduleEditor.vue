@@ -127,7 +127,9 @@ const setDays = (arr) => { f.value.days = arr; touched.days = true }
 
 // Nhiều giờ chạy trong ngày
 const newTime = ref('')
-// Bấm "Thêm giờ" → hiện ô giờ (mở luôn bảng chọn giờ nếu trình duyệt hỗ trợ); chọn xong là thêm
+// Bấm "Thêm giờ" → hiện ô giờ (mở luôn bảng chọn giờ nếu trình duyệt hỗ trợ); chọn giờ rồi bấm ✓ (hoặc Enter) để thêm.
+// Không tự thêm khi ô đổi giá trị hay mất focus: iPhone điền sẵn giờ hiện tại và báo "change" ngay lúc mở bảng cuộn
+// (và mỗi lần cuộn); Android mở hộp chọn giờ là trang mất focus. Tự thêm/ẩn ô lúc đó sẽ đóng luôn bảng chọn giờ.
 const adding = ref(false)
 const timeEl = ref(null)
 async function startAdd() {
@@ -138,10 +140,7 @@ async function startAdd() {
   el.focus()
   try { el.showPicker && el.showPicker() } catch { /* một số trình duyệt chặn showPicker */ }
 }
-function onTimeChange() { if (isTime(newTime.value)) { addTime(); adding.value = false } }
-// Không ẩn ô khi mất focus lúc chưa chọn giờ: trên điện thoại, hộp chọn giờ là cửa sổ riêng của hệ điều hành,
-// mở ra là trang mất focus — ẩn ô lúc đó sẽ đóng luôn hộp chọn giờ. Muốn thôi thì bấm ×.
-function onTimeBlur() { if (isTime(newTime.value)) { addTime(); adding.value = false } }
+function confirmAdd() { if (!isTime(newTime.value)) return toast('Chọn giờ cần thêm', 'error'); addTime(); adding.value = false }
 function cancelAdd() { newTime.value = ''; adding.value = false }
 const sortedTimes = computed(() => [...new Set(f.value.times)].sort())
 function addTime() {
@@ -211,7 +210,8 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
           <Field v-else label="Giờ chạy" tip="scheduleTime" :error="show('time')" hint="Thêm được nhiều giờ trong ngày (tối đa 24), mỗi giờ chạy 1 lần.">
             <div class="times">
               <span v-for="t in sortedTimes" :key="t" class="tchip num">{{ t }}<button type="button" :aria-label="'Bỏ giờ ' + t" @click="removeTime(t)"><X :size="13" /></button></span>
-              <input v-if="adding" ref="timeEl" v-model="newTime" type="time" class="input tin" aria-label="Giờ cần thêm" @change="onTimeChange" @blur="onTimeBlur" @keydown.enter.prevent="onTimeChange" />
+              <input v-if="adding" ref="timeEl" v-model="newTime" type="time" class="input tin" aria-label="Giờ cần thêm" @keydown.enter.prevent="confirmAdd" />
+              <button v-if="adding" type="button" class="tok" aria-label="Thêm giờ này" @click="confirmAdd"><Check :size="16" /></button>
               <button v-if="adding" type="button" class="tcancel" aria-label="Thôi thêm giờ" @click="cancelAdd"><X :size="15" /></button>
               <button v-else type="button" class="addt" @click="startAdd"><Plus :size="14" />Thêm giờ</button>
             </div>
@@ -288,7 +288,8 @@ const valueHint = computed(() => (f.value.mode === 'percent' ? 'Nhập số âm 
 .addt { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1.5px dashed var(--border-strong); background: var(--surface); color: var(--accent); font: inherit; font-weight: 600; font-size: 13.5px; cursor: pointer; }
 .addt:hover { border-color: var(--accent); }
 .tin { width: 130px; padding: 6px 10px; }
-.tcancel { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: var(--surface-3); color: var(--text-2); cursor: pointer; }
+.tok, .tcancel { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: var(--surface-3); color: var(--text-2); cursor: pointer; }
+.tok { background: var(--accent); color: #fff; }
 .win { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: end; }
 .win label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); font-weight: 600; }
 .arrow { padding-bottom: 10px; }
