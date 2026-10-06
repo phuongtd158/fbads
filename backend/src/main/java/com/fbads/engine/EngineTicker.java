@@ -49,11 +49,13 @@ public class EngineTicker {
     private final WorkspaceRepository workspaces;
     private final EngineLock lock;
     private final EngineWatch watch;
+    private final AlertWatch alerts;
 
     public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
                         LogService logs, EngineState state, EngineClock clock, EventBus events,
-                        EventStatsService stats, EngineWatch watch) {
+                        EventStatsService stats, EngineWatch watch, AlertWatch alerts) {
         this.watch = watch;
+        this.alerts = alerts;
         this.workspaces = workspaces;
         this.lock = lock;
         this.events = events;
@@ -102,6 +104,7 @@ public class EngineTicker {
         step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
         // kiểm tra token: lỗi ở đây không tính là lượt lỗi
         try { watch.tickToken(); } catch (RuntimeException e) { log.error("Lỗi kiểm tra token: {}", e.getMessage()); }
+        try { alerts.tick(); } catch (RuntimeException e) { log.error("Lỗi kiểm tra cảnh báo: {}", e.getMessage()); }
         try { watch.workspaceDone(first); } catch (RuntimeException e) { log.error("Lỗi báo trạng thái vòng tự động: {}", e.getMessage()); }
         events.publish(AppEvent.ENGINE_TICK, "engine", false, Map.of("at", clock.millis()));
     }
