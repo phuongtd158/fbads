@@ -58,6 +58,13 @@ public class AppSettings {
     private String killScope = "total";
     @Convert(converter = JsonConverters.TargetsMap.class)
     private Map<String, Map<String, Number>> accountTargets = new LinkedHashMap<>();
+    // Cảnh báo bất thường (engine/AlertWatch): 30 phút kiểm tra một lần, gửi Telegram và ghi nhật ký
+    private boolean alertAccount = true;     // tài khoản quảng cáo bị vô hiệu hoá / nợ thanh toán…
+    private boolean alertDisapproved = true; // quảng cáo bị từ chối
+    private boolean alertSpike = true;       // chi tiêu hôm nay tăng vọt so với cùng giờ hôm qua
+    private int spikePct = 50;               // tăng hơn 50% thì báo
+    private long spikeMinSpend = 100000;     // chỉ báo khi hôm nay đã chi từ mức này
+    private boolean weeklyReport = true;     // báo cáo tuần qua Telegram, sáng thứ Hai cùng giờ báo cáo hằng ngày
 
     /** Chế độ đang chạy: mock (dữ liệu giả) / dry (chạy thử) / live (thật) */
     @JsonIgnore
@@ -132,4 +139,16 @@ public class AppSettings {
     public void setKillScope(String killScope) { this.killScope = killScope; }
     public Map<String, Map<String, Number>> getAccountTargets() { return accountTargets; }
     public void setAccountTargets(Map<String, Map<String, Number>> accountTargets) { this.accountTargets = accountTargets; }
+    public boolean isAlertAccount() { return alertAccount; }
+    public void setAlertAccount(boolean v) { this.alertAccount = v; }
+    public boolean isAlertDisapproved() { return alertDisapproved; }
+    public void setAlertDisapproved(boolean v) { this.alertDisapproved = v; }
+    public boolean isAlertSpike() { return alertSpike; }
+    public void setAlertSpike(boolean v) { this.alertSpike = v; }
+    public int getSpikePct() { return spikePct; }
+    public void setSpikePct(int v) { this.spikePct = v; }
+    public long getSpikeMinSpend() { return spikeMinSpend; }
+    public void setSpikeMinSpend(long v) { this.spikeMinSpend = v; }
+    public boolean isWeeklyReport() { return weeklyReport; }
+    public void setWeeklyReport(boolean v) { this.weeklyReport = v; }
 }

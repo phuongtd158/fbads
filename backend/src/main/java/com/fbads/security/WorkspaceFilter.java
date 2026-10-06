@@ -35,7 +35,7 @@ public class WorkspaceFilter {
     public static final String ROLE = "fbads.role", USER_ID = "fbads.userId";
 
     /** Không cần workspace: đăng nhập / đăng ký, callback của Facebook (tự lấy workspace từ state) */
-    static final Set<String> NO_WORKSPACE = Set.of("/api/auth", "/api/login", "/api/logout", "/api/setup", "/api/register", "/api/fb/callback");
+    static final Set<String> NO_WORKSPACE = Set.of("/api/auth", "/api/health", "/api/login", "/api/logout", "/api/setup", "/api/register", "/api/fb/callback");
     /** Việc của riêng người dùng, không phụ thuộc quyền trong workspace đang chọn */
     static final Set<String> PERSONAL = Set.of("/api/password", "/api/workspaces", "/api/workspaces/switch");
     /** Ghi vào đây cần quyền OWNER */

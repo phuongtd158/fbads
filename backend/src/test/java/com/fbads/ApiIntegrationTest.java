@@ -22,16 +22,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.mysql.MySQLContainer;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -62,17 +56,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Chạy cả ứng dụng trên MySQL thật (Testcontainers), dữ liệu giả (mock), engine tắt.
  * Gọi API y như giao diện Vue gọi.
  */
-@Testcontainers
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"fbads.engine.enabled=false", "fbads.secret-key=khoa-test"})
-class ApiIntegrationTest {
-    @Container
-    @ServiceConnection
-    static MySQLContainer db = new MySQLContainer("mysql:8.0");
-
-    @Container
-    @ServiceConnection(name = "redis")
-    static GenericContainer<?> redisServer = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
-
+class ApiIntegrationTest extends IntegrationBase {
     @LocalServerPort
     int port;
     @Autowired

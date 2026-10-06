@@ -21,24 +21,38 @@ import java.util.StringJoiner;
 
 /**
  * Gửi 1 yêu cầu HTTP tới Graph API bằng RestClient, đọc mức dùng (RateLimits) và đổi lỗi Facebook thành FbException tiếng Việt.
- * @Retry (Resilience4j): lỗi MẠNG thì tự thử lại tối đa 3 lần (cấu hình resilience4j.retry.instances.graph);
- * lỗi do Facebook trả về thì không thử lại (thử lại chỉ tốn thêm lượt gọi).
+ * Mỗi lời gọi chờ tối đa 30 giây (không có giới hạn thì một lần Facebook treo làm cả vòng tự động đứng theo).
+ * read() (GET) được Resilience4j thử lại khi lỗi tạm thời (xem Transient, cấu hình resilience4j.retry.instances.graphRead);
+ * write() (bật/tắt, đổi ngân sách) không thử lại: có thể Facebook đã làm rồi mà mình chưa nhận được trả lời.
  */
 @Component
 public class GraphClient {
     public static final String BASE = "https://graph.facebook.com";
 
+    /** Thời gian chờ mặc định của mỗi lời gọi */
+    public static final Duration TIMEOUT = Duration.ofSeconds(30);
+
     private final RestClient http;
     private final RateLimits limits;
     private final JsonMapper mapper;
+    private final JdkClientHttpRequestFactory factory;
+    private volatile Duration timeout = TIMEOUT;
 
     public GraphClient(RestClient.Builder builder, RateLimits limits, JsonMapper mapper) {
         HttpClient jdk = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build();
-        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(jdk);
-        factory.setReadTimeout(Duration.ofSeconds(60));
+        this.factory = new JdkClientHttpRequestFactory(jdk);
+        factory.setReadTimeout(TIMEOUT);
         this.http = builder.requestFactory(factory).build();
         this.limits = limits;
         this.mapper = mapper;
+    }
+
+    /** Thời gian chờ mỗi lời gọi (đổi được trong kiểm thử) */
+    public Duration timeout() { return timeout; }
+
+    public void setTimeout(Duration d) {
+        this.timeout = d;
+        factory.setReadTimeout(d);
     }
 
     /** Chuỗi query/body dạng form: a=1&b=2 (mã hoá URL) */
@@ -48,12 +62,27 @@ public class GraphClient {
         return j.toString();
     }
 
+    /** Lỗi tạm thời, thử lại có thể được: lỗi mạng, hết giờ, Facebook lỗi 5xx (trừ khi đang bị giới hạn số lần gọi) */
+    public static final class Transient implements java.util.function.Predicate<Throwable> {
+        @Override
+        public boolean test(Throwable e) {
+            if (e instanceof org.springframework.web.client.ResourceAccessException) return true;
+            return e instanceof FbException f && !f.isRateLimit() && f.fb().get("httpStatus") instanceof Number n && n.intValue() >= 500;
+        }
+    }
+
+    /** Lời gọi ĐỌC (GET): lỗi tạm thời thì Resilience4j thử lại */
+    @Retry(name = "graphRead")
+    public JsonNode read(URI uri, Map<String, Object> request) { return send(HttpMethod.GET, uri, null, request); }
+
+    /** Lời gọi GHI (POST/DELETE): không thử lại */
+    public JsonNode write(HttpMethod method, URI uri, String body, Map<String, Object> request) { return send(method, uri, body, request); }
+
     /**
      * GET (params nằm trên URL) hoặc POST (params trong body). request = mô tả yêu cầu đã bỏ bí mật, để ghi vào lỗi.
-     * Ném ResourceAccessException khi lỗi mạng (để @Retry thử lại), FbException khi Facebook báo lỗi.
+     * Ném ResourceAccessException khi lỗi mạng hoặc hết giờ, FbException khi Facebook báo lỗi.
      */
-    @Retry(name = "graph")
-    public JsonNode send(HttpMethod method, URI uri, String body, Map<String, Object> request) {
+    private JsonNode send(HttpMethod method, URI uri, String body, Map<String, Object> request) {
         RestClient.RequestBodySpec spec = http.method(method).uri(uri);
         if (body != null) spec.contentType(MediaType.APPLICATION_FORM_URLENCODED).body(body);
         return spec.exchange((req, res) -> {

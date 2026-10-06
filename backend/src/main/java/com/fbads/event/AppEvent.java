@@ -37,4 +37,6 @@ public record AppEvent(String id, String type, String key, long at, boolean tele
     public static final String ENGINE_TICK = "engine.tick";
     /** Báo cáo hằng ngày tới giờ gửi: data = {text} */
     public static final String DAILY_REPORT = "report.daily";
+    /** Tin Telegram soạn sẵn (cảnh báo, báo cáo tuần…): data = {text} */
+    public static final String TELEGRAM_TEXT = "telegram.text";
 }

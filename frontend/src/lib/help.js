@@ -204,12 +204,6 @@ export const TOPICS = [
         'Bấm **Gửi tin thử** hoặc **Gửi báo cáo ngay** để xem kết quả **từng người**: ai nhận được, ai lỗi và lý do (đã chặn bot, chưa nhắn cho bot, bot chưa ở trong nhóm…). Một người lỗi không làm những người còn lại mất tin.',
       ] },
       { t: 'note', tone: 'warning', text: 'Tin gửi đi có chi tiêu và tên chiến dịch, nên chỉ thêm những người bạn muốn họ thấy số liệu.' },
-      { t: 'steps', title: 'Điều khiển tool qua Telegram', items: [
-        'Bật **Nhận lệnh từ Telegram** ở Cài đặt → Telegram rồi bấm **Lưu**. Chỉ bật ở **một** bản tool cho mỗi bot.',
-        'Nhắn cho bot: `/status` (chế độ, vòng tự động, chi tiêu hôm nay), `/camps` (camp đang chạy kèm nút **Tắt**), `/report` (báo cáo ngay), `/id` (xem Chat ID).',
-        'Tin báo của lịch/rule có nút **Hoàn tác**; rule chỉ thông báo có nút **Tắt camp**. Bấm nút nào bot cũng hỏi lại, nút xác nhận hết hạn sau 10 phút.',
-        'Chỉ các Chat ID đã nhập mới điều khiển được. Người lạ nhắn `/start` chỉ được trả lời Chat ID của họ. Khi đã bật, cách lấy Chat ID bằng `getUpdates` không còn dùng được: nhắn `/id` cho bot.',
-      ] },
       { t: 'p', text: '**Báo cáo tuần** (bật sẵn, tắt ở Cài đặt → Telegram): sáng thứ Hai, cùng giờ với báo cáo hằng ngày, tool gửi chi tiêu, kết quả, CPA của tuần trước (thứ Hai → Chủ nhật) so với tuần liền trước, 3 camp tốt nhất (CPA thấp), 3 camp cần xem lại (chi mà không có kết quả, hoặc CPA cao) và số lần tool đã tự bật/tắt/đổi ngân sách. Bấm **Gửi báo cáo tuần** để xem thử bất cứ lúc nào.' },
     ],
   },

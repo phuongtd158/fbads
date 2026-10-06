@@ -42,21 +42,34 @@ public class TelegramService {
     /** Phản hồi cho giao diện: mã HTTP + nội dung */
     public record Reply(int status, Map<String, Object> body) {}
 
+    /** Telegram treo thì báo lỗi sau chừng này, không giữ chân vòng tự động */
+    public static final Duration TIMEOUT = Duration.ofSeconds(10);
+
     private final SettingsService settings;
     private final RestClient http;
+    private final JdkClientHttpRequestFactory factory;
+    private volatile Duration timeout = TIMEOUT;
     private final JsonMapper mapper;
     private volatile String apiBase = "https://api.telegram.org";
 
     public TelegramService(SettingsService settings, RestClient.Builder builder, JsonMapper mapper) {
         this.settings = settings;
-        JdkClientHttpRequestFactory f = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
-        f.setReadTimeout(Duration.ofSeconds(20));
-        this.http = builder.requestFactory(f).build();
+        this.factory = new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
+        factory.setReadTimeout(TIMEOUT);
+        this.http = builder.requestFactory(factory).build();
         this.mapper = mapper;
     }
 
     /** Cho kiểm thử: trỏ tới máy chủ giả */
     public void setApiBase(String base) { this.apiBase = base; }
+
+    public String apiBase() { return apiBase; }
+
+    /** Cho kiểm thử: thời gian chờ mỗi lần gọi */
+    public void setTimeout(Duration d) {
+        this.timeout = d;
+        factory.setReadTimeout(d);
+    }
 
     /** Danh sách Chat ID: cách nhau bằng dấu phẩy / chấm phẩy / khoảng trắng, bỏ trùng (không phân biệt hoa thường) */
     public static List<String> chatIds(String v) {
@@ -96,6 +109,9 @@ public class TelegramService {
                         return new Result(id, false, msg, status == 429 || status >= 500);
                     });
         } catch (RuntimeException e) {
+            for (Throwable t = e; t != null; t = t.getCause())
+                if (t instanceof java.net.http.HttpTimeoutException)
+                    return new Result(id, false, "Telegram không trả lời sau " + Math.round(timeout.toMillis() / 1000.0) + " giây.", true);
             return new Result(id, false, "Không kết nối được tới Telegram. Kiểm tra mạng internet.", true);
         }
     }

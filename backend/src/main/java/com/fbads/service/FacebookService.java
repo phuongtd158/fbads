@@ -67,6 +67,8 @@ public class FacebookService {
 
     private record Cache0(long at, List<AdObject> data, boolean stale) {}
 
+    private record TokenError(String token, String message) {}
+
     private static final class RangeEntry {
         final long at; final Map<String, Metrics> data; final boolean mock; volatile boolean stale;
         RangeEntry(long at, Map<String, Metrics> data, boolean mock) { this.at = at; this.data = data; this.mock = mock; }
@@ -75,6 +77,7 @@ public class FacebookService {
     private final SettingsService settings;
     private final GraphClient graph;
     private final RateLimits limits;
+    private volatile String graphBase = GraphClient.BASE;
     /** Trạng thái riêng của một workspace: dữ liệu giả, số đã tải, tài khoản, tiền tệ. Workspace khác nhau không dùng chung gì. */
     private static final class Ws {
         final MockAds mock = new MockAds();
@@ -84,6 +87,7 @@ public class FacebookService {
         volatile Cache0 cache = new Cache0(0, null, false);
         volatile List<Map<String, Object>> accErrors = List.of();
         volatile String currency = "VND";
+        volatile TokenError tokenError;
     }
 
     private final Map<Long, Ws> states = new ConcurrentHashMap<>();
@@ -170,21 +174,49 @@ public class FacebookService {
         request.put("method", method);
         request.put("path", "/" + s.getApiVersion() + "/" + path);
         request.put("params", cleanParams(params));
-        String base = GraphClient.BASE + "/" + s.getApiVersion() + "/" + path;
-        if (method.equals("GET")) return send(HttpMethod.GET, URI.create(base + "?" + GraphClient.form(all)), null, request);
-        return send(HttpMethod.valueOf(method), URI.create(base), GraphClient.form(all), request);
+        String base = graphBase + "/" + s.getApiVersion() + "/" + path;
+        try {
+            if (method.equals("GET")) return send(HttpMethod.GET, URI.create(base + "?" + GraphClient.form(all)), null, request);
+            return send(HttpMethod.valueOf(method), URI.create(base), GraphClient.form(all), request);
+        } catch (FbException e) {
+            // Token trong Cài đặt bị Facebook báo hỏng (hết hạn, bị thu hồi): ghi lại để báo Telegram ngay (engine/EngineWatch)
+            if (tokenOverride == null && Integer.valueOf(190).equals(e.code())) ws().tokenError = new TokenError(token, e.getMessage());
+            throw e;
+        }
     }
 
+    /** Lỗi token gần nhất của token đang dùng trong Cài đặt; "" = không có (hoặc đã đổi token khác) */
+    public String tokenError() {
+        TokenError t = ws().tokenError;
+        return t != null && t.token().equals(settings.get().getAccessToken()) ? t.message() : "";
+    }
+
+    /** Cho kiểm thử: trỏ tới máy chủ giả thay graph.facebook.com */
+    public void setGraphBase(String base) { this.graphBase = base; }
+
     private JsonNode send(HttpMethod m, URI uri, String body, Map<String, Object> request) {
+        boolean read = m == HttpMethod.GET;
         try {
-            return graph.send(m, uri, body, request);
+            return read ? graph.read(uri, request) : graph.write(m, uri, body, request);
         } catch (ResourceAccessException e) {
             Map<String, Object> fb = new LinkedHashMap<>();
             fb.put("network", true);
-            fb.put("systemMessage", String.valueOf(e.getMostSpecificCause().getMessage()));
             fb.put("request", request);
+            if (isTimeout(e)) {
+                fb.put("timeout", true);
+                long sec = Math.round(graph.timeout().toMillis() / 1000.0);
+                throw new FbException(read ? "Facebook không trả lời sau " + sec + " giây."
+                        : "Facebook không trả lời sau " + sec + " giây. Không rõ thao tác đã được thực hiện chưa, hãy bấm Làm mới để xem trạng thái thật trên Facebook.", fb);
+            }
+            fb.put("systemMessage", String.valueOf(e.getMostSpecificCause().getMessage()));
             throw new FbException("Không kết nối được tới Facebook. Kiểm tra mạng internet.", fb);
         }
+    }
+
+    static boolean isTimeout(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause())
+            if (t instanceof java.net.http.HttpTimeoutException || t instanceof java.net.SocketTimeoutException) return true;
+        return false;
     }
 
     /** Lấy hết các trang (500 mục/trang để ít lượt gọi) */
@@ -474,6 +506,7 @@ public class FacebookService {
         ws().accErrors = List.of();
         ws().accInfo.clear();
         ws().rangeCache.clear();
+        ws().tokenError = null;
     }
 
     public void resetMock() { ws().mock.reset(); }
@@ -550,7 +583,10 @@ public class FacebookService {
     /** Sau khi đổi: số ở Redis đã cũ → xoá; lần đọc sau tải lại từ Facebook */
     public void setStatus(String id, boolean on) {
         if (isMock()) ws().mock.setStatus(id, on);
-        else call("POST", id, Map.of("status", on ? "ACTIVE" : "PAUSED"), null);
+        else {
+            try { call("POST", id, Map.of("status", on ? "ACTIVE" : "PAUSED"), null); }
+            finally { ws().cache = new Cache0(0, ws().cache.data(), ws().cache.stale()); } // lỗi/hết giờ: lần sau tải lại trạng thái thật
+        }
         ws().cache = new Cache0(0, ws().cache.data(), ws().cache.stale());
         evictL2(false);
         events.publish(AppEvent.OBJECTS_CHANGED, id, false, Map.of("id", id));
@@ -562,7 +598,8 @@ public class FacebookService {
         else {
             AdObject o = findCached(id);
             String cur = o != null && o.currency != null ? o.currency : ws().currency;
-            call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null);
+            try { call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null); }
+            finally { ws().cache = new Cache0(0, ws().cache.data(), ws().cache.stale()); }
         }
         ws().cache = new Cache0(0, ws().cache.data(), ws().cache.stale());
         evictL2(false);

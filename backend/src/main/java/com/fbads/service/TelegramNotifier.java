@@ -12,7 +12,7 @@ import java.time.Duration;
 /**
  * Consumer "Telegram": nhận sự kiện, sự kiện nào cần báo thì soạn tin và gửi.
  *  - log.created có telegram=true (lịch, rule, dừng khẩn, hoàn tác): một dòng tóm tắt, giống bản Node;
- *  - report.daily: báo cáo hằng ngày.
+ *  - report.daily: báo cáo hằng ngày; telegram.text: tin soạn sẵn (cảnh báo, báo cáo tuần…).
  * Gửi không được thì ném lỗi để nơi gọi quyết định: Kafka thử lại (lỗi tạm thời) hoặc đưa vào DLT (lỗi cố định);
  * chế độ không Kafka thì chỉ ghi log.
  */
@@ -98,7 +98,7 @@ public class TelegramNotifier {
         if (!e.telegram() || e.data() == null) return null;
         return switch (e.type()) {
             case AppEvent.LOG_CREATED -> logLine(e.data());
-            case AppEvent.DAILY_REPORT -> e.data().path("text").asString(null);
+            case AppEvent.DAILY_REPORT, AppEvent.TELEGRAM_TEXT -> e.data().path("text").asString(null);
             default -> null;
         };
     }

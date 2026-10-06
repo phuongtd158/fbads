@@ -79,6 +79,21 @@ public final class SettingsValidator {
             else v.put("dailyChangeCapPct", (int) n);
         }
         if (has.test("killSwitchEnabled")) v.put("killSwitchEnabled", Boolean.TRUE.equals(patch.killSwitchEnabled()));
+        // Cảnh báo bất thường (engine/AlertWatch), báo cáo tuần
+        if (has.test("alertAccount")) v.put("alertAccount", Boolean.TRUE.equals(patch.alertAccount()));
+        if (has.test("alertDisapproved")) v.put("alertDisapproved", Boolean.TRUE.equals(patch.alertDisapproved()));
+        if (has.test("alertSpike")) v.put("alertSpike", Boolean.TRUE.equals(patch.alertSpike()));
+        if (has.test("weeklyReport")) v.put("weeklyReport", Boolean.TRUE.equals(patch.weeklyReport()));
+        if (has.test("spikePct")) {
+            double n = Json.num(patch.spikePct());
+            if (n != Math.rint(n) || n < 10 || n > 1000) e.put("spikePct", "Mức tăng vọt từ 10% đến 1000%");
+            else v.put("spikePct", (int) n);
+        }
+        if (has.test("spikeMinSpend")) {
+            double n = patch.spikeMinSpend() == null ? 0 : patch.spikeMinSpend();
+            if (!Double.isFinite(n) || n < 0 || n > Checks.BUDGET_MAX) e.put("spikeMinSpend", "Chi tiêu tối thiểu phải là số không âm");
+            else v.put("spikeMinSpend", Math.round(n));
+        }
         if (has.test("dailySpendLimit")) {
             double n = patch.dailySpendLimit() == null ? 0 : patch.dailySpendLimit();
             if (!Double.isFinite(n) || n < 0 || n > Checks.BUDGET_MAX) e.put("dailySpendLimit", "Mức chi tiêu tối đa mỗi ngày phải là số không âm");

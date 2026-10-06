@@ -48,10 +48,12 @@ public class EngineTicker {
     private final EventStatsService stats;
     private final WorkspaceRepository workspaces;
     private final EngineLock lock;
+    private final EngineWatch watch;
 
     public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
                         LogService logs, EngineState state, EngineClock clock, EventBus events,
-                        EventStatsService stats) {
+                        EventStatsService stats, EngineWatch watch) {
+        this.watch = watch;
         this.workspaces = workspaces;
         this.lock = lock;
         this.events = events;
@@ -74,26 +76,37 @@ public class EngineTicker {
 
     /** Một lượt: lần lượt từng workspace, mỗi workspace chạy riêng (workspace này lỗi token không làm hỏng workspace khác) */
     void runOnce() {
-        for (long ws : workspaces.allIds()) {
-            try {
-                WorkspaceContext.run(ws, () -> lock.run(() -> { runWorkspace(); return null; }));
-            } catch (RuntimeException e) {
-                log.error("Lỗi tick (workspace {}): {}", ws, e.getMessage(), e);
+        watch.tickStarted();
+        try {
+            for (long ws : workspaces.allIds()) {
+                try {
+                    WorkspaceContext.run(ws, () -> lock.run(() -> { runWorkspace(); return null; }));
+                } catch (RuntimeException e) {
+                    log.error("Lỗi tick (workspace {}): {}", ws, e.getMessage(), e);
+                }
             }
+        } finally {
+            watch.tickDone();
         }
     }
 
     private void runWorkspace() {
-        step("lịch", schedules::tick);
-        step("bật lại theo hẹn", rules::tickResumes);
+        watch.workspaceStarted();
+        RuntimeException first = step("lịch", schedules::tick);
+        first = firstOf(first, step("bật lại theo hẹn", rules::tickResumes));
         long every = Math.max(1, settings.get().getRuleIntervalMin()) * 60_000L;
         // "Đến giờ kiểm tra rule chưa" lưu ở Redis (SET NX + hết hạn) để nhiều bản tool không cùng chạy rule trong một chu kỳ
         if (Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(RULES_RAN + WorkspaceContext.require(), "1", Duration.ofMillis(every))))
-            step("rule", rules::runRules);
-        step("báo cáo", report::tick);
+            first = firstOf(first, step("rule", rules::runRules));
+        first = firstOf(first, step("báo cáo", report::tick));
         step("dọn dẹp", () -> state.cleanupDaily(LocalDate.parse(clock.now().date()).minusDays(7).toString()));
+        // kiểm tra token: lỗi ở đây không tính là lượt lỗi
+        try { watch.tickToken(); } catch (RuntimeException e) { log.error("Lỗi kiểm tra token: {}", e.getMessage()); }
+        try { watch.workspaceDone(first); } catch (RuntimeException e) { log.error("Lỗi báo trạng thái vòng tự động: {}", e.getMessage()); }
         events.publish(AppEvent.ENGINE_TICK, "engine", false, Map.of("at", clock.millis()));
     }
+
+    private static RuntimeException firstOf(RuntimeException a, RuntimeException b) { return a != null ? a : b; }
 
     /** Dọn các dấu "sự kiện đã đếm" (chung mọi workspace), mỗi giờ một lần là đủ */
     @Scheduled(initialDelay = 60_000, fixedDelay = 3_600_000)
@@ -106,9 +119,11 @@ public class EngineTicker {
         }
     }
 
-    private void step(String name, Runnable r) {
+    /** Chạy một phần của lượt; lỗi thì ghi nhật ký và trả về lỗi (null = ổn) */
+    private RuntimeException step(String name, Runnable r) {
         try {
             r.run();
+            return null;
         } catch (RuntimeException e) {
             log.error("Lỗi tick ({}): {}", name, e.getMessage(), e);
             String mode = settings.get().mode();
@@ -118,6 +133,7 @@ public class EngineTicker {
                     l.setError(FbException.describe(e));
                 });
             } catch (RuntimeException ignored) { /* DB lỗi: đã ghi log ra console */ }
+            return e;
         }
     }
 }

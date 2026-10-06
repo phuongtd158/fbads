@@ -52,6 +52,14 @@ public final class SettingsPatch {
     private String killScope;
     /** Mục tiêu theo từng tài khoản: { [id]: { cpa, roas, dailySpendLimit } } */
     private Map<String, AccountTarget> accountTargets;
+    /** Cảnh báo bất thường: tài khoản có vấn đề / quảng cáo bị từ chối / chi tiêu tăng vọt */
+    private Boolean alertAccount, alertDisapproved, alertSpike;
+    /** Tăng vọt: tăng hơn bao nhiêu % so với cùng giờ hôm qua (10–1000) */
+    private Double spikePct;
+    /** Tăng vọt: chỉ báo khi hôm nay đã chi từ mức này; "" = 0 */
+    private Double spikeMinSpend;
+    /** Báo cáo tuần qua Telegram */
+    private Boolean weeklyReport;
     /** Dùng dữ liệu giả */
     private Boolean mock;
     /** Chạy thử, không đổi gì trên Facebook */
@@ -80,6 +88,12 @@ public final class SettingsPatch {
     public Double dailySpendLimit() { return dailySpendLimit; }
     public String killScope() { return killScope; }
     public Map<String, AccountTarget> accountTargets() { return accountTargets; }
+    public Boolean alertAccount() { return alertAccount; }
+    public Boolean alertDisapproved() { return alertDisapproved; }
+    public Boolean alertSpike() { return alertSpike; }
+    public Double spikePct() { return spikePct; }
+    public Double spikeMinSpend() { return spikeMinSpend; }
+    public Boolean weeklyReport() { return weeklyReport; }
     public Boolean mock() { return mock; }
     public Boolean dryRun() { return dryRun; }
 
@@ -117,6 +131,20 @@ public final class SettingsPatch {
     public void setKillScope(String v) { killScope = v; sent.add("killScope"); }
 
     public void setAccountTargets(Map<String, AccountTarget> v) { accountTargets = v; sent.add("accountTargets"); }
+
+    public void setAlertAccount(Boolean v) { alertAccount = v; sent.add("alertAccount"); }
+
+    public void setAlertDisapproved(Boolean v) { alertDisapproved = v; sent.add("alertDisapproved"); }
+
+    public void setAlertSpike(Boolean v) { alertSpike = v; sent.add("alertSpike"); }
+
+    @JsNumber
+    public void setSpikePct(Double v) { spikePct = v; sent.add("spikePct"); }
+
+    @JsNumber
+    public void setSpikeMinSpend(Double v) { spikeMinSpend = v; sent.add("spikeMinSpend"); }
+
+    public void setWeeklyReport(Boolean v) { weeklyReport = v; sent.add("weeklyReport"); }
 
     public void setMock(Boolean v) { mock = v; sent.add("mock"); }
 

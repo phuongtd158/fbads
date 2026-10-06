@@ -74,13 +74,12 @@ management:
 resilience4j:
   retry:
     instances:
-      graph:                   # gọi Facebook Graph API: thử lại khi lỗi mạng (không thử lại khi Facebook trả lỗi)
-        max-attempts: 3
+      graphRead:               # lời gọi ĐỌC Facebook (GET): thử lại tối đa 2 lần (chờ 1 giây, rồi 3 giây) khi lỗi mạng, hết giờ hoặc Facebook lỗi 5xx.
+        max-attempts: 3        # Lời gọi GHI (bật/tắt, đổi ngân sách) không thử lại: có thể Facebook đã làm rồi mà mình chưa nhận được trả lời.
         wait-duration: 1s
-        exponential-backoff-multiplier: 2
+        exponential-backoff-multiplier: 3
         enable-exponential-backoff: true
-        retry-exceptions:
-          - org.springframework.web.client.ResourceAccessException
+        retry-exception-predicate: com.fbads.client.GraphClient$Transient
 
 fbads:
   public-dir: ${PUBLIC_DIR:../frontend/dist}   # bản build giao diện Vue (cd frontend && npm run build)

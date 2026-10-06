@@ -16,7 +16,7 @@ import java.net.URI;
  * Bộ lọc cho /api (chạy TRƯỚC Spring Security, như thứ tự middleware của bản Node):
  *  1. dữ liệu API không bao giờ được cache;
  *  2. chặn gọi chéo từ trang web khác (CSRF): request ghi phải cùng origin và là JSON.
- *     HEAD chỉ được phép trên /api/auth (UptimeRobot… hay dùng HEAD để kiểm tra tool còn sống).
+ *     HEAD chỉ được phép trên /api/auth và /api/health (UptimeRobot… hay dùng HEAD để kiểm tra tool còn sống).
  */
 @Configuration
 public class ApiFilters {
@@ -36,7 +36,7 @@ public class ApiFilters {
             res.setHeader("Cache-Control", "no-store");
             res.setHeader("X-Content-Type-Options", "nosniff");
             String m = req.getMethod();
-            if (m.equals("GET") || (m.equals("HEAD") && req.getRequestURI().equals("/api/auth"))) { chain.doFilter(req, res); return; }
+            if (m.equals("GET") || (m.equals("HEAD") && (req.getRequestURI().equals("/api/auth") || req.getRequestURI().equals("/api/health")))) { chain.doFilter(req, res); return; }
             String origin = req.getHeader("Origin");
             if (origin != null) {
                 String host;
