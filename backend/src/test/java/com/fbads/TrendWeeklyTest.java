@@ -11,10 +11,12 @@ import com.fbads.entity.LogEntry;
 import com.fbads.repository.LogRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
+import com.fbads.service.facebook.FacebookGraph;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +41,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class TrendWeeklyTest extends IntegrationBase {
     @LocalServerPort int port;
     @Autowired SettingsService settings;
-    @Autowired FacebookService fb;
+    @Autowired FacebookInsights insights;
+    @Autowired FacebookGraph fbGraph;
+    @Autowired FacebookState fbState;
     @Autowired TelegramService telegram;
     @Autowired ReportService report;
     @Autowired EngineClock clock;
@@ -58,12 +62,12 @@ class TrendWeeklyTest extends IntegrationBase {
         fbStub = new GraphStub();
         fbStub.handler = r -> GraphStub.Res.ok("{\"data\":[]}");
         tg = new TelegramStub();
-        fb.setGraphBase(fbStub.base());
+        fbGraph.setGraphBase(fbStub.base());
         telegram.setApiBase(tg.base());
         settings.update(s -> { s.setMock(true); s.setDryRun(false); s.setAccessToken("EAAtoken-1234567890"); s.setAdAccountIds(List.of("111")); s.setAdAccountId("111");
             s.setTelegramToken("1:x"); s.setTelegramChatId("42"); s.setReportTime("08:00"); s.setWeeklyReport(true); s.setTimezone("Asia/Ho_Chi_Minh"); s.setResultAction("purchase"); });
-        fb.resetCache();
-        fb.resetMock();
+        fbState.resetCache();
+        fbState.resetMock();
         state.clearAll();
     }
 
@@ -72,10 +76,10 @@ class TrendWeeklyTest extends IntegrationBase {
         logRepo.deleteAllById(logIds);
         settings.update(s -> { s.setMock(true); s.setDryRun(true); s.setAccessToken(""); s.setAdAccountIds(List.of()); s.setAdAccountId(""); s.setTelegramToken(""); s.setTelegramChatId("");
             s.setReportTime(""); });
-        fb.resetCache();
-        fb.resetMock();
+        fbState.resetCache();
+        fbState.resetMock();
         limits.reset();
-        fb.setGraphBase(GraphClient.BASE);
+        fbGraph.setGraphBase(GraphClient.BASE);
         telegram.setApiBase("https://api.telegram.org");
         clock.setClock(Clock.systemUTC());
         state.clearAll();
@@ -91,7 +95,7 @@ class TrendWeeklyTest extends IntegrationBase {
         settings.update(s -> s.setMock(false));
         fbStub.handler = r -> GraphStub.Res.ok("{\"data\":[{\"date_start\":\"2026-09-01\",\"spend\":\"100000\",\"impressions\":\"1000\",\"clicks\":\"10\",\"actions\":[{\"action_type\":\"purchase\",\"value\":\"2\"}]},"
                 + "{\"date_start\":\"2026-09-03\",\"spend\":\"50000\",\"impressions\":\"500\",\"clicks\":\"5\"}]}");
-        FacebookService.TrendResult r = fb.dailyTrend("555", "2026-09-01", "2026-09-04", false);
+        FacebookInsights.TrendResult r = insights.dailyTrend("555", "2026-09-01", "2026-09-04", false);
         assertThat(col(r.days(), "date")).containsExactly("2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04");
         assertThat(col(r.days(), "spend")).containsExactly(100000.0, 0.0, 50000.0, 0.0);
         assertThat(col(r.days(), "results")).containsExactly(2.0, 0.0, 0.0, 0.0);
@@ -99,21 +103,21 @@ class TrendWeeklyTest extends IntegrationBase {
         GraphStub.Req q = fbStub.calls.getFirst();
         assertThat(q.path()).isEqualTo("555/insights");
         assertThat(q.params()).containsEntry("time_increment", "1").containsEntry("time_range", "{\"since\":\"2026-09-01\",\"until\":\"2026-09-04\"}");
-        fb.dailyTrend("555", "2026-09-01", "2026-09-04", false);
-        fb.dailyTrend("555", "2026-09-01", "2026-09-04", true); // bấm Làm mới ngay sau khi tải: vẫn dùng lại
+        insights.dailyTrend("555", "2026-09-01", "2026-09-04", false);
+        insights.dailyTrend("555", "2026-09-01", "2026-09-04", true); // bấm Làm mới ngay sau khi tải: vẫn dùng lại
         assertThat(fbStub.calls).hasSize(1);
         // bị Facebook giới hạn: chưa có số cũ thì báo lỗi
         limits.block(60_000);
-        assertThatThrownBy(() -> fb.dailyTrend("666", "2026-09-01", "2026-09-02", false)).isInstanceOf(FbException.class).hasMessageContaining("giới hạn số lần gọi");
+        assertThatThrownBy(() -> insights.dailyTrend("666", "2026-09-01", "2026-09-02", false)).isInstanceOf(FbException.class).hasMessageContaining("giới hạn số lần gọi");
     }
 
     @Test
     void mockTrendIsStableAnd404() {
-        FacebookService.TrendResult a = fb.dailyTrend("mock_1", "2026-09-01", "2026-09-30", false);
-        fb.resetCache();
-        FacebookService.TrendResult b = fb.dailyTrend("mock_1", "2026-09-01", "2026-09-30", false);
+        FacebookInsights.TrendResult a = insights.dailyTrend("mock_1", "2026-09-01", "2026-09-30", false);
+        fbState.resetCache();
+        FacebookInsights.TrendResult b = insights.dailyTrend("mock_1", "2026-09-01", "2026-09-30", false);
         assertThat(a.days()).hasSize(30).isEqualTo(b.days());
-        assertThatThrownBy(() -> fb.dailyTrend("nope", "2026-09-01", "2026-09-02", false)).isInstanceOf(ApiException.class)
+        assertThatThrownBy(() -> insights.dailyTrend("nope", "2026-09-01", "2026-09-02", false)).isInstanceOf(ApiException.class)
                 .satisfies(e -> assertThat(((ApiException) e).status()).isEqualTo(404));
     }
 

@@ -8,6 +8,7 @@ import com.fbads.engine.EngineLock;
 import com.fbads.engine.RuleRunner;
 import com.fbads.entity.Rule;
 import com.fbads.repository.RuleRepository;
+import com.fbads.service.facebook.FacebookObjects;
 import com.fbads.validation.Result;
 import com.fbads.validation.RuleValidator;
 import org.springframework.stereotype.Service;
@@ -20,14 +21,14 @@ import java.util.Map;
 @Service
 public class RuleService {
     private final RuleRepository repo;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
     private final SettingsService settings;
     private final RuleRunner runner;
     private final EngineLock lock;
 
-    public RuleService(RuleRepository repo, FacebookService fb, SettingsService settings, RuleRunner runner, EngineLock lock) {
+    public RuleService(RuleRepository repo, FacebookObjects objects, SettingsService settings, RuleRunner runner, EngineLock lock) {
         this.repo = repo;
-        this.fb = fb;
+        this.objects = objects;
         this.settings = settings;
         this.runner = runner;
         this.lock = lock;
@@ -36,9 +37,10 @@ public class RuleService {
     public List<Rule> findAll() { return repo.findAllByOrderBySeqAsc(); }
 
     private Result<Rule> validate(RuleRequest input, List<Rule> existing) {
-        List<RuleValidator.Account> accounts = fb.accounts().stream()
+        List<RuleValidator.Account> accounts = objects.accounts().stream()
                 .map(a -> new RuleValidator.Account((String) a.get("id"), (String) a.get("name"))).toList();
-        Result<Rule> r = RuleValidator.validate(input, fb.objectsForValidation(), existing, settings.get().getAccountTargets(), accounts);
+        Result<Rule> r = RuleValidator.validate(input, objects.objectsForValidation(), existing,
+                settings.get().getAccountTargets(), accounts);
         if (!r.ok()) throw new ValidationException(r);
         return r;
     }

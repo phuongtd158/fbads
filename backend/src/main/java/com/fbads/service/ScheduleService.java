@@ -9,6 +9,7 @@ import com.fbads.engine.EngineLock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.Schedule;
 import com.fbads.repository.ScheduleRepository;
+import com.fbads.service.facebook.FacebookObjects;
 import com.fbads.validation.Result;
 import com.fbads.validation.ScheduleValidator;
 import org.springframework.stereotype.Service;
@@ -21,13 +22,13 @@ public class ScheduleService {
     public static final int MAX_ITEMS = 200;
 
     private final ScheduleRepository repo;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
     private final ScheduleRunner runner;
     private final EngineLock lock;
 
-    public ScheduleService(ScheduleRepository repo, FacebookService fb, ScheduleRunner runner, EngineLock lock) {
+    public ScheduleService(ScheduleRepository repo, FacebookObjects objects, ScheduleRunner runner, EngineLock lock) {
         this.repo = repo;
-        this.fb = fb;
+        this.objects = objects;
         this.runner = runner;
         this.lock = lock;
     }
@@ -37,7 +38,7 @@ public class ScheduleService {
     /** Thêm mới (chưa có id) hoặc thay thế lịch cùng id */
     public Saved<Schedule> save(ScheduleRequest input) {
         List<Schedule> all = findAll();
-        Result<Schedule> r = ScheduleValidator.validate(input, fb.objectsForValidation(), all);
+        Result<Schedule> r = ScheduleValidator.validate(input, objects.objectsForValidation(), all);
         if (!r.ok()) throw new ValidationException(r);
         Schedule item = r.value();
         // id chưa có trong workspace này (mục mới, hoặc id của workspace khác) → luôn cấp id mới, không bao giờ ghi đè mục của người khác

@@ -5,11 +5,15 @@ import com.fbads.client.GraphClient;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineWatch;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
 import com.fbads.service.WsState;
+import com.fbads.service.facebook.FacebookActions;
+import com.fbads.service.facebook.FacebookAuth;
+import com.fbads.service.facebook.FacebookGraph;
+import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.service.facebook.FacebookState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,8 +38,11 @@ class WatchIntegrationTest extends IntegrationBase {
     int port;
     @Autowired
     SettingsService settings;
-    @Autowired
-    FacebookService fb;
+    @Autowired FacebookObjects objects;
+    @Autowired FacebookActions actions;
+    @Autowired FacebookAuth auth;
+    @Autowired FacebookGraph fbGraph;
+    @Autowired FacebookState fbState;
     @Autowired
     GraphClient graph;
     @Autowired
@@ -62,13 +69,13 @@ class WatchIntegrationTest extends IntegrationBase {
         ws = WorkspaceContext.enter(WorkspaceContext.DEFAULT);
         fbStub = new GraphStub();
         tg = new TelegramStub();
-        fb.setGraphBase(fbStub.base());
+        fbGraph.setGraphBase(fbStub.base());
         graph.setTimeout(Duration.ofMillis(300));
         telegram.setApiBase(tg.base());
         clock.setClock(Clock.fixed(now, ZoneOffset.UTC));
         settings.update(s -> { s.setMock(false); s.setAccessToken("EAAtesttoken1234567890"); s.setAdAccountIds(java.util.List.of("123")); s.setAdAccountId("123");
             s.setTelegramToken("123:abc"); s.setTelegramChatId("42"); });
-        fb.resetCache();
+        fbState.resetCache();
         watch.reset();
         state.clearAll();
     }
@@ -76,9 +83,9 @@ class WatchIntegrationTest extends IntegrationBase {
     @AfterEach
     void tearDown() {
         settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(java.util.List.of()); s.setAdAccountId(""); s.setTelegramToken(""); s.setTelegramChatId(""); });
-        fb.resetCache();
+        fbState.resetCache();
         limits.reset(); // "rate" đã chặn gọi Facebook 5 phút: không để lây sang test khác
-        fb.setGraphBase(GraphClient.BASE);
+        fbGraph.setGraphBase(GraphClient.BASE);
         graph.setTimeout(GraphClient.TIMEOUT);
         telegram.setApiBase("https://api.telegram.org");
         telegram.setTimeout(TelegramService.TIMEOUT);
@@ -100,22 +107,22 @@ class WatchIntegrationTest extends IntegrationBase {
     void readsAreRetriedWritesAreNot() {
         tokenExpiresIn(null);
         fbStub.script("hang", "500");
-        assertThat(fb.inspectToken("EAAtesttoken1234567890").get("valid")).as("lần thứ 3 thành công").isEqualTo(true);
+        assertThat(auth.inspectToken("EAAtesttoken1234567890").get("valid")).as("lần thứ 3 thành công").isEqualTo(true);
         assertThat(fbStub.calls).hasSize(3);
 
         fbStub.calls.clear();
         fbStub.script("500", "500", "500", "500");
-        assertThatThrownBy(() -> fb.inspectToken("EAAtesttoken1234567890")).isInstanceOf(FbException.class);
+        assertThatThrownBy(() -> auth.inspectToken("EAAtesttoken1234567890")).isInstanceOf(FbException.class);
         assertThat(fbStub.calls).as("không thử quá 2 lần").hasSize(3);
 
         fbStub.calls.clear();
         fbStub.script("rate");
-        assertThatThrownBy(() -> fb.inspectToken("EAAtesttoken1234567890")).isInstanceOf(FbException.class);
+        assertThatThrownBy(() -> auth.inspectToken("EAAtesttoken1234567890")).isInstanceOf(FbException.class);
         assertThat(fbStub.calls).as("bị giới hạn thì không thử lại").hasSize(1);
 
         fbStub.calls.clear();
         fbStub.script("hang");
-        assertThatThrownBy(() -> fb.setStatus("c1", false)).isInstanceOfSatisfying(FbException.class, e -> {
+        assertThatThrownBy(() -> actions.setStatus("c1", false)).isInstanceOfSatisfying(FbException.class, e -> {
             assertThat(e.fb().get("timeout")).isEqualTo(true);
             assertThat(e.getMessage()).contains("Không rõ thao tác");
         });
@@ -124,7 +131,7 @@ class WatchIntegrationTest extends IntegrationBase {
 
         fbStub.calls.clear();
         fbStub.script("neterr");
-        assertThatThrownBy(() -> fb.setBudget("c1", 500000)).isInstanceOf(FbException.class);
+        assertThatThrownBy(() -> actions.setBudget("c1", 500000)).isInstanceOf(FbException.class);
         assertThat(fbStub.calls).as("lời gọi ghi lỗi mạng: không thử lại").hasSize(1);
     }
 
@@ -162,7 +169,7 @@ class WatchIntegrationTest extends IntegrationBase {
     @Test
     void brokenTokenAlertedImmediatelyOnce() {
         fbStub.handler = r -> new GraphStub.Res(400, "{\"error\":{\"code\":190,\"message\":\"Error validating access token\"}}");
-        assertThatThrownBy(() -> fb.listObjects(true)).isInstanceOf(FbException.class);
+        assertThatThrownBy(() -> objects.listObjects(true)).isInstanceOf(FbException.class);
         watch.tickToken();
         watch.tickToken();
         assertThat(tg.texts).hasSize(1);

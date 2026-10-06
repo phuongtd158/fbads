@@ -12,7 +12,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.util.UUID;
 
 /**
- * Nơi duy nhất phát sự kiện. Nơi phát (nhật ký, FacebookService, engine) không biết ai nhận và nhận bằng cách nào.
+ * Nơi duy nhất phát sự kiện. Nơi phát (nhật ký, FacebookActions, engine) không biết ai nhận và nhận bằng cách nào.
  * Sự kiện mang workspace của luồng đang phát (WorkspaceContext).
  * Đang trong transaction thì chờ commit xong mới phát, để consumer không thấy dữ liệu có thể còn bị huỷ.
  */

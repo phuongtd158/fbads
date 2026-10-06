@@ -6,9 +6,10 @@ import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookActions;
+import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
@@ -23,14 +24,14 @@ import java.util.function.Consumer;
 @Service
 public class ActionExecutor {
     private final SettingsService settings;
-    private final FacebookService fb;
+    private final FacebookActions actions;
     private final LogService logs;
     private final EngineState state;
     private final EngineClock clock;
 
-    public ActionExecutor(SettingsService settings, FacebookService fb, LogService logs, EngineState state, EngineClock clock) {
+    public ActionExecutor(SettingsService settings, FacebookActions actions, LogService logs, EngineState state, EngineClock clock) {
         this.settings = settings;
-        this.fb = fb;
+        this.actions = actions;
         this.logs = logs;
         this.state = state;
         this.clock = clock;
@@ -131,7 +132,7 @@ public class ActionExecutor {
         boolean dry = s.isDry();
         boolean isNotify = action.isNotify();
         String mode = s.mode();
-        Map<String, Object> before = FacebookService.snapshot(obj);
+        Map<String, Object> before = FacebookObjects.snapshot(obj);
         Consumer<LogEntry> base = e -> {
             e.setKind(ctx.kind() != null ? ctx.kind() : "manual");
             e.setRefId(ctx.refId());
@@ -166,10 +167,10 @@ public class ActionExecutor {
         try {
             if (!isNotify && !dry) {
                 if (p.after().containsKey("status")) {
-                    fb.setStatus(obj.id, "ACTIVE".equals(p.after().get("status")));
+                    actions.setStatus(obj.id, "ACTIVE".equals(p.after().get("status")));
                     obj.status = obj.effective = (String) p.after().get("status");
                 } else {
-                    fb.setBudget(obj.id, p.next());
+                    actions.setBudget(obj.id, p.next());
                     if (ctx.isRule()) {
                         String day = clock.now().date();
                         if (!state.hasDaily(day, "base:" + obj.id)) state.putDaily(day, "base:" + obj.id, obj.dailyBudget);

@@ -11,9 +11,10 @@ import com.fbads.entity.Rule;
 import com.fbads.entity.RuleResume;
 import com.fbads.repository.RuleRepository;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookObjects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,7 +32,8 @@ public class RuleRunner {
     private static final Logger log = LoggerFactory.getLogger(RuleRunner.class);
 
     private final RuleRepository rules;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookInsights insights;
     private final RateLimits limits;
     private final RuleEvaluator evaluator;
     private final ActionExecutor executor;
@@ -41,10 +43,12 @@ public class RuleRunner {
     private final SettingsService settings;
     private final LogService logs;
 
-    public RuleRunner(RuleRepository rules, FacebookService fb, RateLimits limits, RuleEvaluator evaluator, ActionExecutor executor,
-                      KillSwitch killSwitch, EngineState state, EngineClock clock, SettingsService settings, LogService logs) {
+    public RuleRunner(RuleRepository rules, FacebookObjects objects, FacebookInsights insights, RateLimits limits,
+                      RuleEvaluator evaluator, ActionExecutor executor, KillSwitch killSwitch, EngineState state,
+                      EngineClock clock, SettingsService settings, LogService logs) {
         this.rules = rules;
-        this.fb = fb;
+        this.objects = objects;
+        this.insights = insights;
         this.limits = limits;
         this.evaluator = evaluator;
         this.executor = executor;
@@ -67,7 +71,7 @@ public class RuleRunner {
             for (Condition c : r.conditionList()) if (c.vsRange()) ranges.add(c.compareRange());
         }
         Map<String, Map<String, Metrics>> maps = new LinkedHashMap<>();
-        for (String range : ranges) maps.put(range, fb.rangeMetrics(range, force));
+        for (String range : ranges) maps.put(range, insights.rangeMetrics(range, force));
         return maps;
     }
 
@@ -82,12 +86,12 @@ public class RuleRunner {
     }
 
     public void runRules() {
-        List<AdObject> objs = fb.listObjects(true);
+        List<AdObject> objs = objects.listObjects(true);
         killSwitch.check(objs);
         List<Rule> active = rules.findByEnabledTrueOrderBySeqAsc();
         if (active.isEmpty()) return;
         // Facebook đang giới hạn số lần gọi → chỉ có số liệu cũ: không quyết định dựa trên nó, đợi lượt sau
-        if (fb.isStale()) { log.info("Bỏ qua lượt kiểm tra rule: Facebook đang giới hạn số lần gọi, số liệu chưa cập nhật."); return; }
+        if (objects.isStale()) { log.info("Bỏ qua lượt kiểm tra rule: Facebook đang giới hạn số lần gọi, số liệu chưa cập nhật."); return; }
         Map<String, Map<String, Metrics>> maps = loadMaps(active, true);
         Delivery.View running = new Delivery.View(objs);
         for (Rule rule : active) {
@@ -165,7 +169,7 @@ public class RuleRunner {
             if (now.date().compareTo(p.getOffDate()) > 0 && now.minutes() >= EngineClock.toMin(at)) due.add(p);
         }
         if (due.isEmpty()) return;
-        List<AdObject> objs = fb.listObjects(true);
+        List<AdObject> objs = objects.listObjects(true);
         if (limits.blocked()) return; // Facebook đang giới hạn: thử lại ở lượt sau
         for (RuleResume p : due) {
             Rule rule = byId.get(p.getKey().ruleId());
@@ -181,7 +185,7 @@ public class RuleRunner {
 
     /** Xem trước: rule này đang khớp camp nào NGAY BÂY GIỜ (không thay đổi gì, không cập nhật thời gian nghỉ) */
     public Map<String, Object> preview(Rule rule) {
-        List<AdObject> objs = fb.listObjects(false);
+        List<AdObject> objs = objects.listObjects(false);
         Map<String, Map<String, Metrics>> maps = loadMaps(List.of(rule), false);
         List<Map<String, Object>> items = new ArrayList<>();
         for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, new Delivery.View(objs))) {

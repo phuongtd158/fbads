@@ -6,8 +6,8 @@ import com.fbads.entity.AppSettings;
 import com.fbads.entity.Schedule;
 import com.fbads.repository.ScheduleRepository;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,17 +28,17 @@ public class ScheduleRunner {
     public record Event(String time, String action, boolean prevDay) {}
 
     private final ScheduleRepository schedules;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
     private final RateLimits limits;
     private final ActionExecutor executor;
     private final EngineState state;
     private final EngineClock clock;
     private final SettingsService settings;
 
-    public ScheduleRunner(ScheduleRepository schedules, FacebookService fb, RateLimits limits, ActionExecutor executor, EngineState state,
-                          EngineClock clock, SettingsService settings) {
+    public ScheduleRunner(ScheduleRepository schedules, FacebookObjects objects, RateLimits limits,
+                          ActionExecutor executor, EngineState state, EngineClock clock, SettingsService settings) {
         this.schedules = schedules;
-        this.fb = fb;
+        this.objects = objects;
         this.limits = limits;
         this.executor = executor;
         this.state = state;
@@ -101,7 +101,7 @@ public class ScheduleRunner {
      * Trả "blocked" nếu Facebook đang giới hạn và CHƯA làm gì.
      */
     public String run(Schedule sch, String type) {
-        List<AdObject> objs = fb.listObjects(true);
+        List<AdObject> objs = objects.listObjects(true);
         if (limits.blocked()) return BLOCKED;
         if ("window".equals(sch.getAction()) && type == null) type = windowIsOn(sch, clock.now()) ? "on" : "off";
         Action action = new Action(type != null ? type : sch.getAction(), sch.getMode(), sch.getValue(),

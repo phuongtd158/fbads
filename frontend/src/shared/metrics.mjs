@@ -1,4 +1,4 @@
-// Chỉ số phái sinh và hàng tổng cho bảng ở Tổng quan. Số liệu gốc của mỗi camp/nhóm QC (backend Java: FacebookService.metricsFrom):
+// Chỉ số phái sinh và hàng tổng cho bảng ở Tổng quan. Số liệu gốc của mỗi camp/nhóm QC (backend Java: FacebookParse.metricsFrom):
 //   { spend, impressions, clicks, results, cpa, roas }
 // Mẫu số bằng 0 thì trả null (giao diện hiện "–"), không trả 0 hay Infinity.
 

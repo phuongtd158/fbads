@@ -17,9 +17,10 @@ import com.fbads.repository.CompanyConfigRepository;
 import com.fbads.repository.CompanyReportRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookObjects;
 import com.fbads.validation.Result;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
@@ -71,7 +72,8 @@ public class CompanyReportService {
     private final CompanyConfigRepository configs;
     private final CompanyReportRepository reports;
     private final CompanyApi api;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookInsights insights;
     private final SettingsService settings;
     private final LogService logs;
     private final EventBus events;
@@ -82,12 +84,13 @@ public class CompanyReportService {
     private final Set<String> inflight = ConcurrentHashMap.newKeySet();
 
     public CompanyReportService(CompanyConfigRepository configs, CompanyReportRepository reports, CompanyApi api,
-            FacebookService fb, SettingsService settings, LogService logs, EventBus events, EngineClock clock,
-            EngineState state, JsonMapper mapper) {
+            FacebookObjects objects, FacebookInsights insights, SettingsService settings, LogService logs,
+            EventBus events, EngineClock clock, EngineState state, JsonMapper mapper) {
         this.configs = configs;
         this.reports = reports;
         this.api = api;
-        this.fb = fb;
+        this.objects = objects;
+        this.insights = insights;
         this.settings = settings;
         this.logs = logs;
         this.events = events;
@@ -169,8 +172,8 @@ public class CompanyReportService {
     public record Built(Map<String, Long> metrics, List<String> campaigns) {}
 
     public Built build(CompanyConfig.Team team, int slot) {
-        List<AdObject> camps = CompanyRules.teamCampaigns(team, fb.listObjects(false).stream().filter(AdObject::isCampaign).toList());
-        Map<String, Metrics> data = fb.rangeMetrics(CompanyRules.rangeOf(slot), false);
+        List<AdObject> camps = CompanyRules.teamCampaigns(team, objects.listObjects(false).stream().filter(AdObject::isCampaign).toList());
+        Map<String, Metrics> data = insights.rangeMetrics(CompanyRules.rangeOf(slot), false);
         return new Built(CompanyRules.sumMetrics(camps, data), camps.stream().map(o -> o.name).toList());
     }
 

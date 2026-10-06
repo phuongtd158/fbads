@@ -12,10 +12,10 @@ import com.fbads.entity.Rule;
 import com.fbads.repository.RuleRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.RuleService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Result;
 import com.fbads.validation.RuleValidator;
 import org.junit.jupiter.api.AfterEach;
@@ -49,7 +49,7 @@ class RulesSmartTest extends IntegrationBase {
     @Autowired EngineState state;
     @Autowired EngineClock clock;
     @Autowired SettingsService settings;
-    @Autowired FacebookService fb;
+    @Autowired FacebookState fbState;
     @Autowired LogService logs;
 
     WorkspaceContext.Scope ws;
@@ -61,16 +61,16 @@ class RulesSmartTest extends IntegrationBase {
         clock.setClock(Clock.fixed(Instant.parse("2031-03-04T13:00:00Z"), ZoneOffset.UTC)); // 20:00 giờ Việt Nam
         settings.update(s -> { s.setMock(true); s.setDryRun(true); s.setSkipLearning(true); s.setDailyChangeCapPct(30); });
         state.clearAll();
-        fb.resetMock();
-        fb.resetCache();
+        fbState.resetMock();
+        fbState.resetCache();
     }
 
     @AfterEach
     void tearDown() {
         created.forEach(ruleRepo::deleteById);
         state.clearAll();
-        fb.resetMock();
-        fb.resetCache();
+        fbState.resetMock();
+        fbState.resetCache();
         clock.setClock(Clock.systemUTC());
         ws.close();
     }

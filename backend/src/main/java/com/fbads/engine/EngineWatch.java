@@ -6,10 +6,11 @@ import com.fbads.entity.AppSettings;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.WsState;
+import com.fbads.service.facebook.FacebookAuth;
+import com.fbads.service.facebook.FacebookGraph;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -53,7 +54,8 @@ public class EngineWatch {
     }
 
     private final SettingsService settings;
-    private final FacebookService fb;
+    private final FacebookAuth auth;
+    private final FacebookGraph graph;
     private final LogService logs;
     private final EventBus events;
     private final WsState state;
@@ -65,10 +67,11 @@ public class EngineWatch {
     private volatile Long busyWs;
     private volatile long lastDoneLocal;
 
-    public EngineWatch(SettingsService settings, FacebookService fb, LogService logs, EventBus events, WsState state,
+    public EngineWatch(SettingsService settings, FacebookAuth auth, FacebookGraph graph, LogService logs, EventBus events, WsState state,
             EngineClock clock, StringRedisTemplate redis) {
         this.settings = settings;
-        this.fb = fb;
+        this.auth = auth;
+        this.graph = graph;
         this.logs = logs;
         this.events = events;
         this.state = state;
@@ -103,14 +106,14 @@ public class EngineWatch {
         String fp = Hash.sha256(s.getAccessToken()).substring(0, 12);
         TokenAlert saved = state.get("tokenAlert", TokenAlert.class);
         TokenAlert ta = saved != null && fp.equals(saved.fp()) ? saved : new TokenAlert(fp, false, null); // token mới → báo lại từ đầu
-        String err = fb.tokenError();
+        String err = graph.tokenError();
         if (!err.isEmpty()) { bad(ta, err); return; }
         String today = clock.now().date();
         Run r = run();
         if (today.equals(ta.date()) || clock.millis() - r.tokenFailedAt < TOKEN_RETRY_MS) return;
         Map<String, Object> t;
         try {
-            t = fb.inspectToken(s.getAccessToken());
+            t = auth.inspectToken(s.getAccessToken());
         } catch (FbException e) {
             if (Integer.valueOf(190).equals(e.code())) { bad(new TokenAlert(fp, ta.bad(), today), e.getMessage()); return; }
             r.tokenFailedAt = clock.millis(); // mạng/Facebook lỗi: thử lại sau 1 giờ

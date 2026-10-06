@@ -4,12 +4,14 @@ import com.fbads.client.GraphClient;
 import com.fbads.engine.AlertWatch;
 import com.fbads.engine.EngineClock;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.FacebookService;
-import com.fbads.service.FacebookService.HourSpend;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
 import com.fbads.service.WsState;
+import com.fbads.service.facebook.FacebookGraph;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookInsights.HourSpend;
+import com.fbads.service.facebook.FacebookState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** Cảnh báo bất thường: tài khoản có vấn đề, quảng cáo bị từ chối, chi tiêu tăng vọt (bản Node: tests/alerts). Facebook và Telegram đều là máy chủ giả. */
 class AlertsIntegrationTest extends IntegrationBase {
     @Autowired SettingsService settings;
-    @Autowired FacebookService fb;
+    @Autowired FacebookGraph fbGraph;
+    @Autowired FacebookState fbState;
     @Autowired TelegramService telegram;
     @Autowired AlertWatch alerts;
     @Autowired EngineClock clock;
@@ -70,13 +73,13 @@ class AlertsIntegrationTest extends IntegrationBase {
             if (r.path().endsWith("/insights")) return GraphStub.Res.ok("{\"data\":" + hours("today".equals(r.params().get("date_preset")) ? today : yesterday) + "}");
             return GraphStub.Res.ok("{\"name\":\"Shop A\",\"currency\":\"VND\",\"account_status\":" + status + "}");
         };
-        fb.setGraphBase(fbStub.base());
+        fbGraph.setGraphBase(fbStub.base());
         telegram.setApiBase(tg.base());
         clock.setClock(Clock.fixed(now, ZoneOffset.UTC));
         settings.update(s -> { s.setMock(false); s.setAccessToken("EAAtoken-1234567890"); s.setAdAccountIds(List.of("111")); s.setAdAccountId("111");
             s.setTelegramToken("1:x"); s.setTelegramChatId("42");
             s.setAlertAccount(true); s.setAlertDisapproved(true); s.setAlertSpike(true); s.setSpikePct(50); s.setSpikeMinSpend(100000); });
-        fb.resetCache();
+        fbState.resetCache();
         alerts.reset();
         state.clearAll();
     }
@@ -85,9 +88,9 @@ class AlertsIntegrationTest extends IntegrationBase {
     void tearDown() {
         settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(List.of()); s.setAdAccountId(""); s.setTelegramToken(""); s.setTelegramChatId("");
             s.setAlertAccount(true); s.setAlertDisapproved(true); s.setAlertSpike(true); });
-        fb.resetCache();
+        fbState.resetCache();
         limits.reset();
-        fb.setGraphBase(GraphClient.BASE);
+        fbGraph.setGraphBase(GraphClient.BASE);
         telegram.setApiBase("https://api.telegram.org");
         clock.setClock(Clock.systemUTC());
         alerts.reset();

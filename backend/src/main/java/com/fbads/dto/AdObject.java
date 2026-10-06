@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
  * Một chiến dịch (level = campaign) hoặc nhóm quảng cáo (level = adset) đọc từ Facebook (hoặc dữ liệu giả).
- * Không lưu DB: luôn lấy mới từ Facebook, có bộ nhớ đệm ngắn trong FacebookService.
+ * Không lưu DB: luôn lấy mới từ Facebook, có bộ nhớ đệm ngắn trong service.facebook.FacebookState.
  * status/effective/dailyBudget đổi được: engine cập nhật ngay sau khi thao tác để các rule sau trong cùng lượt thấy trạng thái mới.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)

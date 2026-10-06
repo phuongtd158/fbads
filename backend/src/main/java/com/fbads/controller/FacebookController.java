@@ -4,8 +4,9 @@ import com.fbads.config.AppProperties;
 import com.fbads.dto.Requests;
 import com.fbads.entity.AppSettings;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.FacebookService;
 import com.fbads.service.SettingsService;
+import com.fbads.service.facebook.FacebookAuth;
+import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Checks;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
@@ -41,12 +42,14 @@ public class FacebookController {
     /** Lỗi của lần đăng nhập Facebook gần nhất, theo workspace */
     private final Map<Long, String> oauthErrors = new ConcurrentHashMap<>();
 
-    private final FacebookService fb;
+    private final FacebookAuth auth;
+    private final FacebookState fbState;
     private final SettingsService settings;
     private final AppProperties props;
 
-    public FacebookController(FacebookService fb, SettingsService settings, AppProperties props) {
-        this.fb = fb;
+    public FacebookController(FacebookAuth auth, FacebookState fbState, SettingsService settings, AppProperties props) {
+        this.auth = auth;
+        this.fbState = fbState;
         this.settings = settings;
         this.props = props;
     }
@@ -83,9 +86,9 @@ public class FacebookController {
         if (error != null || code == null || code.isEmpty()) return back("cancel"); // người dùng bấm Huỷ trên Facebook
         return WorkspaceContext.call(pending.workspaceId(), () -> {
             try {
-                String token = fb.exchangeCode(pending.appId(), settings.get().getFbAppSecret(), pending.redirectUri(), code);
+                String token = auth.exchangeCode(pending.appId(), settings.get().getFbAppSecret(), pending.redirectUri(), code);
                 settings.update(s -> s.setAccessToken(token));
-                fb.resetCache();
+                fbState.resetCache();
                 oauthErrors.remove(pending.workspaceId());
                 return back("ok");
             } catch (RuntimeException e) {
@@ -103,7 +106,7 @@ public class FacebookController {
     @RequestMapping(value = {"/test-connection", "/connection"}, method = {RequestMethod.GET, RequestMethod.POST})
     Map<String, Object> testConnection() {
         try {
-            return fb.testConnection();
+            return auth.testConnection();
         } catch (RuntimeException e) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("ok", false);
@@ -119,7 +122,7 @@ public class FacebookController {
         if (token.isEmpty()) token = settings.get().getAccessToken();
         String tm = Checks.checkToken(token);
         if (!tm.isEmpty()) return ApiExceptionHandler.error(400, tm);
-        return ResponseEntity.ok(fb.listAccounts(token));
+        return ResponseEntity.ok(auth.listAccounts(token));
     }
 
     /** Đổi token ngắn hạn thành ~60 ngày. App ID/Secret chỉ dùng 1 lần, không lưu. */
@@ -131,11 +134,11 @@ public class FacebookController {
         String appId = b.appId(), appSecret = b.appSecret();
         String em = firstError(Checks.checkToken(token), Checks.checkAppId(appId), Checks.checkAppSecret(appSecret));
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
-        String longToken = fb.extendToken(appId, appSecret, token);
+        String longToken = auth.extendToken(appId, appSecret, token);
         settings.update(s -> s.setAccessToken(longToken));
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("ok", true);
-        m.put("token", fb.inspectToken(longToken));
+        m.put("token", auth.inspectToken(longToken));
         return ResponseEntity.ok(m);
     }
 
@@ -166,6 +169,6 @@ public class FacebookController {
         settings.update(x -> { x.setFbAppId(fAppId); x.setFbAppSecret(fSecret); x.setFbConfigId(fConfig); });
         oauthErrors.remove(WorkspaceContext.require());
         String uri = redirectUri(req);
-        return ResponseEntity.ok(Map.of("url", fb.oauthUrl(appId, configId, uri, newOauthState(appId, uri))));
+        return ResponseEntity.ok(Map.of("url", auth.oauthUrl(appId, configId, uri, newOauthState(appId, uri))));
     }
 }

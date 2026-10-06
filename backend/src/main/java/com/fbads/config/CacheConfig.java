@@ -15,10 +15,11 @@ import java.util.Map;
 
 /**
  * Spring Cache trên Redis. Mỗi cache lưu JSON của một kiểu cố định (dễ đọc bằng redis-cli, không cần lưu tên class):
- *  - fb-objects  : danh sách camp/nhóm QC + số liệu hôm nay (FacebookService.listObjects)
- *  - fb-ranges   : số liệu theo khoảng ngày (FacebookService.rangeData)
- *  - fb-accounts : tài khoản quảng cáo của một token (@Cacheable trên FacebookService.listAccounts)
- * Giữ 1 ngày: FacebookService tự quyết khi nào số đã cũ (2–5 phút); bản cũ hơn vẫn dùng được khi Facebook đang chặn số lần gọi.
+ *  - fb-objects  : danh sách camp/nhóm QC + số liệu hôm nay (FacebookObjects.listObjects)
+ *  - fb-ranges   : số liệu theo khoảng ngày (FacebookInsights.rangeData)
+ *  - fb-accounts : tài khoản quảng cáo của một token (@Cacheable trên FacebookAuth.listAccounts)
+ * Giữ 1 ngày: FacebookObjects / FacebookInsights tự quyết khi nào số đã cũ (2–5 phút); bản cũ hơn vẫn dùng được
+ * khi Facebook đang chặn số lần gọi.
  */
 @Configuration
 @EnableCaching

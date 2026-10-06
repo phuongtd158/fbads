@@ -1,11 +1,12 @@
 package com.fbads.controller;
 
 import com.fbads.dto.SettingsPatch;
-import com.fbads.service.FacebookService;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
+import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Result;
 import com.fbads.validation.SettingsValidator;
 import org.springframework.http.ResponseEntity;
@@ -29,15 +30,17 @@ public class SettingsController {
     private final SettingsService settings;
     private final ScheduleService schedules;
     private final RuleService rules;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookState fbState;
     private final TelegramService telegram;
 
-    public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules, FacebookService fb,
-            TelegramService telegram) {
+    public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules,
+            FacebookObjects objects, FacebookState fbState, TelegramService telegram) {
         this.settings = settings;
         this.schedules = schedules;
         this.rules = rules;
-        this.fb = fb;
+        this.objects = objects;
+        this.fbState = fbState;
         this.telegram = telegram;
     }
 
@@ -71,8 +74,8 @@ public class SettingsController {
         if (!r.ok()) return ApiExceptionHandler.bad(r);
         // chỉ ghi các khoá đã được kiểm tra (r.value) — không bao giờ ghi trực tiếp từ dữ liệu client
         settings.apply(r.value());
-        if (SOURCE_KEYS.stream().anyMatch(r.value()::containsKey)) fb.resetCache();
-        try { fb.listObjects(true); } catch (RuntimeException ignored) { /* lỗi kết nối hiện ở trang Kết nối */ }
+        if (SOURCE_KEYS.stream().anyMatch(r.value()::containsKey)) fbState.resetCache();
+        try { objects.listObjects(true); } catch (RuntimeException ignored) { /* lỗi kết nối hiện ở trang Kết nối */ }
         return ResponseEntity.ok(settings.publicSettings());
     }
 

@@ -7,6 +7,8 @@ import com.fbads.dto.AdObject;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
+import com.fbads.service.facebook.FacebookActions;
+import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -22,14 +24,17 @@ public class UndoService {
 
     private final LogService logs;
     private final SettingsService settings;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookActions actions;
     private final ActionExecutor executor;
     private final EngineState state;
 
-    public UndoService(LogService logs, SettingsService settings, FacebookService fb, ActionExecutor executor, EngineState state) {
+    public UndoService(LogService logs, SettingsService settings, FacebookObjects objects, FacebookActions actions,
+            ActionExecutor executor, EngineState state) {
         this.logs = logs;
         this.settings = settings;
-        this.fb = fb;
+        this.objects = objects;
+        this.actions = actions;
         this.executor = executor;
         this.state = state;
     }
@@ -64,7 +69,7 @@ public class UndoService {
             throw new ApiException(400, "Dòng nhật ký này được ghi ở chế độ khác (Dùng thử/Thật) nên không thể hoàn tác "
                     + "ở chế độ hiện tại.");
         String targetId = String.valueOf(l.getTarget().get("id"));
-        AdObject cur = fb.listObjects(true).stream().filter(o -> o.id.equals(targetId)).findFirst()
+        AdObject cur = objects.listObjects(true).stream().filter(o -> o.id.equals(targetId)).findFirst()
                 .orElseThrow(() -> new ApiException(404, "Không tìm thấy camp/nhóm này trên tài khoản (có thể đã bị xoá)."));
 
         // Nếu sau đó có ai đổi tiếp thì hỏi lại trước khi ghi đè
@@ -79,7 +84,7 @@ public class UndoService {
             throw new ApiException(409, "Camp đã thay đổi kể từ lúc đó (" + String.join(", ", drift)
                     + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").with("drift", true);
 
-        Map<String, Object> snapshot = FacebookService.snapshot(cur);
+        Map<String, Object> snapshot = FacebookObjects.snapshot(cur);
         Map<String, Object> actionJson = new LinkedHashMap<>(l.getAction());
         actionJson.put("revert", true);
         String mode = s.mode();
@@ -88,13 +93,13 @@ public class UndoService {
         try {
             if (after.containsKey("status")) {
                 boolean want = "ACTIVE".equals(before.get("status"));
-                fb.setStatus(cur.id, want);
+                actions.setStatus(cur.id, want);
                 newAfter.put("status", want ? "ACTIVE" : "PAUSED");
                 detail = want ? "Hoàn tác: bật lại camp" : "Hoàn tác: tắt lại camp";
             }
             if (after.containsKey("dailyBudget")) {
                 double b = num(before.get("dailyBudget"));
-                fb.setBudget(cur.id, b);
+                actions.setBudget(cur.id, b);
                 newAfter.put("dailyBudget", (double) Math.round(b));
                 detail = "Hoàn tác: ngân sách " + Fmt.money(cur.dailyBudget == null ? 0 : cur.dailyBudget) + " → " + Fmt.money(b);
             }

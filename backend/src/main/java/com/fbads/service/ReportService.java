@@ -3,12 +3,14 @@ package com.fbads.service;
 import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
-import com.fbads.entity.LogEntry;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,7 +29,8 @@ import java.util.function.ToDoubleFunction;
  */
 @Service
 public class ReportService {
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookInsights insights;
     private final TelegramService telegram;
     private final SettingsService settings;
     private final EngineState state;
@@ -35,11 +38,12 @@ public class ReportService {
     private final EventBus events;
     private final LogService logs;
 
-    public ReportService(FacebookService fb, TelegramService telegram, SettingsService settings, EngineState state, EngineClock clock,
-                         EventBus events, LogService logs) {
+    public ReportService(FacebookObjects objects, FacebookInsights insights, TelegramService telegram,
+                         SettingsService settings, EngineState state, EngineClock clock, EventBus events, LogService logs) {
         this.events = events;
         this.logs = logs;
-        this.fb = fb;
+        this.objects = objects;
+        this.insights = insights;
         this.telegram = telegram;
         this.settings = settings;
         this.state = state;
@@ -50,7 +54,7 @@ public class ReportService {
     public TelegramService.SendResult send() { return telegram.send(text()); }
 
     String text() {
-        List<AdObject> camps = fb.listObjects(true).stream().filter(AdObject::isCampaign).toList();
+        List<AdObject> camps = objects.listObjects(true).stream().filter(AdObject::isCampaign).toList();
         Map<String, List<AdObject>> groups = new LinkedHashMap<>();
         for (AdObject o : camps) groups.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);
         boolean multi = groups.size() > 1;
@@ -98,7 +102,7 @@ public class ReportService {
     }
 
     private Map<String, Metrics> weekData(String since, String until) {
-        return fb.rangeData(new FacebookService.RangeQuery("r:" + since + "_" + until,
+        return insights.rangeData(new FacebookInsights.RangeQuery("r:" + since + "_" + until,
                 Map.of("time_range", "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}"), 7), false).data();
     }
 
@@ -159,7 +163,7 @@ public class ReportService {
 
     String weeklyText(EngineClock.Now now) {
         Week w = lastWeek(now);
-        List<AdObject> camps = fb.listObjects(false).stream().filter(AdObject::isCampaign).toList();
+        List<AdObject> camps = objects.listObjects(false).stream().filter(AdObject::isCampaign).toList();
         Map<String, Metrics> cur = weekData(w.since(), w.until()), prev = weekData(w.prevSince(), w.prevUntil());
         Map<String, List<AdObject>> groups = new LinkedHashMap<>();
         for (AdObject o : camps) groups.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);

@@ -7,12 +7,14 @@ import com.fbads.entity.AppSettings;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.FacebookService;
-import com.fbads.service.FacebookService.DisapprovedAd;
-import com.fbads.service.FacebookService.HourSpend;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.WsState;
+import com.fbads.service.facebook.FacebookHealth.DisapprovedAd;
+import com.fbads.service.facebook.FacebookHealth;
+import com.fbads.service.facebook.FacebookInsights.HourSpend;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookObjects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -50,7 +52,9 @@ public class AlertWatch {
     public record Spike(int hour, double now, double before, long up) {}
 
     private final SettingsService settings;
-    private final FacebookService fb;
+    private final FacebookObjects objects;
+    private final FacebookInsights insights;
+    private final FacebookHealth health;
     private final RateLimits limits;
     private final LogService logs;
     private final EventBus events;
@@ -59,10 +63,12 @@ public class AlertWatch {
     /** Lần kiểm tra gần nhất của mỗi workspace. Không lưu: khởi động lại thì kiểm tra ngay lượt đầu */
     private final Map<Long, Long> lastAt = new ConcurrentHashMap<>();
 
-    public AlertWatch(SettingsService settings, FacebookService fb, RateLimits limits, LogService logs, EventBus events,
-            WsState state, EngineClock clock) {
+    public AlertWatch(SettingsService settings, FacebookObjects objects, FacebookInsights insights,
+            FacebookHealth health, RateLimits limits, LogService logs, EventBus events, WsState state, EngineClock clock) {
         this.settings = settings;
-        this.fb = fb;
+        this.objects = objects;
+        this.insights = insights;
+        this.health = health;
         this.limits = limits;
         this.logs = logs;
         this.events = events;
@@ -122,9 +128,9 @@ public class AlertWatch {
     }
 
     private void checkAccount(String id, State st, AppSettings s, String today) {
-        FacebookService.AccountHealth h = fb.accountHealth(id);
+        FacebookHealth.AccountHealth h = health.accountHealth(id);
         String nm = h.name();
-        String cur = fb.accounts().stream()
+        String cur = objects.accounts().stream()
                 .filter(a -> id.equals(a.get("id")))
                 .map(a -> String.valueOf(a.get("currency")))
                 .findFirst().orElse("");
@@ -143,7 +149,7 @@ public class AlertWatch {
         st.acc().put(id, h.status());
 
         if (s.isAlertDisapproved()) {
-            List<DisapprovedAd> ads = fb.disapprovedAds(id);
+            List<DisapprovedAd> ads = health.disapprovedAds(id);
             Set<String> seen = new HashSet<>(st.ads().getOrDefault(id, List.of()));
             List<DisapprovedAd> fresh = ads.stream().filter(a -> !seen.contains(a.id())).toList();
             // được duyệt lại thì bỏ khỏi danh sách → bị từ chối lần nữa sẽ báo lại
@@ -160,9 +166,10 @@ public class AlertWatch {
         }
 
         if (s.isAlertSpike() && !today.equals(st.spike().get(id))) {
-            List<HourSpend> t = fb.hourlySpend(id, "today");
+            List<HourSpend> t = insights.hourlySpend(id, "today");
             if (!t.isEmpty()) {
-                Spike sp = spikeOf(t, fb.hourlySpend(id, "yesterday"), s.getSpikePct() > 0 ? s.getSpikePct() : 50, s.getSpikeMinSpend());
+                Spike sp = spikeOf(t, insights.hourlySpend(id, "yesterday"), s.getSpikePct() > 0 ? s.getSpikePct() : 50,
+                        s.getSpikeMinSpend());
                 if (sp != null) {
                     st.spike().put(id, today);
                     String until = String.format("%02d:00", sp.hour() + 1);

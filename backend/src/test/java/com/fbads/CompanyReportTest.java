@@ -16,10 +16,12 @@ import com.fbads.repository.CompanyConfigRepository;
 import com.fbads.repository.CompanyReportRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.FacebookService;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.TelegramService;
+import com.fbads.service.facebook.FacebookInsights;
+import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Result;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,13 +49,16 @@ import static org.mockito.Mockito.doThrow;
 
 /**
  * Báo cáo lên hệ thống công ty (bản Node: tests/companyReport, trừ phần nút Telegram vì bản Java không có Telegram hai chiều).
- * Hệ thống công ty và Telegram đều là máy chủ giả: không bao giờ gọi hệ thống thật. Số Facebook cố định qua spy của FacebookService.
+ * Hệ thống công ty và Telegram đều là máy chủ giả: không bao giờ gọi hệ thống thật. Số Facebook cố định qua mock của FacebookObjects / FacebookInsights.
  */
 class CompanyReportTest extends IntegrationBase {
     @LocalServerPort int port;
-    @Autowired FacebookService realFb;
+    @Autowired FacebookObjects realObjects;
+    @Autowired FacebookInsights realInsights;
+    @Autowired FacebookState fbState;
     /** Số Facebook cố định: mock gắn thẳng vào CompanyReportService (không dùng @MockitoSpyBean để mọi lớp test vẫn chung một Spring context) */
-    FacebookService fb;
+    FacebookObjects objects;
+    FacebookInsights insights;
     @Autowired CompanyReportService company;
     @Autowired CompanyApi api;
     @Autowired CompanyConfigRepository configs;
@@ -92,14 +97,15 @@ class CompanyReportTest extends IntegrationBase {
         });
         state.clearAll();
         api.reset();
-        realFb.resetMock();
-        realFb.resetCache();
+        fbState.resetMock();
+        fbState.resetCache();
         at("2026-10-04T10:00:00Z");
     }
 
     @AfterEach
     void tearDown() {
-        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "fb", realFb);
+        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "objects", realObjects);
+        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "insights", realInsights);
         reports.deleteAll();
         configs.deleteAll();
         api.reset();
@@ -411,12 +417,14 @@ class CompanyReportTest extends IntegrationBase {
 
     // ------------------------------------------------------------------ Tự động gửi (số Facebook cố định)
     void stubFb(Metrics c1) {
-        if (fb == null) {
-            fb = Mockito.mock(FacebookService.class);
-            ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "fb", fb);
+        if (objects == null) {
+            objects = Mockito.mock(FacebookObjects.class);
+            insights = Mockito.mock(FacebookInsights.class);
         }
-        doReturn(List.of(camp("c1", "mock_a", "CT01 Hoạt huyết"), camp("c2", "mock_b", "Khác"))).when(fb).listObjects(anyBoolean());
-        doReturn(Map.of("c1", c1, "c2", m(999, 9, 9, 9, 9, 9, 9))).when(fb).rangeMetrics(anyString(), anyBoolean());
+        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "objects", objects);
+        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "insights", insights);
+        doReturn(List.of(camp("c1", "mock_a", "CT01 Hoạt huyết"), camp("c2", "mock_b", "Khác"))).when(objects).listObjects(anyBoolean());
+        doReturn(Map.of("c1", c1, "c2", m(999, 9, 9, 9, 9, 9, 9))).when(insights).rangeMetrics(anyString(), anyBoolean());
     }
 
     static final Metrics FB = m(1520000, 15, 12, 7, 2660000, 13680000, 1689);
@@ -475,7 +483,7 @@ class CompanyReportTest extends IntegrationBase {
     @Test
     void autoReportsFacebookFailure() {
         autoMode();
-        doThrow(new RuntimeException("Token Facebook đã hết hạn")).when(fb).listObjects(anyBoolean());
+        doThrow(new RuntimeException("Token Facebook đã hết hạn")).when(objects).listObjects(anyBoolean());
         atVn("2026-10-05", 9, 0);
         company.tick();
         assertThat(company.list()).isEmpty();

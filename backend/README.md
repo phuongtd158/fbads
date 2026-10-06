@@ -164,7 +164,7 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | Thư mục | Chứa gì |
 |---|---|
 | `controller/` | Nhận/trả HTTP, không có logic; `ApiExceptionHandler` đổi lỗi thành JSON |
-| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `FacebookService`, `TelegramService`, `UndoService`, `ReportService`, `DataImporter` |
+| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `TelegramService`, `UndoService`, `ReportService`, `DataImporter`. Gói con `service/facebook/`: `FacebookObjects`, `FacebookInsights`, `FacebookActions`, `FacebookAuth`, `FacebookHealth` (+ `FacebookGraph`, `FacebookState`, `FacebookParse` dùng chung) |
 | `repository/` | Spring Data JPA, mỗi bảng 1 interface |
 | `entity/` | Class ánh xạ bảng (`@Entity`) |
 | `dto/` | Dữ liệu vào/ra không phải bảng: body của request (`Requests`, `ScheduleRequest`, `RuleRequest`, `SettingsPatch`), `AdObject`, `Metrics`, `Condition`, `Saved` |

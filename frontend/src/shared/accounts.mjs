@@ -1,7 +1,7 @@
 // Nhiều tài khoản quảng cáo: nhãn hiển thị + gom theo loại tiền. Dùng chung cho giao diện và kiểm thử.
 // Mỗi camp/nhóm QC do server gắn sẵn { accountId, accountName, currency } của tài khoản chứa nó.
 
-// Loại tiền Facebook tính ngân sách theo đơn vị nhỏ nhất (VND: đồng, USD: cent) — giống backend Java (FacebookService)
+// Loại tiền Facebook tính ngân sách theo đơn vị nhỏ nhất (VND: đồng, USD: cent) — giống backend Java (FacebookParse)
 const NO_DECIMAL = new Set(['VND', 'JPY', 'KRW', 'CLP', 'ISK', 'PYG'])
 export const decimalsOf = (cur) => (NO_DECIMAL.has(cur) ? 0 : 2)
 

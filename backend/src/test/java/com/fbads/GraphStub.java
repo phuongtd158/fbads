@@ -17,7 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Function;
 
 /**
- * Máy chủ giả thay graph.facebook.com trong test (FacebookService.setGraphBase).
+ * Máy chủ giả thay graph.facebook.com trong test (FacebookGraph.setGraphBase).
  * Mỗi lời gọi: lấy bước tiếp theo trong `script` nếu có ("hang" = treo, "neterr" = cắt kết nối, "500" = Facebook lỗi,
  * "rate" = bị giới hạn số lần gọi), còn lại trả lời bằng `handler` (mặc định: một tài khoản quảng cáo đang hoạt động).
  */
