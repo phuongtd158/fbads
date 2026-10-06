@@ -56,7 +56,7 @@ class CompanyReportTest extends IntegrationBase {
     @Autowired FacebookObjects realObjects;
     @Autowired FacebookInsights realInsights;
     @Autowired FacebookState fbState;
-    /** Số Facebook cố định: mock gắn thẳng vào CompanyReportService (không dùng @MockitoSpyBean để mọi lớp test vẫn chung một Spring context) */
+    /** Số Facebook cố định: mock gắn thẳng vào CompanyDrafts (không dùng @MockitoSpyBean để mọi lớp test vẫn chung một Spring context) */
     FacebookObjects objects;
     FacebookInsights insights;
     @Autowired CompanyReportService company;
@@ -104,8 +104,8 @@ class CompanyReportTest extends IntegrationBase {
 
     @AfterEach
     void tearDown() {
-        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "objects", realObjects);
-        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "insights", realInsights);
+        ReflectionTestUtils.setField(drafts(), "objects", realObjects);
+        ReflectionTestUtils.setField(drafts(), "insights", realInsights);
         reports.deleteAll();
         configs.deleteAll();
         api.reset();
@@ -416,13 +416,18 @@ class CompanyReportTest extends IntegrationBase {
     }
 
     // ------------------------------------------------------------------ Tự động gửi (số Facebook cố định)
+    /** CompanyDrafts (chỉ dùng trong gói company) là nơi lấy số Facebook */
+    Object drafts() {
+        return ReflectionTestUtils.getField((Object) AopTestUtils.getTargetObject(company), "drafts");
+    }
+
     void stubFb(Metrics c1) {
         if (objects == null) {
             objects = Mockito.mock(FacebookObjects.class);
             insights = Mockito.mock(FacebookInsights.class);
         }
-        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "objects", objects);
-        ReflectionTestUtils.setField((Object) AopTestUtils.getTargetObject(company), "insights", insights);
+        ReflectionTestUtils.setField(drafts(), "objects", objects);
+        ReflectionTestUtils.setField(drafts(), "insights", insights);
         doReturn(List.of(camp("c1", "mock_a", "CT01 Hoạt huyết"), camp("c2", "mock_b", "Khác"))).when(objects).listObjects(anyBoolean());
         doReturn(Map.of("c1", c1, "c2", m(999, 9, 9, 9, 9, 9, 9))).when(insights).rangeMetrics(anyString(), anyBoolean());
     }
