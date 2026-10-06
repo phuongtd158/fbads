@@ -1,0 +1,3 @@
+# Thông báo lỗi tiếng Việt khi khởi động thất bại (Spring Boot tự đọc file này)
+org.springframework.boot.diagnostics.FailureAnalyzer=\
+com.fbads.event.KafkaStartupFailure

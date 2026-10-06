@@ -70,7 +70,7 @@ Loại sự kiện: `log.created`, `log.updated`, `objects.changed`, `engine.tic
 - Telegram lỗi tạm thời (mất mạng, 429, 5xx): thử lại qua topic `fbads.events-telegram-retry-0`, `-1`, `-2` (chờ 5 giây, 15 giây, 45 giây),
   hết lượt thì vào `fbads.events-telegram-dlt`. Lỗi cố định (token, chat id sai) vào thẳng DLT.
 - Kafka có thể giao một sự kiện 2 lần: thống kê ghi mã sự kiện đã đếm (`event_stats_seen`), Telegram đánh dấu tin đã gửi trong Redis (`fbads:tg:<id>`, giữ 2 ngày). Nhận lại thì bỏ qua.
-- Kafka chưa chạy lúc khởi động: tool dừng và báo lỗi. Kafka tắt giữa chừng: tool vẫn chạy bình thường, chỉ mất thông báo và cập nhật tức thì trong lúc đó (dữ liệu vẫn ở DB).
+- Kafka chưa chạy lúc khởi động: tool dừng và in thông báo tiếng Việt (mục "APPLICATION FAILED TO START") nói cách tắt Kafka hoặc bật Kafka (`event/KafkaStartupFailure`). Kafka tắt giữa chừng: tool vẫn chạy bình thường, chỉ mất thông báo và cập nhật tức thì trong lúc đó (dữ liệu vẫn ở DB).
   Gửi lên Kafka chạy ở luồng riêng nên thao tác trên giao diện không bị chậm.
 
 ### Bật Kafka khi đang code
