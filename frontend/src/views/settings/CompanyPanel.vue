@@ -75,7 +75,7 @@ async function test() {
 }
 const MODE_TEXT = {
   preview: 'Chỉ tạo bản báo cáo và nhắn Telegram để bạn so số. Tool không gửi gì lên hệ thống công ty.',
-  approve: 'Tool chỉ gửi khi bạn bấm Gửi (trên Telegram bot sẽ hỏi lại một lần).',
+  approve: 'Tool chỉ gửi khi bạn bấm Gửi ở trang Báo cáo công ty.',
   auto: 'Đến mốc tool gửi luôn rồi nhắn Telegram. Số trông bất thường (có đơn mà doanh thu bằng 0, Team không khớp chiến dịch, không lấy được số Facebook) thì dừng lại để bạn xem và gửi tay. Hệ thống công ty lỗi thì tự thử lại tối đa 3 lần.',
 }
 const leadHint = computed(() => {
@@ -93,7 +93,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
       <div class="top">
         <div>
           <h3>Báo cáo lên hệ thống công ty</h3>
-          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO sau VAT = doanh thu, hiển thị, nhấp) thành bản báo cáo. Đơn và DSO tính theo <b>Loại kết quả</b> ở <RouterLink to="/settings/general">Cài đặt → Chung</RouterLink>. Xem, sửa và gửi trên Telegram hoặc ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
+          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO sau VAT = doanh thu, hiển thị, nhấp) thành bản báo cáo. Đơn và DSO tính theo <b>Loại kết quả</b> ở <RouterLink to="/settings/general">Cài đặt → Chung</RouterLink>. Tool nhắn Telegram khi có bản báo cáo mới; xem, sửa và gửi ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
         </div>
         <Switch v-model="f.enabled" label="Bật báo cáo theo mốc" />
       </div>

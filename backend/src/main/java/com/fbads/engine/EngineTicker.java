@@ -50,12 +50,15 @@ public class EngineTicker {
     private final EngineLock lock;
     private final EngineWatch watch;
     private final AlertWatch alerts;
+    private final com.fbads.company.CompanyReportService company;
 
     public EngineTicker(WorkspaceRepository workspaces, EngineLock lock, StringRedisTemplate redis, ScheduleRunner schedules, RuleRunner rules, ReportService report, SettingsService settings,
                         LogService logs, EngineState state, EngineClock clock, EventBus events,
-                        EventStatsService stats, EngineWatch watch, AlertWatch alerts) {
+                        EventStatsService stats, EngineWatch watch, AlertWatch alerts,
+                        com.fbads.company.CompanyReportService company) {
         this.watch = watch;
         this.alerts = alerts;
+        this.company = company;
         this.workspaces = workspaces;
         this.lock = lock;
         this.events = events;
@@ -105,6 +108,7 @@ public class EngineTicker {
         // kiểm tra token: lỗi ở đây không tính là lượt lỗi
         try { watch.tickToken(); } catch (RuntimeException e) { log.error("Lỗi kiểm tra token: {}", e.getMessage()); }
         try { alerts.tick(); } catch (RuntimeException e) { log.error("Lỗi kiểm tra cảnh báo: {}", e.getMessage()); }
+        try { company.tick(); } catch (RuntimeException e) { log.error("Lỗi báo cáo công ty: {}", e.getMessage()); }
         try { watch.workspaceDone(first); } catch (RuntimeException e) { log.error("Lỗi báo trạng thái vòng tự động: {}", e.getMessage()); }
         events.publish(AppEvent.ENGINE_TICK, "engine", false, Map.of("at", clock.millis()));
     }

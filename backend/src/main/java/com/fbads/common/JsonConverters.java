@@ -45,6 +45,11 @@ public final class JsonConverters {
         public AnyMap() { super(new TypeReference<>() {}); }
     }
 
+    /** { khoá: số nguyên hoặc null } (null = chưa nhập), giữ thứ tự khoá */
+    public static class NullableLongMap extends Base<Map<String, Long>> {
+        public NullableLongMap() { super(new TypeReference<>() {}); } // Jackson đọc Map thành LinkedHashMap: giữ thứ tự khoá
+    }
+
     public static class MapList extends Base<List<Map<String, Object>>> {
         public MapList() { super(new TypeReference<>() {}); }
     }

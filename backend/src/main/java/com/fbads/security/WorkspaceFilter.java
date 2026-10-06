@@ -39,7 +39,7 @@ public class WorkspaceFilter {
     /** Việc của riêng người dùng, không phụ thuộc quyền trong workspace đang chọn */
     static final Set<String> PERSONAL = Set.of("/api/password", "/api/workspaces", "/api/workspaces/switch");
     /** Ghi vào đây cần quyền OWNER */
-    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/telegram/", "/api/members", "/api/workspace");
+    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/telegram/", "/api/members", "/api/workspace", "/api/company/config");
 
     /** Quyền tối thiểu để gọi; null = không cần kiểm tra quyền */
     static Role required(String method, String path) {

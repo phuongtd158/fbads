@@ -102,4 +102,14 @@ public final class Requests {
 
         public OauthStart { appId = trimmed(appId); appSecret = trimmed(appSecret); configId = configId == null ? null : configId.trim(); }
     }
+
+    /** POST /api/company/reports/build: tạo bản báo cáo của một mốc ngay; notify = nhắn Telegram như đến mốc */
+    public record CompanyBuild(@com.fbads.common.JsNumber Double slot, @com.fasterxml.jackson.annotation.JsonProperty("notify") Boolean telegram) {
+        public static final CompanyBuild EMPTY = new CompanyBuild(null, null);
+    }
+
+    /** POST /api/company/reports/{id}/update: cập nhật báo cáo đã có trên công ty, lý do bắt buộc */
+    public record CompanyUpdate(String reason) {
+        public static final CompanyUpdate EMPTY = new CompanyUpdate(null);
+    }
 }
