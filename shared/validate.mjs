@@ -7,7 +7,7 @@ export const LIMITS = {
     budgetMax: 1e10,
     scheduleSetPctMax: 300, // lịch: tăng tối đa +300%
     rulePctIncreaseMax: 100, // rule: tăng tối đa +100% mỗi lần
-    rulePctDecreaseMax: 90, // giảm tối đa -90% (không cho về 0)
+    rulePctDecreaseMax: 95, // giảm tối đa -95% (không cho về 0)
     bigPctWarn: 30, // thay đổi lớn hơn mức này thì cảnh báo
     cooldownMax: 168,
     intervalMin: 5,
@@ -204,7 +204,7 @@ export function validateSchedule(input = {}, ctx = {}) {
             if (!e.value && !e.time && times.length > 1) w.push(`Ngân sách sẽ ${value > 0 ? 'cộng' : 'trừ'} ${money(Math.abs(value))} ${times.length} lần mỗi ngày và cộng dồn.`)
         } else if (mode === 'percent') {
             if (value === 0) e.value = 'Phần trăm phải khác 0'
-            else if (value <= -100) e.value = 'Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -90%.'
+            else if (value <= -100) e.value = `Không thể giảm từ 100% trở lên (ngân sách sẽ về 0). Tối đa -${LIMITS.rulePctDecreaseMax}%.`
             else if (value < -LIMITS.rulePctDecreaseMax) e.value = `Giảm tối đa ${LIMITS.rulePctDecreaseMax}% mỗi lần`
             else if (value > LIMITS.scheduleSetPctMax) e.value = `Tăng tối đa ${LIMITS.scheduleSetPctMax}% mỗi lần`
             else if (Math.abs(value) >= 50) w.push(`${value > 0 ? 'Tăng' : 'Giảm'} ${Math.abs(value)}% một lần là thay đổi lớn, Facebook có thể học lại từ đầu.`)

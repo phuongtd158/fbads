@@ -29,7 +29,8 @@ test('schedule ngân sách: % không hợp lệ', () => {
   const base = { ...okSchedule, action: 'budget', mode: 'percent' }
   assert.ok(validateSchedule({ ...base, value: 0 }, { objs }).errors.value)
   assert.ok(validateSchedule({ ...base, value: -100 }, { objs }).errors.value)
-  assert.ok(validateSchedule({ ...base, value: -95 }, { objs }).errors.value)
+  assert.ok(validateSchedule({ ...base, value: -96 }, { objs }).errors.value)
+  assert.equal(validateSchedule({ ...base, value: -95 }, { objs }).errors.value, undefined) // giảm tối đa 95%
   assert.ok(validateSchedule({ ...base, value: 500 }, { objs }).errors.value)
   assert.equal(validateSchedule({ ...base, value: -30 }, { objs }).ok, true)
   assert.ok(validateSchedule({ ...base, value: 60 }, { objs }).warnings.length > 0)
@@ -106,6 +107,8 @@ test('rule đổi ngân sách: % và thời gian nghỉ', () => {
   assert.ok(validateRule({ ...inc, cooldownHours: 0 }).errors.cooldownHours)
   const dec = { ...inc, action: 'decrease', minBudget: 100000, maxBudget: 0 }
   assert.ok(validateRule({ ...dec, pct: 100 }).errors.pct)
+  assert.ok(validateRule({ ...dec, pct: 96 }).errors.pct)
+  assert.equal(validateRule({ ...dec, pct: 95 }).errors.pct, undefined) // giảm tối đa 95%
   assert.equal(validateRule({ ...dec, pct: 20 }).ok, true)
   assert.ok(validateRule({ ...inc, minBudget: 3000000 }).errors.maxBudget) // trần < sàn
   assert.ok(validateRule({ ...inc, maxBudget: 0 }).warnings.length > 0) // không đặt trần → cảnh báo
