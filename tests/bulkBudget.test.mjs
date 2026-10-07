@@ -56,7 +56,8 @@ test('form sai thì báo lỗi', () => {
   assert.ok(readForm({ op: 'lt', x: '', mode: 'set', value: '500k' }).errors.x)
   assert.ok(readForm({ op: 'between', x: '10k', y: '', mode: 'set', value: '500k' }).errors.y)
   assert.ok(readForm({ op: 'any', mode: 'set', value: '0' }).errors.value)
-  assert.ok(readForm({ op: 'any', mode: 'percent', value: '-95' }).errors.value)
+  assert.ok(readForm({ op: 'any', mode: 'percent', value: '-96' }).errors.value)
+  assert.equal(readForm({ op: 'any', mode: 'percent', value: '-95' }).errors.value, undefined) // giảm tối đa 95%
   assert.ok(readForm({ op: 'any', mode: 'add', value: 'x' }).errors.value)
 })
 
