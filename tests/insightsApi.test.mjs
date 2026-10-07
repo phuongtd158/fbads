@@ -96,3 +96,11 @@ test('xu hướng: số ngày sai hoặc camp không có thì báo lỗi rõ rà
   assert.equal(nf.status, 404)
   assert.match(nf.body.error, /Không tìm thấy/)
 })
+
+test('danh sách camp được nén gzip và có thời gian xử lý (Server-Timing)', async () => {
+  const r = await fetch(`${BASE}/api/objects`, { headers: { 'accept-encoding': 'gzip' } })
+  assert.equal(r.status, 200)
+  assert.equal(r.headers.get('content-encoding'), 'gzip')
+  assert.match(r.headers.get('server-timing') || '', /^total;dur=\d+$/)
+  assert.ok((await r.json()).items.length > 0) // fetch tự giải nén
+})

@@ -12,8 +12,8 @@ if (fs.existsSync(ENV_FILE)) {
   } else console.warn('  ⚠ Có file .env nhưng Node quá cũ để đọc (cần 20.12+). Hãy cập nhật Node hoặc đặt biến môi trường bằng tay.');
 }
 
-let express;
-try { express = require('express'); } catch {
+let express, compression;
+try { express = require('express'); compression = require('compression'); } catch {
   console.error('\n  ❌ Chưa cài thư viện của server. Mở cửa sổ lệnh ở thư mục tool và chạy: npm install\n');
   process.exit(1);
 }
@@ -35,6 +35,7 @@ function createApp(shared) {
   app.disable('x-powered-by');
   app.set('etag', false);
   app.set('query parser', (qs) => Object.fromEntries(new URLSearchParams(qs))); // ?a=1 → { a: '1' }, luôn là chuỗi
+  app.use(compression()); // nén gzip phản hồi (danh sách camp/nhóm QC nhỏ đi nhiều lần khi tải về)
 
   // ----- API: xem các nhóm route trong lib/routes/ -----
   app.use('/api', mw.apiHeaders, mw.sameOriginJson, mw.jsonBody, mw.requireAuth);
