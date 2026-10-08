@@ -1,15 +1,15 @@
 package com.fbads.company;
 
 import com.fbads.common.ApiException;
+import com.fbads.company.CompanyJson.NewReport;
+import com.fbads.company.CompanyJson.RemoteReport;
+import com.fbads.company.CompanyJson.ReportUpdate;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
 import com.fbads.repository.CompanyReportRepository;
 import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -39,18 +39,16 @@ class CompanySender {
     private final CompanyMessages messages;
     private final SettingsService settings;
     private final EngineClock clock;
-    private final JsonMapper mapper;
     /** Bản báo cáo đang gửi (không gửi hai lần cùng lúc) */
     private final Set<String> inflight = ConcurrentHashMap.newKeySet();
 
     CompanySender(CompanyReportRepository reports, CompanyApi api, CompanyMessages messages, SettingsService settings,
-            EngineClock clock, JsonMapper mapper) {
+            EngineClock clock) {
         this.reports = reports;
         this.api = api;
         this.messages = messages;
         this.settings = settings;
         this.clock = clock;
-        this.mapper = mapper;
     }
 
     private Instant now() {
@@ -90,26 +88,24 @@ class CompanySender {
         if (!inflight.add(r.getId())) throw new ApiException(409, "Báo cáo này đang được gửi.");
         String what = what(r);
         try {
-            JsonNode exist = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
-            if (exist != null && CompanyRules.updatesExisting(r.getSlot()) && !exist.path("locked").asBoolean(false)) {
+            RemoteReport exist = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
+            if (exist != null && CompanyRules.updatesExisting(r.getSlot()) && !exist.isLocked()) {
                 return closeInto(c, r, exist, what, source);
             }
             if (exist != null) {
                 markExists(r, exist, what, source);
                 throw new ApiException(409, r.getError());
             }
-            Map<String, Object> body = CompanyRules.payloadOf(r);
-            JsonNode res = api.submitReport(c, body);
-            ObjectNode x = mapper.valueToTree(body);
-            x.put("revision", 1);
-            if (res != null && res.isObject()) x.setAll((ObjectNode) res);
-            x.put("id", res == null ? "" : res.path("id").asString(""));
-            r.setRemote(remoteOf(x, r.getMetrics()));
+            NewReport body = CompanyRules.payloadOf(r);
+            RemoteReport res = api.submitReport(c, body);
+            // bản vừa gửi (lần sửa 1), phần công ty trả về đè lên
+            RemoteReport sent = asSent("", "", 1, body.metrics(), body.notes(), body.issue(), body.resolution()).overlay(res);
+            r.setRemote(remoteOf(sent, r.getMetrics()));
             r.setStatus("sent");
             r.setSentAs("create");
             r.setSentAt(now());
-            r.setRemoteId(res == null ? "" : res.path("id").asString(""));
-            r.setRemoteStatus(res == null ? "" : res.path("status").asString(""));
+            r.setRemoteId(res == null ? "" : res.id());
+            r.setRemoteStatus(res == null ? "" : res.status());
             r.setError("");
             r.setReasons(new ArrayList<>());
             r.setNextTryAt(null);
@@ -133,12 +129,12 @@ class CompanySender {
     }
 
     /** Công ty đã có báo cáo của mốc này (hoặc đã khoá, với mốc 9h): không gửi đè, ghi lại số trên công ty để so */
-    private void markExists(CompanyReport r, JsonNode exist, String what, String source) {
+    private void markExists(CompanyReport r, RemoteReport exist, String what, String source) {
         boolean locked = CompanyRules.updatesExisting(r.getSlot());
         r.setStatus("exists");
         r.setRemote(remoteOf(exist, null));
-        r.setRemoteId(exist.path("id").asString(""));
-        r.setRemoteStatus(exist.path("status").asString(""));
+        r.setRemoteId(exist.id());
+        r.setRemoteStatus(exist.status());
         r.setError(locked ? LOCKED_MSG : "Hệ thống công ty đã có báo cáo của mốc này (tool không gửi đè). Muốn "
                 + "sửa hãy vào web công ty.");
         if (locked) r.setNextTryAt(null);
@@ -152,11 +148,11 @@ class CompanySender {
      * Mốc 9h: ghi số chốt cả ngày vào bản ghi "9h ngày hôm qua" đã có trên công ty (chưa khoá), kèm lần sửa hiện tại
      * + lý do tự điền
      */
-    private CompanyReport closeInto(CompanyConfig c, CompanyReport r, JsonNode exist, String what, String source) {
+    private CompanyReport closeInto(CompanyConfig c, CompanyReport r, RemoteReport exist, String what, String source) {
         CompanyReport.Remote fresh = remoteOf(exist, null);
         String reason = CompanyRules.closeReason(r.getDate());
-        Map<String, Object> body = CompanyRules.updatePayloadOf(r, fresh.revision(), reason);
-        JsonNode res = api.submitReport(c, body);
+        ReportUpdate body = CompanyRules.updatePayloadOf(r, fresh.revision(), reason);
+        RemoteReport res = api.submitReport(c, body);
         r.setRemote(remoteAfterUpdate(body, fresh, res, r.getMetrics()));
         Instant now = now();
         r.setStatus("sent");
@@ -200,7 +196,7 @@ class CompanySender {
         if (!inflight.add(r.getId())) throw new ApiException(409, "Báo cáo này đang được gửi.");
         String what = what(r);
         try {
-            JsonNode cur = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
+            RemoteReport cur = api.findReport(c, r.getTeamId(), r.getDate(), r.getSlot());
             if (cur == null) {
                 throw new ApiException(409, "Không thấy báo cáo của mốc này trên hệ thống công ty nữa (có thể đã bị "
                         + "xoá). Kiểm tra trên web công ty.");
@@ -218,8 +214,8 @@ class CompanySender {
                 throw new ApiException(409, "Báo cáo trên công ty vừa được sửa ở nơi khác (lần sửa " + fresh.revision()
                         + "). Tool đã tải số mới về, kiểm tra lại rồi bấm cập nhật lần nữa.");
             }
-            Map<String, Object> body = CompanyRules.updatePayloadOf(r, fresh.revision(), reason);
-            JsonNode res = api.submitReport(c, body);
+            ReportUpdate body = CompanyRules.updatePayloadOf(r, fresh.revision(), reason);
+            RemoteReport res = api.submitReport(c, body);
             r.setRemote(remoteAfterUpdate(body, fresh, res, r.getMetrics()));
             r.setStatus("sent");
             if (r.getSentAs() == null) r.setSentAs("update");
@@ -241,37 +237,39 @@ class CompanySender {
         }
     }
 
-    /** Báo cáo trên hệ thống công ty → phần tool lưu để hiển thị / so sánh */
-    CompanyReport.Remote remoteOf(JsonNode x, Map<String, Long> fallback) {
+    /**
+     * Báo cáo trên hệ thống công ty → phần tool lưu để hiển thị / so sánh. Công ty không gửi kèm số liệu thì dùng
+     * fallback (null = để trống).
+     */
+    CompanyReport.Remote remoteOf(RemoteReport x, Map<String, Long> fallback) {
         Map<String, Long> metrics = new LinkedHashMap<>();
-        JsonNode src = x.path("metrics");
         for (String k : CompanyRules.METRIC_KEYS) {
-            if (src.isObject()) {
-                JsonNode v = src.path(k);
-                metrics.put(k, v.isMissingNode() || v.isNull() ? null : Math.round(v.asDouble()));
+            if (x.metrics() != null) {
+                Double v = x.metrics().get(k);
+                metrics.put(k, v == null ? null : Math.round(v));
             } else {
                 metrics.put(k, fallback == null ? null : fallback.get(k));
             }
         }
-        JsonNode rev = x.path("revision");
-        Integer revision = rev.isMissingNode() || rev.isNull() ? null : rev.asInt();
-        return new CompanyReport.Remote(x.path("id").asString(""), x.path("status").asString(""), revision,
-                x.path("locked").asBoolean(false), metrics, x.path("notes").asString(""), x.path("issue").asString(""),
-                x.path("resolution").asString(""), x.path("updated_at").asString(""), now().toString());
+        return new CompanyReport.Remote(x.id(), x.status(), x.revision(), x.isLocked(), metrics, x.notes(), x.issue(),
+                x.resolution(), x.updatedAt(), now().toString());
     }
 
     /** Kết quả lưu sau khi cập nhật bản ghi đã có trên công ty: số vừa gửi + lần sửa tăng 1 + phần công ty trả về */
-    private CompanyReport.Remote remoteAfterUpdate(Map<String, Object> body, CompanyReport.Remote fresh, JsonNode res,
+    private CompanyReport.Remote remoteAfterUpdate(ReportUpdate body, CompanyReport.Remote fresh, RemoteReport res,
             Map<String, Long> metrics) {
-        ObjectNode x = mapper.valueToTree(body);
-        x.remove("reason");
-        x.remove("revision");
-        x.put("id", fresh.id());
-        x.put("status", fresh.status());
-        if (fresh.revision() == null) x.putNull("revision");
-        else x.put("revision", fresh.revision() + 1);
-        if (res != null && res.isObject()) x.setAll((ObjectNode) res);
-        return remoteOf(x, metrics);
+        Integer revision = fresh.revision() == null ? null : fresh.revision() + 1;
+        RemoteReport sent = asSent(fresh.id(), fresh.status(), revision, body.metrics(), body.notes(), body.issue(),
+                body.resolution());
+        return remoteOf(sent.overlay(res), metrics);
+    }
+
+    /** Báo cáo như tool vừa gửi lên (chưa có phần công ty trả về) */
+    private static RemoteReport asSent(String id, String status, Integer revision, Map<String, Long> metrics, String notes,
+            String issue, String resolution) {
+        Map<String, Double> m = new LinkedHashMap<>();
+        metrics.forEach((k, v) -> m.put(k, v == null ? null : v.doubleValue()));
+        return new RemoteReport(id, null, null, null, null, status, revision, null, m, notes, issue, resolution, null);
     }
 
     // ------------------------------------------------------------------ Tự động gửi

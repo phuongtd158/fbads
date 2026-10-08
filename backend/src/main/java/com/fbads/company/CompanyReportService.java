@@ -2,6 +2,7 @@ package com.fbads.company;
 
 import com.fbads.common.ApiException;
 import com.fbads.common.ValidationException;
+import com.fbads.company.CompanyJson.RemoteReport;
 import com.fbads.dto.CompanyConfigPatch;
 import com.fbads.dto.CompanyReportPatch;
 import com.fbads.dto.Responses.CompanyBuilt;
@@ -19,7 +20,6 @@ import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
 import com.fbads.validation.Result;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -233,10 +233,9 @@ public class CompanyReportService {
         int n = 0;
         for (Map.Entry<String, List<CompanyReport>> e : byTeam.entrySet()) {
             List<String> dates = e.getValue().stream().map(CompanyReport::getDate).sorted().toList();
-            List<JsonNode> remote = api.listReports(c, e.getKey(), dates.getFirst(), dates.getLast());
+            List<RemoteReport> remote = api.listReports(c, e.getKey(), dates.getFirst(), dates.getLast());
             for (CompanyReport r : e.getValue()) {
-                JsonNode x = remote.stream().filter(y -> r.getDate().equals(y.path("date").asString(""))
-                        && y.path("slot").asDouble(-1) == r.getSlot()).findFirst().orElse(null);
+                RemoteReport x = remote.stream().filter(y -> y.isFor(r.getDate(), r.getSlot())).findFirst().orElse(null);
                 if (x == null) continue;
                 r.setRemote(sender.remoteOf(x, null));
                 r.setRemoteId(r.getRemote().id());

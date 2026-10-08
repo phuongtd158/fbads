@@ -19,12 +19,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.DeserializationFeature;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +38,43 @@ import java.util.Map;
 @Order(50)
 public class DataImporter implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DataImporter.class);
+
+    /**
+     * File dữ liệu của bản Node. settings giữ dạng Map vì chỉ những khoá có trong file mới được ghi đè lên cài đặt
+     * hiện tại; các phần còn lại Jackson đọc thẳng vào entity.
+     */
+    public record LegacyData(Map<String, Object> settings, List<Schedule> schedules, List<Rule> rules, List<LogEntry> logs,
+            LegacyState state) {
+        public LegacyData {
+            schedules = schedules == null ? List.of() : schedules;
+            rules = rules == null ? List.of() : rules;
+            logs = logs == null ? List.of() : logs;
+        }
+
+        /** Mật khẩu đã băm của bản Node ("" = chưa đặt) */
+        String passwordHash() {
+            return settings != null && settings.get("passwordHash") instanceof String h ? h : "";
+        }
+
+        /** Các camp đang chờ bật lại hôm sau */
+        Collection<Resume> resumes() {
+            return state == null || state.resume() == null ? List.of() : state.resume().values();
+        }
+    }
+
+    public record LegacyState(Map<String, Resume> resume) {}
+
+    /** Một camp rule đã tắt và hẹn bật lại vào ngày sau ngày date */
+    public record Resume(String ruleId, String objId, String date) {
+        public Resume {
+            ruleId = ruleId == null ? "" : ruleId;
+            objId = objId == null ? "" : objId;
+            date = date == null ? "" : date;
+        }
+    }
+
+    /** Trả lời của Upstash cho lệnh GET: { result: chuỗi đã mã hoá | null } */
+    private record UpstashResult(String result) {}
 
     private final AppProperties props;
     private final SettingsService settings;
@@ -75,50 +112,44 @@ public class DataImporter implements ApplicationRunner {
             return;
         }
         String json = fromFile ? Files.readString(Path.of(cfg.file())) : fetchUpstash(cfg);
-        importJson(mapper.readTree(json));
+        importData(mapper.readValue(json, LegacyData.class));
     }
 
     private String fetchUpstash(AppProperties.Import cfg) {
         if (cfg.dataKey() == null || cfg.dataKey().length() < 16)
             throw new IllegalStateException("Thiếu DATA_KEY (ít nhất 16 ký tự) để giải mã dữ liệu trên Upstash.");
-        JsonNode res = http.build().post().uri(cfg.upstashUrl().replaceAll("/+$", ""))
+        String body = http.build().post().uri(cfg.upstashUrl().replaceAll("/+$", ""))
                 .header("Authorization", "Bearer " + cfg.upstashToken())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(List.of("GET", "fbads:data"))
-                .retrieve().body(JsonNode.class);
-        JsonNode result = res == null ? null : res.get("result");
-        if (result == null || result.isNull()) throw new IllegalStateException("Upstash chưa có dữ liệu (khoá fbads:data trống).");
-        return UpstashCodec.decode(result.asString(), cfg.dataKey());
+                .retrieve().body(String.class);
+        UpstashResult res = body == null ? null : mapper.readValue(body, UpstashResult.class);
+        if (res == null || res.result() == null) throw new IllegalStateException("Upstash chưa có dữ liệu (khoá fbads:data trống).");
+        return UpstashCodec.decode(res.result(), cfg.dataKey());
     }
 
     /** Nhập toàn bộ trong 1 giao dịch: lỗi giữa chừng thì DB vẫn trống như trước */
-    public void importJson(JsonNode d) {
+    public void importData(LegacyData d) {
         WorkspaceContext.run(WorkspaceContext.DEFAULT, () -> importInto(d)); // dữ liệu của bản 1 người dùng → workspace 1
     }
 
-    private void importInto(JsonNode d) {
+    private void importInto(LegacyData d) {
         tx.executeWithoutResult(t -> {
-            JsonNode s = d.path("settings");
-            auth.importLegacyPassword(s.path("passwordHash").asString("")); // mật khẩu cũ → tài khoản "admin"
-            if (s.isObject()) {
+            auth.importLegacyPassword(d.passwordHash()); // mật khẩu cũ → tài khoản "admin"
+            if (d.settings() != null) {
                 settings.update(x -> {
-                    mapper.updateValue(x, s);
+                    mapper.updateValue(x, d.settings());
                     // dữ liệu cũ chỉ có 1 tài khoản quảng cáo → chuyển sang danh sách
                     if ((x.getAdAccountIds() == null || x.getAdAccountIds().isEmpty()) && x.getAdAccountId() != null
                             && !x.getAdAccountId().isEmpty())
                         x.setAdAccountIds(new ArrayList<>(List.of(x.getAdAccountId())));
                 });
             }
-            for (JsonNode n : d.path("schedules").values()) schedules.save(mapper.treeToValue(n, Schedule.class));
-            for (JsonNode n : d.path("rules").values()) rules.save(mapper.treeToValue(n, Rule.class));
+            schedules.saveAll(d.schedules());
+            rules.saveAll(d.rules());
             // bản Node lưu nhật ký mới nhất trước → nhập ngược lại để thứ tự (seq) tăng theo thời gian
-            List<JsonNode> entries = new ArrayList<>();
-            for (JsonNode n : d.path("logs").values()) entries.add(n);
-            for (int i = entries.size() - 1; i >= 0; i--) logs.save(mapper.treeToValue(entries.get(i), LogEntry.class));
-            for (Map.Entry<String, JsonNode> e : d.path("state").path("resume").properties()) {
-                JsonNode p = e.getValue();
-                state.addResume(p.path("ruleId").asString(""), p.path("objId").asString(""), p.path("date").asString(""));
-            }
+            for (LogEntry e : d.logs().reversed()) logs.save(e);
+            for (Resume p : d.resumes()) state.addResume(p.ruleId(), p.objId(), p.date());
         });
         settings.reload();
         log.info("Đã nhập dữ liệu cũ vào workspace 1: {} lịch, {} rule, {} dòng nhật ký.", schedules.count(), rules.count(), logs.count());

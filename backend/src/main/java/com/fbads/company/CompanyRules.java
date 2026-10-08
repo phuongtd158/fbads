@@ -1,5 +1,7 @@
 package com.fbads.company;
 
+import com.fbads.company.CompanyJson.NewReport;
+import com.fbads.company.CompanyJson.ReportUpdate;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.CompanyConfigPatch;
 import com.fbads.dto.CompanyReportPatch;
@@ -264,21 +266,21 @@ public final class CompanyRules {
     }
 
     /** Body của POST /api/reports */
-    public static Map<String, Object> payloadOf(CompanyReport r) {
-        Map<String, Object> metrics = new LinkedHashMap<>();
-        for (String k : METRIC_KEYS) metrics.put(k, r.getMetrics().get(k));
-        Map<String, Object> b = new LinkedHashMap<>();
-        b.put("team_id", r.getTeamId()); b.put("date", r.getDate()); b.put("slot", r.getSlot()); b.put("metrics", metrics);
-        b.put("notes", r.getNotes()); b.put("issue", r.getIssue()); b.put("resolution", r.getResolution());
-        return b;
+    public static NewReport payloadOf(CompanyReport r) {
+        return new NewReport(r.getTeamId(), r.getDate(), r.getSlot(), metricsOf(r), r.getNotes(), r.getIssue(), r.getResolution());
     }
 
     /** Body cập nhật báo cáo đã có trên công ty: như gửi mới, kèm lần sửa hiện tại và lý do */
-    public static Map<String, Object> updatePayloadOf(CompanyReport r, Integer revision, String reason) {
-        Map<String, Object> b = payloadOf(r);
-        b.put("revision", revision);
-        b.put("reason", reason == null ? "" : reason.trim());
-        return b;
+    public static ReportUpdate updatePayloadOf(CompanyReport r, Integer revision, String reason) {
+        return new ReportUpdate(r.getTeamId(), r.getDate(), r.getSlot(), metricsOf(r), r.getNotes(), r.getIssue(),
+                r.getResolution(), revision, reason == null ? "" : reason.trim());
+    }
+
+    /** Số liệu gửi đi, đủ mọi khoá theo thứ tự METRIC_KEYS (chưa nhập = null) */
+    private static Map<String, Long> metricsOf(CompanyReport r) {
+        Map<String, Long> metrics = new LinkedHashMap<>();
+        for (String k : METRIC_KEYS) metrics.put(k, r.getMetrics().get(k));
+        return metrics;
     }
 
     public static String validateReason(String reason) {
