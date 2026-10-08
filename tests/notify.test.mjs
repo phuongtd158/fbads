@@ -142,3 +142,43 @@ test('hai bản tách Chat ID (server và giao diện) luôn cho cùng kết qu�
     assert.deepEqual(notify.chatIdsOf(s), parseChatIds(s), JSON.stringify(s))
   }
 })
+
+test('esc: chữ có < > & không còn bị Telegram hiểu là thẻ HTML; plain() trả lại chữ gốc', () => {
+  assert.equal(notify.esc('CPA <50k & "a" > b'), 'CPA &lt;50k &amp; "a" &gt; b')
+  assert.equal(notify.esc(null), '')
+  assert.equal(notify.plain(`✅ <b>Rule</b>\n${notify.esc('Test <3 & co')}: <code>x</code>`), '✅ Rule\nTest <3 & co: x')
+})
+
+test('Telegram không đọc được HTML → gửi lại dạng chữ thường cho người đó, tin không bị mất', async () => {
+  cfg('111111, 222222')
+  const bad = { status: 400, body: { ok: false, error_code: 400, description: 'Bad Request: can\'t parse entities: Unsupported start tag "" at byte offset 83' } }
+  let first = true
+  const orig = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body)
+    if (body.chat_id === '111111' && body.parse_mode === 'HTML' && first) { first = false; sent.push({ chat: body.chat_id, text: body.text, mode: body.parse_mode }); return reply(bad.status, bad.body) }
+    sent.push({ chat: body.chat_id, text: body.text, mode: body.parse_mode })
+    return reply(200, { ok: true, result: {} })
+  }
+  const warn = console.warn; console.warn = () => {}
+  try {
+    const r = await notify.send('✅ <b>Rule</b>\nCPA < 50k')
+    assert.deepEqual(r.results.map((x) => x.ok), [true, true])
+    const retry = sent.filter((s) => s.chat === '111111')
+    assert.equal(retry.length, 2)
+    assert.equal(retry[1].mode, undefined, 'gửi lại không dùng HTML')
+    assert.equal(retry[1].text, '✅ Rule\nCPA < 50k')
+    assert.equal(sent.filter((s) => s.chat === '222222').length, 1, 'người không lỗi chỉ nhận 1 tin')
+  } finally { globalThis.fetch = orig; console.warn = warn }
+})
+
+test('gửi lại vẫn lỗi → báo lỗi của lần gửi lại', async () => {
+  cfg('111111')
+  script = { 111111: { status: 400, body: { ok: false, error_code: 400, description: 'Bad Request: can\'t parse entities: x' } } }
+  const warn = console.warn; console.warn = () => {}
+  try {
+    const r = await notify.send('<b>x</b>')
+    assert.equal(sent.length, 2)
+    assert.equal(r.results[0].ok, false)
+  } finally { console.warn = warn }
+})
