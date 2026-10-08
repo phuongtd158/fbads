@@ -339,3 +339,17 @@ test('báo cáo: nhiều tài khoản quảng cáo → mỗi tài khoản một 
   assert.ok(sent.includes('Tài khoản mẫu A') && sent.includes('Tài khoản mẫu B'))
   assert.equal((sent.match(/Đang chạy:/g) || []).length, 2)
 })
+
+test('tin Telegram của lịch/rule escape tên và nội dung có ký tự < & (Telegram không từ chối tin)', async () => {
+  const notify = require('../lib/notify')
+  const orig = notify.telegram
+  let sent = ''
+  notify.telegram = async (t) => { sent = t; return true }
+  try {
+    const o = await camp('mock_1')
+    await engine.act({ ...o, name: 'Camp <3 & co' }, { type: 'notify', message: 'CPA <50k' }, 'Rule: Cảnh báo <CPA>', { kind: 'rule' })
+  } finally { notify.telegram = orig }
+  assert.ok(sent.includes('<b>Rule: Cảnh báo &lt;CPA&gt;</b>'), sent)
+  assert.ok(sent.includes('Camp &lt;3 &amp; co: CPA &lt;50k'), sent)
+  assert.ok(!/<(?!\/?b>)/.test(sent), 'chỉ còn thẻ <b> của tool')
+})
