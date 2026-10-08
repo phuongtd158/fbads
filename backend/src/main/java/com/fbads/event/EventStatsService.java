@@ -1,9 +1,6 @@
-package com.fbads.service;
+package com.fbads.event;
 
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.EventStat;
-import com.fbads.event.AppEvent;
-import com.fbads.repository.EventStatRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;

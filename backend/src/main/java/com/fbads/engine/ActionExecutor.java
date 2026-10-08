@@ -11,7 +11,6 @@ import com.fbads.log.LogKind;
 import com.fbads.log.LogService;
 import com.fbads.log.LogSnapshot;
 import com.fbads.log.LogTarget;
-import com.fbads.service.EngineState;
 import com.fbads.settings.AppSettings;
 import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;

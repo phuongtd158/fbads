@@ -5,7 +5,6 @@ import com.fbads.common.Fmt;
 import com.fbads.log.LogCondition;
 import com.fbads.log.LogEntry;
 import com.fbads.log.LogKind;
-import com.fbads.service.EngineState;
 import com.fbads.settings.AppSettings;
 import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;

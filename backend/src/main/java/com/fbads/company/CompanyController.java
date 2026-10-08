@@ -1,6 +1,6 @@
 package com.fbads.company;
 
-import com.fbads.dto.Responses.Ok;
+import com.fbads.web.Ok;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

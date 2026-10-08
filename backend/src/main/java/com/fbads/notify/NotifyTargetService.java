@@ -2,11 +2,11 @@ package com.fbads.notify;
 
 import com.fbads.common.ApiException;
 import com.fbads.common.Ids;
+import com.fbads.common.Result;
 import com.fbads.common.ValidationException;
 import com.fbads.notify.NotifyOverview.NotifyTargetView;
 import com.fbads.notify.NotifyOverview.NotifyTopic;
 import com.fbads.notify.NotifyOverview.NotifyType;
-import com.fbads.validation.Result;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;

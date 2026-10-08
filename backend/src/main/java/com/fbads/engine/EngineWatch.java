@@ -1,7 +1,6 @@
 package com.fbads.engine;
 
 import com.fbads.common.Hash;
-import com.fbads.dto.Responses.Health;
 import com.fbads.event.EventBus;
 import com.fbads.facebook.FacebookAuth;
 import com.fbads.facebook.FacebookGraph;
@@ -12,9 +11,9 @@ import com.fbads.log.LogKind;
 import com.fbads.log.LogService;
 import com.fbads.notify.Notice;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.WsState;
 import com.fbads.settings.AppSettings;
 import com.fbads.settings.SettingsService;
+import com.fbads.web.Health;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;

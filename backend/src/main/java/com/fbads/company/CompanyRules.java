@@ -2,9 +2,9 @@ package com.fbads.company;
 
 import com.fbads.ads.AdObject;
 import com.fbads.ads.Metrics;
+import com.fbads.common.Result;
 import com.fbads.company.CompanyJson.NewReport;
 import com.fbads.company.CompanyJson.ReportUpdate;
-import com.fbads.validation.Result;
 
 import java.net.URI;
 import java.time.LocalDate;

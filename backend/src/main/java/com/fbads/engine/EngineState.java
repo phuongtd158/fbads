@@ -1,7 +1,5 @@
-package com.fbads.service;
+package com.fbads.engine;
 
-import com.fbads.entity.DailyMark;
-import com.fbads.repository.DailyMarkRepository;
 import com.fbads.rule.RuleMark;
 import com.fbads.rule.RuleMarkRepository;
 import com.fbads.rule.RuleObjKey;

@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
 
 /**
  * WebSocket STOMP tại /ws: trình duyệt SUBSCRIBE "/topic/ws.{id}.logs", ".objects", ".engine" của workspace đang chọn
- * (xem service/LiveEvents).
+ * (xem event/LiveEvents).
  *  - Chỉ nghe được kênh của workspace mình là thành viên (chế độ mở: chỉ workspace 1).
  *  - Chỉ nhận kết nối cùng origin (mặc định của Spring khi không khai báo origin nào khác).
  *  - Cần đăng nhập: /ws đi qua Spring Security như /api (security/SecurityConfig).

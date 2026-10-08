@@ -1,6 +1,5 @@
-package com.fbads.service;
+package com.fbads.event;
 
-import com.fbads.event.AppEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;

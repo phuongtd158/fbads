@@ -1,6 +1,5 @@
-package com.fbads.repository;
+package com.fbads.event;
 
-import com.fbads.entity.EventStat;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

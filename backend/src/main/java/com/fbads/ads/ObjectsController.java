@@ -1,6 +1,6 @@
 package com.fbads.ads;
 
-import com.fbads.dto.Responses.Ok;
+import com.fbads.web.Ok;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

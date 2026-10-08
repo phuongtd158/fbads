@@ -1,7 +1,7 @@
 package com.fbads.notify;
 
-import com.fbads.dto.Responses.Ok;
 import com.fbads.notify.NotifyOverview.NotifyTargetView;
+import com.fbads.web.Ok;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

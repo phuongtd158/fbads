@@ -1,4 +1,4 @@
-package com.fbads.dto;
+package com.fbads.web;
 
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 

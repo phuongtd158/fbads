@@ -1,6 +1,5 @@
-package com.fbads.controller;
+package com.fbads.web;
 
-import com.fbads.dto.Responses.Health;
 import com.fbads.engine.EngineWatch;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

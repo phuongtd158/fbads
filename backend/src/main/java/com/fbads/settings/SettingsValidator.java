@@ -1,8 +1,8 @@
 package com.fbads.settings;
 
+import com.fbads.common.Checks;
 import com.fbads.common.Json;
-import com.fbads.validation.Checks;
-import com.fbads.validation.Result;
+import com.fbads.common.Result;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * Chọn camp / nhóm QC theo điều kiện của lịch "Theo điều kiện" (bản Java của matchFilter trong shared/bulk.mjs).
- * Điều kiện và câu mô tả: entity/ScheduleFilter.
+ * Điều kiện và câu mô tả: ScheduleFilter.
  */
 public final class BulkFilter {
     private BulkFilter() {}

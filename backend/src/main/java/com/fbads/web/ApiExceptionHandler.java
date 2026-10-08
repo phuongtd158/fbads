@@ -1,10 +1,9 @@
-package com.fbads.controller;
+package com.fbads.web;
 
 import com.fbads.common.ApiException;
+import com.fbads.common.Result;
 import com.fbads.common.ValidationException;
-import com.fbads.dto.Responses.ApiError;
 import com.fbads.facebook.FbException;
-import com.fbads.validation.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;

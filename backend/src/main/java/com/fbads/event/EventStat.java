@@ -1,4 +1,4 @@
-package com.fbads.entity;
+package com.fbads.event;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;

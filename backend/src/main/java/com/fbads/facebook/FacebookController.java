@@ -1,11 +1,11 @@
 package com.fbads.facebook;
 
+import com.fbads.common.Checks;
 import com.fbads.config.AppProperties;
-import com.fbads.controller.ApiExceptionHandler;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.settings.AppSettings;
 import com.fbads.settings.SettingsService;
-import com.fbads.validation.Checks;
+import com.fbads.web.ApiExceptionHandler;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;

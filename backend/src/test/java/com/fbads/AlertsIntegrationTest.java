@@ -1,7 +1,7 @@
 package com.fbads;
 
-import com.fbads.engine.AlertWatch;
 import com.fbads.engine.EngineClock;
+import com.fbads.engine.WsState;
 import com.fbads.facebook.FacebookGraph;
 import com.fbads.facebook.FacebookInsights.HourSpend;
 import com.fbads.facebook.FacebookState;
@@ -9,8 +9,8 @@ import com.fbads.facebook.GraphClient;
 import com.fbads.log.LogService;
 import com.fbads.notify.NotifyTargetRepository;
 import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.report.AlertWatch;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.WsState;
 import com.fbads.settings.SettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

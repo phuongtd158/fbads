@@ -2,10 +2,10 @@ package com.fbads.schedule;
 
 import com.fbads.ads.AdLevel;
 import com.fbads.ads.AdObject;
+import com.fbads.common.Checks;
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
-import com.fbads.validation.Checks;
-import com.fbads.validation.Result;
+import com.fbads.common.Result;
 
 import java.util.ArrayList;
 import java.util.HashSet;

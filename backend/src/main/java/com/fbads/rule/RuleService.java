@@ -1,13 +1,13 @@
 package com.fbads.rule;
 
 import com.fbads.common.Ids;
+import com.fbads.common.Result;
 import com.fbads.common.ValidationException;
-import com.fbads.dto.Saved;
 import com.fbads.engine.EngineLock;
 import com.fbads.facebook.FacebookObjects;
 import com.fbads.schedule.ScheduleService;
 import com.fbads.settings.SettingsService;
-import com.fbads.validation.Result;
+import com.fbads.web.Saved;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

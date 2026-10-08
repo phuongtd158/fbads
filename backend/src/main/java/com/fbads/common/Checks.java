@@ -1,4 +1,4 @@
-package com.fbads.validation;
+package com.fbads.common;
 
 import java.time.ZoneId;
 import java.util.LinkedHashMap;

@@ -1,9 +1,9 @@
 package com.fbads.account;
 
 import com.fbads.common.ApiException;
-import com.fbads.dto.Responses.Ok;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.security.WorkspaceFilter;
+import com.fbads.web.Ok;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

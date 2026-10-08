@@ -2,8 +2,6 @@ package com.fbads.event;
 
 import com.fbads.notify.Notifier;
 import com.fbads.notify.NotifyFailure;
-import com.fbads.service.EventStatsService;
-import com.fbads.service.LiveEvents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Conditional;

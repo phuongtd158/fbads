@@ -1,11 +1,11 @@
 package com.fbads.notify.channel;
 
+import com.fbads.common.Checks;
 import com.fbads.notify.ConfigField;
 import com.fbads.notify.Notice;
 import com.fbads.notify.NotifyChannel;
 import com.fbads.notify.SendResult.Recipient;
 import com.fbads.notify.SendResult;
-import com.fbads.validation.Checks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;

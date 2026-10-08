@@ -1,11 +1,11 @@
 package com.fbads.settings;
 
-import com.fbads.controller.ApiExceptionHandler;
+import com.fbads.common.Result;
 import com.fbads.facebook.FacebookObjects;
 import com.fbads.facebook.FacebookState;
 import com.fbads.rule.RuleService;
 import com.fbads.schedule.ScheduleService;
-import com.fbads.validation.Result;
+import com.fbads.web.ApiExceptionHandler;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

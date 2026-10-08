@@ -134,10 +134,10 @@ fbads.calls.service    :   ← ObjectService.setBudget 18 ms
 
 | Cờ | Tầng | Ghi gì |
 |---|---|---|
-| `LOG_CONTROLLER` | `controller/` | Request vào API nào, tham số |
-| `LOG_SERVICE` | `service/` | Nghiệp vụ, Facebook, sự kiện |
-| `LOG_ENGINE` | `engine/` | Vòng tự động mỗi 30 giây (bỏ qua `EngineClock` vì chỉ đọc giờ) |
-| `LOG_REPOSITORY` | `repository/` | Method repository được gọi (kể cả `save`, `findById`) và thời gian |
+| `LOG_CONTROLLER` | `@RestController` | Request vào API nào, tham số |
+| `LOG_SERVICE` | `@Service` | Nghiệp vụ, Facebook, sự kiện |
+| `LOG_ENGINE` | `engine/`, `*Runner`, `RuleEvaluator`, `AlertWatch` | Vòng tự động mỗi 30 giây (bỏ qua `EngineClock` vì chỉ đọc giờ) |
+| `LOG_REPOSITORY` | `*Repository` | Method repository được gọi (kể cả `save`, `findById`) và thời gian |
 | `LOG_SQL` | Hibernate | Câu SQL (xuống dòng cho dễ đọc) và giá trị từng tham số `?` |
 
 - Bật/tắt riêng từng tầng bằng biến môi trường. Ví dụ dùng `dev` nhưng thấy vòng tự động làm rối log thì thêm `LOG_ENGINE=false`.
@@ -181,35 +181,38 @@ mvn test        # cần Docker: Testcontainers tự bật MySQL 8.0, Redis và K
 - **CallLoggingTest**, **CallLoggerTest**: log chi tiết đủ các tầng và SQL, tầng tắt thì im lặng, không lộ mật khẩu/token.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
 
-## Cấu trúc thư mục (chia theo tầng)
+## Cấu trúc thư mục (chia theo tính năng)
 
-Luồng một request: `controller` → `service` → `repository` → DB.
+Mỗi tính năng một package, trong đó có đủ controller, service, entity, repository, DTO (record) và validator của nó. Muốn hiểu "lịch" thì chỉ mở `schedule/`. Trong mỗi package, đọc theo tên: `*Controller` (API) → `*Service` (nghiệp vụ) → entity (bảng) → `*Repository`. Mỗi package có `package-info.java` nói nên đọc file nào trước.
 
-| Thư mục | Chứa gì |
+| Package | Tính năng |
 |---|---|
-| `controller/` | Nhận/trả HTTP, không có logic; `ApiExceptionHandler` đổi lỗi thành JSON |
-| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `UndoService`, `ReportService`, `DataImporter`. Gói con `service/facebook/`: `FacebookObjects`, `FacebookInsights`, `FacebookActions`, `FacebookAuth`, `FacebookHealth` (+ `FacebookGraph`, `FacebookState`, `FacebookParse` dùng chung) |
-| `notify/` | Gửi thông báo, không phụ thuộc kênh: `Notice` (nội dung), `NotifyChannel` (hợp đồng chung của mọi kênh), `Notifier` (chọn kênh của workspace rồi giao), `NotifyTargetService` (kênh đã cài). Mỗi loại kênh một class trong `notify/channel/` (`TelegramChannel`, `EmailChannel`) |
-| `repository/` | Spring Data JPA, mỗi bảng 1 interface |
-| `entity/` | Class ánh xạ bảng (`@Entity`) |
-| `dto/` | Dữ liệu vào/ra không phải bảng: body của request (`Requests`, `ScheduleRequest`, `RuleRequest`, `SettingsPatch`), `AdObject`, `Metrics`, `Condition`, `Saved` |
-| `client/` | Gọi dịch vụ ngoài: `GraphClient` (Facebook), giới hạn gọi API, dữ liệu giả |
-| `engine/` | Logic chạy lịch/rule mỗi 30 giây (`EngineTicker`, `ScheduleRunner`, `RuleRunner`…) |
-| `event/` | Sự kiện: `EventBus`, bản Kafka (`KafkaEvents`, `KafkaEventListeners`) và bản Spring events (`LocalEvents`) |
-| `validation/` | Luật kiểm tra lịch/rule/cài đặt (giống `frontend/src/shared/validate.mjs`) |
+| `schedule/` | Lịch tự động: `ScheduleController`, `ScheduleService`, `ScheduleValidator`, `Schedule` (+ `ScheduleFilter`, `ScheduleWindow`), `ScheduleRunner` (engine gọi), `BulkFilter` |
+| `rule/` | Rule: `RuleController`, `RuleService`, `RuleValidator`, `Rule`, `Condition`, `RuleRunner` (engine gọi), `RuleEvaluator` (chỉ tính toán), `RulePreview`, `RuleActivity` |
+| `log/` | Nhật ký và hoàn tác: `LogController`, `LogService`, `UndoService`, `LogEntry` và các phần JSON (`LogChange`, `LogSnapshot`…) |
+| `ads/` | Camp/nhóm QC: `ObjectsController`, `ObjectService` (bật/tắt, ngân sách tay, xu hướng), `AdObject`, `Metrics` |
+| `facebook/` | Graph API: `FacebookObjects`, `FacebookInsights`, `FacebookActions`, `FacebookAuth`, `FacebookHealth` (+ `FacebookGraph`, `FacebookState`, `FacebookParse` dùng chung), `GraphClient` (HTTP, thử lại, giới hạn gọi), `MockAds` (dữ liệu giả), `FacebookController` |
+| `account/` | Người dùng, workspace, thành viên, vai trò, đăng nhập: `AuthController`, `WorkspaceController`, `AuthService`, `LoginAttempts` |
+| `settings/` | Cài đặt workspace: `SettingsController`, `SettingsService`, `SettingsValidator`, `AppSettings`, `SettingsPatch`, `DataImporter` |
+| `report/` | Báo cáo ngày/tuần và cảnh báo bất thường: `ReportController`, `ReportService`, `AlertWatch` |
+| `company/` | Báo cáo lên hệ thống công ty: `CompanyController`, `CompanyReportService`, `CompanyRules`, `CompanyApi`… |
+| `notify/` | Gửi thông báo, không phụ thuộc kênh: `Notice` (nội dung), `NotifyChannel` (hợp đồng chung của mọi kênh), `Notifier` (chọn kênh của workspace rồi giao), `NotifyTargetService`, `NotifyController`. Mỗi loại kênh một class trong `notify/channel/` (`TelegramChannel`, `EmailChannel`) |
+| `engine/` | Lõi vòng tự động mỗi 30 giây: `EngineTicker`, `ActionExecutor` (nơi duy nhất làm thay đổi thật), `EngineState`, `EngineClock`, `KillSwitch` |
+| `event/` | Sự kiện: `EventBus`, bản Kafka (`KafkaEvents`, `KafkaEventListeners`) và bản Spring events (`LocalEvents`), `LiveEvents` (WebSocket), `EventStatsService` |
+| `web/` | HTTP dùng chung: `ApiExceptionHandler` (lỗi → JSON), `HealthController`, `Ok`, `ApiError`, `Saved` |
 | `security/` | Spring Security, mã hoá mật khẩu, filter chặn request lạ, `WorkspaceContext` + `WorkspaceFilter` (workspace và vai trò của từng request) |
 | `logging/` | Log chi tiết từng tầng bằng Spring AOP (`@Aspect`, `@Around`) |
-| `config/`, `common/` | Cấu hình Spring (Redis, cache, WebSocket, Jackson…) và tiện ích dùng chung |
+| `config/`, `common/` | Cấu hình Spring (Redis, cache, WebSocket, Jackson…) và tiện ích dùng chung (`Json`, `Fmt`, `Checks`, `Result`…) |
 
 ## Đối chiếu Node → Spring (để học)
 
 | Bản Node | Bản Java | Học được gì |
 |---|---|---|
 | `data.json` / Upstash (`lib/store.js`) | MySQL + Spring Data JPA (`*Repository`), Flyway | Entity, repository, migration, `@Version` |
-| `express.Router` (`lib/routes/*`) | `@RestController` (`controller/`) | Mapping, `@RequestBody`, `ResponseEntity` |
-| `req.body` (object tuỳ ý) | Body đọc thẳng vào record/class trong `dto/`; số dạng chữ đọc như `Number()` của JS nhờ `@JsNumber`; sai kiểu → 400 `"Sai kiểu dữ liệu"` kèm tên trường | DTO, record, deserializer tự viết, PATCH phân biệt "không gửi" với "gửi null" (`SettingsPatch`) |
+| `express.Router` (`lib/routes/*`) | `@RestController` (`*Controller` trong từng package tính năng) | Mapping, `@RequestBody`, `ResponseEntity` |
+| `req.body` (object tuỳ ý) | Body đọc thẳng vào record (DTO nằm cùng package tính năng); số dạng chữ đọc như `Number()` của JS nhờ `@JsNumber`; sai kiểu → 400 `"Sai kiểu dữ liệu"` kèm tên trường | DTO, record, deserializer tự viết, PATCH phân biệt "không gửi" với "gửi null" (`SettingsPatch`) |
 | Middleware tự viết (`lib/middleware.js`, `lib/auth.js`) | Spring Security + Spring Session Data Redis, filter `ApiFilters` (`security/`) | SecurityFilterChain, phiên lưu ở Redis |
-| `shared/validate.mjs` (chạy cả ở giao diện) | `validation/*Validator` (bản Java của `frontend/src/shared/validate.mjs`) + Bean Validation (`@Valid`, `@StrongPassword`) | Ràng buộc tự viết |
+| `shared/validate.mjs` (chạy cả ở giao diện) | `*Validator` (`schedule/`, `rule/`, `settings/`; bản Java của `frontend/src/shared/validate.mjs`) + Bean Validation (`@Valid`, `@StrongPassword`) | Ràng buộc tự viết |
 | `setInterval` trong `lib/engine.js` | `@Scheduled` + `@SchedulerLock` (ShedLock trên Redis) (`EngineTicker`, `EngineLock`) | Lập lịch, khoá phân tán, virtual threads |
 | Cache trong bộ nhớ (`lib/fb.js`) | Bộ nhớ + Redis qua Spring Cache (`CacheConfig`, `@Cacheable`, `@CacheEvict`) | Cache 2 tầng, TTL, serializer JSON |
 | Đếm đăng nhập sai trong `Map` | Redis `INCR` + `EXPIRE` (`LoginAttempts`) | Đếm có hạn, dùng chung giữa nhiều bản |

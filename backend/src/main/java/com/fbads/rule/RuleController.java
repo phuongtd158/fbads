@@ -1,7 +1,7 @@
 package com.fbads.rule;
 
-import com.fbads.dto.Responses.Ok;
-import com.fbads.dto.Saved;
+import com.fbads.web.Ok;
+import com.fbads.web.Saved;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
