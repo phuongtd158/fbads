@@ -11,7 +11,7 @@ import { DELIVERY, deliveryMap } from '../lib/delivery'
 import { groupByCurrency, countByAccount, accountLabel, decimalsOf } from '../lib/accounts'
 import { totals, runningBudget } from '../lib/metrics'
 import { isToday, resolveRange } from '../lib/dates'
-import { colOf, cellValue, cellText, money } from '../lib/overviewColumns'
+import { colOf, cellValue, cellText, money, moveKey } from '../lib/overviewColumns'
 import Btn from '../components/Btn.vue'
 import Switch from '../components/Switch.vue'
 import Badge from '../components/Badge.vue'
@@ -256,6 +256,66 @@ const hasWidths = computed(() => Object.keys(ov.widths).length > 0)
 const resetWidths = () => { ov.widths = {} }
 const RZ_TITLE = 'Kéo để đổi độ rộng cột · bấm đúp để về mặc định'
 
+// ----- Kéo tiêu đề cột số liệu sang trái/phải để đổi vị trí (chuột; điện thoại đổi trong menu "Cột") -----
+// Nhấn rồi đi quá 6px mới tính là kéo, nên bấm nhanh vẫn là sắp xếp. Độ rộng đã chỉnh đi theo cột (lưu theo key).
+const tableEl = ref(null)
+const colDrag = ref(null) // { key, to, x } khi đang kéo; x = vị trí vạch thả (px, tính từ mép trái bảng)
+let cd = null
+function headDown(key, e) {
+  if (e.pointerType === 'touch' || e.button !== 0 || ov.columns.length < 2) return
+  const btn = e.currentTarget
+  cd = { key, btn, id: e.pointerId, x0: e.clientX, x: e.clientX, on: false, moved: false, timer: null }
+  btn.addEventListener('pointermove', headMove); btn.addEventListener('pointerup', headUp); btn.addEventListener('pointercancel', headCancel)
+}
+function headMove(e) {
+  cd.x = e.clientX
+  if (!cd.on) {
+    if (Math.abs(cd.x - cd.x0) < 6) return
+    cd.on = cd.moved = true
+    cd.btn.setPointerCapture(cd.id)
+    // chụp vị trí các cột khác (tính từ mép trái bảng nên cuộn ngang trong lúc kéo vẫn đúng)
+    const left = tableEl.value.getBoundingClientRect().left
+    cd.cells = [...tableEl.value.querySelectorAll('.hd [data-col]')].filter((el) => el.dataset.col !== cd.key)
+      .map((el) => { const r = el.getBoundingClientRect(); return { l: r.left - left, r: r.right - left } })
+    cd.box = tableEl.value.parentElement
+    cd.timer = setInterval(headAutoScroll, 30)
+  }
+  headPlace()
+}
+function headPlace() {
+  const x = cd.x - tableEl.value.getBoundingClientRect().left, c = cd.cells
+  const to = c.filter((r) => (r.l + r.r) / 2 < x).length
+  // vạch thả nằm giữa khe 2 cột (đầu/cuối dãy thì sát mép cột)
+  const lx = to === 0 ? c[0].l - 3 : to === c.length ? c[c.length - 1].r + 3 : (c[to - 1].r + c[to].l) / 2
+  colDrag.value = { key: cd.key, to, x: lx }
+}
+// kéo tới gần mép khung bảng thì tự cuộn ngang
+function headAutoScroll() {
+  const r = cd.box.getBoundingClientRect(), edge = 60
+  const d = cd.x < r.left + 70 + 170 + edge ? -14 : cd.x > r.right - edge ? 14 : 0 // bên trái chừa 2 cột đứng yên
+  if (d && cd.box.scrollLeft + d >= 0) { cd.box.scrollLeft += d; headPlace() }
+}
+function headEnd() {
+  const { btn } = cd
+  btn.removeEventListener('pointermove', headMove); btn.removeEventListener('pointerup', headUp); btn.removeEventListener('pointercancel', headCancel)
+  clearInterval(cd.timer)
+}
+function headUp() {
+  headEnd()
+  const d = colDrag.value
+  colDrag.value = null
+  if (d) { const next = moveKey(ov.columns, d.key, d.to); if (next !== ov.columns) ov.columns = next }
+  if (!cd.moved) cd = null // không kéo: để click sắp xếp như thường
+}
+function headCancel() { headEnd(); colDrag.value = null; cd = null }
+// vừa kéo xong thì trình duyệt vẫn bắn click: bỏ qua lần đó, không sắp xếp
+function headClick(key) {
+  if (cd && cd.moved) { cd = null; return }
+  sortBy(key)
+}
+onBeforeUnmount(() => { if (cd) headEnd() })
+const DRAG_TITLE = ' · kéo sang trái/phải để đổi vị trí cột'
+
 // ----- Bộ lọc đang áp dụng -----
 const STATUS_LABEL = { on: 'Đang chạy', off: 'Không chạy' }
 const chips = computed(() => {
@@ -455,15 +515,16 @@ async function bulk(on) {
       </EmptyState>
 
       <div v-else class="tscroll" :class="{ dim: ov.loading && !today }">
-        <div class="table" :class="{ hasacc: showAccCol, resizing }" :style="gridStyle">
+        <div ref="tableEl" class="table" :class="{ hasacc: showAccCol, resizing, coldrag: colDrag }" :style="gridStyle">
+          <i v-if="colDrag" class="dropline" :style="{ left: colDrag.x + 'px' }" />
           <div class="hd row">
             <span class="c-sw" />
             <span class="c-nm"><button type="button" class="sh" :class="{ on: sortKey === 'name' }" :title="sortTitle('name')" @click="sortBy('name')">{{ ov.level === 'campaign' ? 'Chiến dịch' : 'Nhóm quảng cáo' }}<component :is="sortIcon('name')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'name' }" :title="RZ_TITLE" @pointerdown="startResize('name', $event)" @dblclick="resetWidth('name')" /></span>
             <span v-if="showAccCol" class="rzc"><button type="button" class="sh" :class="{ on: sortKey === 'account' }" :title="sortTitle('account')" @click="sortBy('account')">Tài khoản<component :is="sortIcon('account')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'account' }" :title="RZ_TITLE" @pointerdown="startResize('account', $event)" @dblclick="resetWidth('account')" /></span>
             <span class="rzc"><button type="button" class="sh" :class="{ on: sortKey === 'delivery' }" :title="sortTitle('delivery')" @click="sortBy('delivery')">Phân phối<component :is="sortIcon('delivery')" :size="13" /></button><i class="rz" :class="{ on: resizing === 'delivery' }" :title="RZ_TITLE" @pointerdown="startResize('delivery', $event)" @dblclick="resetWidth('delivery')" /></span>
             <div class="metrics">
-              <span v-for="c in cols" :key="c.key" class="r rzc">
-                <button type="button" class="sh" :class="{ on: sortKey === c.key }" :title="sortTitle(c.key)" @click="sortBy(c.key)">{{ c.short || c.label }}<component :is="sortIcon(c.key)" :size="13" /></button>
+              <span v-for="c in cols" :key="c.key" class="r rzc" :data-col="c.key" :class="{ dragcol: colDrag && colDrag.key === c.key }">
+                <button type="button" class="sh" :class="{ on: sortKey === c.key }" :title="sortTitle(c.key) + DRAG_TITLE" @pointerdown="headDown(c.key, $event)" @click="headClick(c.key)">{{ c.short || c.label }}<component :is="sortIcon(c.key)" :size="13" /></button>
                 <InfoTip v-if="c.tip" :tip="c.tip" />
                 <i class="rz" :class="{ on: resizing === c.key }" :title="RZ_TITLE" @pointerdown="startResize(c.key, $event)" @dblclick="resetWidth(c.key)" />
               </span>
@@ -477,7 +538,7 @@ async function bulk(on) {
               <div v-if="showAccCol" class="c-ac" :title="'Tài khoản quảng cáo ID ' + it.o.accountId"><b>{{ accountLabel(it.o) }}</b><small v-if="it.o.currency" class="faint">{{ it.o.currency }}</small></div>
               <div class="c-dl"><span class="dl" :class="deliveryOf(it.o).tone" :title="deliveryOf(it.o).label"><i />{{ deliveryOf(it.o).label }}</span></div>
               <div class="metrics">
-                <div v-for="c in cols" :key="c.key" class="m r">
+                <div v-for="c in cols" :key="c.key" class="m r" :class="{ dragcol: colDrag && colDrag.key === c.key }">
                   <span class="ml">{{ c.label }}</span>
                   <BudgetCell v-if="c.key === 'budget'" :o="it.o" />
                   <template v-else-if="c.key === 'spend'">
@@ -498,7 +559,7 @@ async function bulk(on) {
 
           <div class="tot row">
             <span class="t-l" :style="{ gridColumn: '1 / span ' + lead }"><b>Tổng</b> · {{ visible.length }} {{ levelName }}<small v-if="visMixed" class="faint"> · khác loại tiền</small></span>
-            <div class="metrics"><span v-for="c in cols" :key="c.key" class="m r"><span class="ml">{{ c.label }}</span><b class="num">{{ totCell(c) }}</b></span></div>
+            <div class="metrics"><span v-for="c in cols" :key="c.key" class="m r" :class="{ dragcol: colDrag && colDrag.key === c.key }"><span class="ml">{{ c.label }}</span><b class="num">{{ totCell(c) }}</b></span></div>
           </div>
         </div>
       </div>
@@ -600,7 +661,13 @@ async function bulk(on) {
 .hd:hover .rz::after { opacity: .7; }
 .rz:hover::after, .rz.on::after { opacity: 1; background: var(--accent); }
 .table.resizing, .table.resizing * { cursor: col-resize !important; user-select: none; }
-.hd { position: sticky; top: 0; z-index: 4; padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
+/* Kéo tiêu đề đổi vị trí cột: cột đang kéo mờ đi, vạch xanh báo chỗ sẽ thả */
+.table { position: relative; }
+.table.coldrag, .table.coldrag * { cursor: grabbing !important; user-select: none; }
+.dragcol { opacity: .45; }
+.hd .dragcol { opacity: 1; } .hd .dragcol .sh { color: var(--accent); background: var(--accent-soft); }
+.dropline { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1.5px; border-radius: 3px; background: var(--accent); z-index: 6; pointer-events: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.hd { position: sticky; top: 0; z-index: 4; user-select: none; padding-top: 11px; padding-bottom: 11px; font-size: 12.5px; font-weight: 650; color: var(--text-3); background: var(--surface-2); border-bottom: 1px solid var(--border); letter-spacing: .01em; }
 .hd .r { display: inline-flex; justify-content: flex-end; align-items: center; gap: 2px; }
 .item { min-height: 68px; border-bottom: 1px solid var(--border); background: var(--surface); transition: background .15s; }
 .item:hover { background: var(--surface-2); }
