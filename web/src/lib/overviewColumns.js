@@ -2,6 +2,8 @@
 // Mỗi dòng của bảng là { o: camp/nhóm QC, m: số liệu đã kèm CTR/CPC/CPM (shared/metrics.mjs derive) }.
 import { fmt, fmtDec } from './format'
 import { decimalsOf } from './accounts'
+import { cleanOrder } from '../../../shared/columnOrder.mjs'
+export { toggleKey, moveKey, canonicalOrder, isCanonical } from '../../../shared/columnOrder.mjs'
 
 // tiny: nhãn ngắn trên thẻ ở điện thoại (không có thì dùng short / label)
 // money: cột tiền (hiện đúng số lẻ theo loại tiền của tài khoản); first: chiều sắp xếp khi bấm lần đầu (mặc định giảm dần)
@@ -28,12 +30,8 @@ export const COLUMN_KEYS = COLUMNS.map((c) => c.key)
 export const DEFAULT_COLUMNS = ['budget', 'spend', 'results', 'cpa', 'roas']
 export const colOf = (key) => COLUMNS.find((c) => c.key === key)
 
-// Danh sách cột đã lưu → hợp lệ, đúng thứ tự chuẩn, luôn có ít nhất 1 cột
-export function cleanColumns(list) {
-  const want = new Set(Array.isArray(list) ? list : [])
-  const out = COLUMN_KEYS.filter((k) => want.has(k))
-  return out.length ? out : [...DEFAULT_COLUMNS]
-}
+// Danh sách cột đã lưu → hợp lệ, giữ thứ tự người dùng đã kéo, luôn có ít nhất 1 cột
+export const cleanColumns = (list) => cleanOrder(list, COLUMN_KEYS, DEFAULT_COLUMNS)
 
 export const money = (n, cur) => (n == null || Number.isNaN(n) ? '–' : decimalsOf(cur) ? fmtDec(n, 2) : fmt(n))
 
