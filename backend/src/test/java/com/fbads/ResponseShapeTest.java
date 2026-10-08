@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * src/test/resources/fixtures/response-shapes.json (chỉ làm khi CỐ Ý đổi API).
  */
 class ResponseShapeTest extends IntegrationBase {
+    static final Set<String> NULLABLE_NUMBERS = Set.of("cpa", "roas");
     static final Path FIXTURE = Path.of("src/test/resources/fixtures/response-shapes.json");
 
     @LocalServerPort int port;
@@ -76,7 +78,11 @@ class ResponseShapeTest extends IntegrationBase {
         if (n == null || n.isNull()) return Api.JSON.getNodeFactory().textNode("null");
         if (n.isObject()) {
             ObjectNode o = Api.JSON.createObjectNode();
-            for (String k : new TreeSet<>(n.propertyNames())) o.set(k, shape(n.get(k)));
+            for (String k : new TreeSet<>(n.propertyNames())) {
+                // cpa/roas: số hoặc null tuỳ dữ liệu giả lúc chạy (sáng sớm chưa có kết quả) nên không so kiểu cụ thể
+                o.set(k, NULLABLE_NUMBERS.contains(k) && !n.get(k).isContainer() ? Api.JSON.getNodeFactory().textNode("number|null")
+                        : shape(n.get(k)));
+            }
             return o;
         }
         if (n.isArray()) {
