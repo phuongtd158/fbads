@@ -4,6 +4,7 @@ import com.fbads.common.Fmt;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogError;
 import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -58,7 +58,7 @@ class CompanyMessages {
         l.setDetail(detail);
         l.setOk(ok);
         l.setMode(settings.get().mode());
-        if (error != null) l.setError(Map.of("message", error));
+        if (error != null) l.setError(LogError.of(error));
         if (skipped) l.setSkipped(true);
         logs.add(l);
     }

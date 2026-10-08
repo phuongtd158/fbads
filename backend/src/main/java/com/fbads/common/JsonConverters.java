@@ -2,6 +2,7 @@ package com.fbads.common;
 
 import jakarta.persistence.AttributeConverter;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JavaType;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
@@ -17,9 +18,11 @@ public final class JsonConverters {
     private JsonConverters() {}
 
     abstract static class Base<T> implements AttributeConverter<T, String> {
-        private final TypeReference<T> type;
+        private final JavaType type;
 
-        Base(TypeReference<T> type) { this.type = type; }
+        Base(TypeReference<T> type) { this.type = MAPPER.getTypeFactory().constructType(type); }
+
+        Base(Class<T> type) { this.type = MAPPER.getTypeFactory().constructType(type); }
 
         @Override
         public String convertToDatabaseColumn(T value) {
@@ -29,6 +32,13 @@ public final class JsonConverters {
         @Override
         public T convertToEntityAttribute(String json) {
             return json == null || json.isBlank() ? null : MAPPER.readValue(json, type);
+        }
+    }
+
+    /** Một record bất kỳ ↔ cột JSON. Mỗi record có một lớp con nhỏ (JPA cần lớp cụ thể), vd LogTarget.Converter. */
+    public abstract static class Of<T> extends Base<T> {
+        protected Of(Class<T> type) {
+            super(type);
         }
     }
 

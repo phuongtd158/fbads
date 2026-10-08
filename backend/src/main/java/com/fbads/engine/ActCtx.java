@@ -1,13 +1,12 @@
 package com.fbads.engine;
 
+import com.fbads.entity.LogCondition;
 import com.fbads.entity.LogKind;
 
-import java.util.Map;
-
 /** Ngữ cảnh của một lần thực thi: nguồn (lịch/rule/hệ thống/thủ công), lịch/rule nào, điều kiện đã khớp, có gửi Telegram không */
-public record ActCtx(LogKind kind, String refId, String refName, Map<String, Object> condition, boolean silent, boolean noCap,
+public record ActCtx(LogKind kind, String refId, String refName, LogCondition condition, boolean silent, boolean noCap,
         boolean includeLearning) {
-    public ActCtx(LogKind kind, String refId, String refName, Map<String, Object> condition, boolean silent) {
+    public ActCtx(LogKind kind, String refId, String refName, LogCondition condition, boolean silent) {
         this(kind, refId, refName, condition, silent, false, false);
     }
 
@@ -18,7 +17,7 @@ public record ActCtx(LogKind kind, String refId, String refName, Map<String, Obj
 
     public ActCtx silenced() { return new ActCtx(kind, refId, refName, condition, true, noCap, includeLearning); }
 
-    public ActCtx withCondition(Map<String, Object> c) { return new ActCtx(kind, refId, refName, c, silent, noCap, includeLearning); }
+    public ActCtx withCondition(LogCondition c) { return new ActCtx(kind, refId, refName, c, silent, noCap, includeLearning); }
 
     /**
      * Rule tăng theo bậc: không áp giới hạn % thay đổi mỗi ngày (đã bắt buộc có trần ngân sách);

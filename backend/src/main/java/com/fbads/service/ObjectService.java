@@ -1,6 +1,5 @@
 package com.fbads.service;
 
-import com.fbads.client.FbException;
 import com.fbads.common.ApiException;
 import com.fbads.common.DateRanges;
 import com.fbads.common.Fmt;
@@ -10,8 +9,13 @@ import com.fbads.dto.Responses.ObjectsList;
 import com.fbads.dto.Responses.ObjectsMeta;
 import com.fbads.dto.Responses.Trend;
 import com.fbads.dto.Responses.TrendEvent;
+import com.fbads.entity.LogAction;
+import com.fbads.entity.LogChange;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogError;
 import com.fbads.entity.LogKind;
+import com.fbads.entity.LogSnapshot;
+import com.fbads.entity.LogTarget;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;
@@ -21,7 +25,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -88,13 +91,12 @@ public class ObjectService {
         FacebookInsights.TrendResult got = insights.dailyTrend(id, since, until, refresh);
         List<TrendEvent> events = new ArrayList<>();
         for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
-            Object type = l.getAction() == null ? null : l.getAction().get("type");
-            if (l.getTarget() == null || !id.equals(l.getTarget().get("id")) || !Boolean.TRUE.equals(l.getOk())
-                    || Boolean.TRUE.equals(l.getDry())
-                    || !List.of("on", "off", "budget").contains(type) || "mock".equals(l.getMode()) != s.isMock()) continue;
+            if (l.getTarget() == null || !id.equals(l.getTarget().id()) || !Boolean.TRUE.equals(l.getOk())
+                    || Boolean.TRUE.equals(l.getDry()) || l.getAction() == null || !l.getAction().changesObject()
+                    || "mock".equals(l.getMode()) != s.isMock()) continue;
             String date = l.getTs().atZone(zone).toLocalDate().toString();
             if (date.compareTo(since) < 0 || date.compareTo(until) > 0) continue;
-            events.add(new TrendEvent(l.getTs().toString(), date, (String) type, l.getSource(), l.getDetail()));
+            events.add(new TrendEvent(l.getTs().toString(), date, l.getAction().type().code(), l.getSource(), l.getDetail()));
         }
         events.sort(Comparator.comparing(TrendEvent::ts));
         return new Trend(id, since, until, got.days(), events, got.at() == 0 ? null : got.at(), got.stale(),
@@ -102,8 +104,7 @@ public class ObjectService {
     }
 
     public void setStatus(String id, boolean on, String name) {
-        manual(id, name, Map.of("type", on ? "on" : "off"), on ? "Bật camp" : "Tắt camp",
-                Map.of("status", on ? "ACTIVE" : "PAUSED"), () -> actions.setStatus(id, on));
+        manual(id, name, LogAction.status(on), on ? "Bật camp" : "Tắt camp", LogChange.status(on), () -> actions.setStatus(id, on));
     }
 
     public void setBudget(String id, double amount, String name) {
@@ -112,33 +113,25 @@ public class ObjectService {
         if (cur != null && cur.dailyBudget == null)
             throw new ApiException(400, "Mục này không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO). Hãy "
                     + "chỉnh ở cấp có ngân sách.");
-        Map<String, Object> action = new LinkedHashMap<>();
-        action.put("type", "budget"); action.put("mode", "set"); action.put("value", value);
-        manual(id, name, action, "Đặt ngân sách " + Fmt.money(value), Map.of("dailyBudget", value), () -> actions.setBudget(id, value));
+        manual(id, name, LogAction.setBudget(value), "Đặt ngân sách " + Fmt.money(value), LogChange.budget(value),
+                () -> actions.setBudget(id, value));
     }
 
     /** Thao tác tay: ghi nhật ký (kể cả khi lỗi) rồi ném lại lỗi cho giao diện */
-    private void manual(String id, String name, Map<String, Object> action, String okDetail, Map<String, Object> after, Runnable fn) {
+    private void manual(String id, String name, LogAction action, String okDetail, LogChange after, Runnable fn) {
         AdObject cur = objects.findCached(id);
         String label = name == null || name.isEmpty() ? id : name;
-        Map<String, Object> target = new LinkedHashMap<>();
-        target.put("id", id);
-        target.put("name", label);
-        if (cur != null) {
-            target.put("level", cur.level.code());
-            if (cur.accountId != null) { target.put("accountId", cur.accountId); target.put("accountName", cur.accountName); }
-        }
         LogEntry e = LogEntry.of(LogKind.MANUAL, "Thủ công", label);
-        e.setTarget(target);
+        e.setTarget(cur != null ? LogTarget.of(cur, label) : new LogTarget(id, label, null, null, null));
         e.setAction(action);
-        e.setBefore(FacebookObjects.snapshot(cur));
+        e.setBefore(LogSnapshot.of(cur));
         e.setMode(settings.get().mode());
         try {
             fn.run();
         } catch (RuntimeException ex) {
             e.setDetail(ex.getMessage());
             e.setOk(false);
-            e.setError(FbException.describe(ex));
+            e.setError(LogError.of(ex));
             logs.add(e);
             throw ex;
         }

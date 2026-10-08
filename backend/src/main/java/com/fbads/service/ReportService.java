@@ -152,12 +152,11 @@ public class ReportService {
         Map<String, Integer> n = new LinkedHashMap<>(Map.of("on", 0, "off", 0, "budget", 0));
         ZoneId zone = clock.zone();
         for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
-            Object type = l.getAction() == null ? null : l.getAction().get("type");
             if (!EnumSet.of(LogKind.RULE, LogKind.SCHEDULE, LogKind.SYSTEM).contains(l.getKind()) || !Boolean.TRUE.equals(l.getOk())
                     || Boolean.TRUE.equals(l.getDry())
-                    || "mock".equals(l.getMode()) != mock || !(type instanceof String t) || !n.containsKey(t)) continue;
+                    || "mock".equals(l.getMode()) != mock || l.getAction() == null || !l.getAction().changesObject()) continue;
             String d = l.getTs().atZone(zone).toLocalDate().toString();
-            if (d.compareTo(since) >= 0 && d.compareTo(until) <= 0) n.merge(t, 1, Integer::sum);
+            if (d.compareTo(since) >= 0 && d.compareTo(until) <= 0) n.merge(l.getAction().type().code(), 1, Integer::sum);
         }
         return n;
     }

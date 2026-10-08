@@ -6,6 +6,7 @@ import com.fbads.dto.AdObject;
 import com.fbads.dto.Condition;
 import com.fbads.dto.Metrics;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogCondition;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.entity.MatchMode;
@@ -28,6 +29,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 
 /** Chạy rule theo chu kỳ, bật lại camp theo hẹn, xem trước rule và thống kê hoạt động của rule. */
@@ -79,7 +81,7 @@ public class RuleRunner {
         return maps;
     }
 
-    /** Các trường thêm của 1 điều kiện: khoảng so sánh, bậc ngưỡng theo kết quả, bậc của rule tăng theo bậc */
+    /** Các trường thêm của 1 điều kiện (xem trước rule): khoảng so sánh, bậc ngưỡng theo kết quả, bậc của rule tăng theo bậc */
     private static void extras(Map<String, Object> m, RuleEvaluator.CondEval c) {
         if (c.compareRange() != null) m.put("compareRange", c.compareRange());
         if (c.tierMetric() != null) {
@@ -126,34 +128,25 @@ public class RuleRunner {
     }
 
     /** Điều kiện đã khớp, lưu vào nhật ký (6 trường đầu = điều kiện đầu tiên, giữ cho nhật ký cũ; conditions = đầy đủ) */
-    private static Map<String, Object> condition(Rule rule, RuleEvaluator.Decision d, RuleEvaluator.CondEval c0) {
-        Map<String, Object> c = new LinkedHashMap<>();
-        c.put("metric", c0.metric()); c.put("op", c0.op()); c.put("range", d.range.code()); c.put("threshold", c0.threshold());
-        c.put("actual", finite(c0.actual())); c.put("actualInf", c0.actual() == Double.POSITIVE_INFINITY);
-        c.put("minSpend", rule.getMinSpend()); c.put("spend", d.metrics.spend()); c.put("cooldownHours", rule.getCooldownHours());
-        c.put("match", rule.getMatch() == MatchMode.ANY ? "any" : "all");
-        List<Map<String, Object>> list = new ArrayList<>();
-        for (RuleEvaluator.CondEval x : d.conds) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("metric", x.metric()); m.put("op", x.op());
-            if (x.vs() != null) m.put("vs", x.vs());
-            if (x.factor() != null) m.put("factor", x.factor());
-            m.put("threshold", x.threshold()); m.put("actual", finite(x.actual()));
-            m.put("actualInf", x.actual() == Double.POSITIVE_INFINITY);
-            m.put("hit", x.hit()); m.put("unknown", x.unknown());
-            extras(m, x);
-            list.add(m);
-        }
-        c.put("conditions", list);
-        if (d.ladder != null) {
-            Map<String, Object> l = new LinkedHashMap<>();
-            l.put("step", d.ladder.step() + 1); l.put("count", d.ladder.count()); l.put("need", d.ladder.need());
-            l.put("metric", d.ladder.metric());
-            l.put("total", rule.getSteps() == null ? 0 : rule.getSteps().size());
-            c.put("ladder", l);
-        }
-        return c;
+    private static LogCondition condition(Rule rule, RuleEvaluator.Decision d, RuleEvaluator.CondEval c0) {
+        List<LogCondition.Hit> hits = d.conds.stream().map(RuleRunner::hit).toList();
+        LogCondition.Ladder ladder = d.ladder == null ? null : new LogCondition.Ladder(d.ladder.step() + 1, d.ladder.count(),
+                d.ladder.need(), d.ladder.metric(), rule.getSteps() == null ? 0 : rule.getSteps().size());
+        return new LogCondition(c0.metric(), c0.op(), d.range, c0.threshold(), finite(c0.actual()), isInf(c0.actual()),
+                rule.getMinSpend(), d.metrics.spend(), rule.getCooldownHours(),
+                Objects.requireNonNullElse(rule.getMatch(), MatchMode.ALL), hits, ladder);
     }
+
+    /** Một điều kiện trong nhật ký; bậc ngưỡng theo kết quả (tier…) và bậc của rule tăng theo bậc (ladder…) chỉ có khi dùng */
+    private static LogCondition.Hit hit(RuleEvaluator.CondEval x) {
+        boolean tiered = x.tierMetric() != null, laddered = x.ladderNeed() != null && x.ladderNeed() != 0;
+        return new LogCondition.Hit(x.metric(), x.op(), x.vs(), x.factor(), x.threshold(), finite(x.actual()), isInf(x.actual()),
+                x.hit(), x.unknown(), x.compareRange(), x.tierMetric(), tiered ? x.tierCount() : null,
+                tiered && x.tier() != null ? x.tier().count() : null, laddered ? x.ladderStep() : null,
+                laddered ? x.ladderNeed() : null);
+    }
+
+    private static boolean isInf(double v) { return v == Double.POSITIVE_INFINITY; }
 
     /** Bật lại các mục mà rule đã tắt, khi tới giờ hẹn của một ngày sau ngày tắt. Bỏ hẹn nếu rule bị xoá/đổi, hoặc mục đã được bật lại. */
     public void tickResumes() {

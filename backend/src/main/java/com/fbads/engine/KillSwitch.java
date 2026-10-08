@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogCondition;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.service.EngineState;
@@ -30,13 +31,6 @@ public class KillSwitch {
         this.state = state;
         this.clock = clock;
         this.executor = executor;
-    }
-
-    private static Map<String, Object> condition(double limit, double spend) {
-        Map<String, Object> c = new LinkedHashMap<>();
-        c.put("metric", "spend"); c.put("op", ">"); c.put("range", "today"); c.put("threshold", limit); c.put("actual", spend);
-        c.put("minSpend", 0); c.put("spend", spend);
-        return c;
     }
 
     public boolean check(List<AdObject> objs) {
@@ -70,7 +64,7 @@ public class KillSwitch {
                 e.setDetail("Chi tiêu " + Fmt.money(spend) + cur + " đã vượt mức " + Fmt.money(limit) + cur + " của tài khoản này — "
                         + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " " + active.size()
                                 + " camp đang chạy (các tài khoản khác không bị ảnh hưởng).");
-                e.setCondition(condition(limit, spend));
+                e.setCondition(LogCondition.spendOver(limit, spend));
                 executor.record(e, false);
                 for (AdObject o : active) executor.act(o, Action.off(), "Dừng khẩn", ActCtx.system());
                 fired = true;
@@ -89,7 +83,7 @@ public class KillSwitch {
         e.setMode(s.mode());
         e.setDetail("Chi tiêu " + Fmt.money(spend) + " đã vượt mức " + Fmt.money(globalLimit) + " — "
                 + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " " + active.size() + " camp đang chạy.");
-        e.setCondition(condition(globalLimit, spend));
+        e.setCondition(LogCondition.spendOver(globalLimit, spend));
         executor.record(e, false);
         for (AdObject o : active) executor.act(o, Action.off(), "Dừng khẩn", ActCtx.system());
         return true;

@@ -1,11 +1,11 @@
 package com.fbads.engine;
 
-import java.util.Map;
+import com.fbads.entity.LogChange;
 
 /**
  * Kế hoạch cho một hành động (tính trước, chưa gọi Facebook). Xem PlanKind.
  */
-public record Plan(PlanKind kind, String detail, Map<String, Object> after, double next, boolean capped, String code,
+public record Plan(PlanKind kind, String detail, LogChange after, double next, boolean capped, String code,
         String reason, boolean notifyOnly) {
     static Plan noop() { return new Plan(PlanKind.NOOP, null, null, 0, false, null, null, false); }
 
@@ -13,7 +13,7 @@ public record Plan(PlanKind kind, String detail, Map<String, Object> after, doub
 
     static Plan error(String message) { return new Plan(PlanKind.ERROR, message, null, 0, false, null, message, false); }
 
-    static Plan doIt(String detail, Map<String, Object> after, double next, boolean capped) {
+    static Plan doIt(String detail, LogChange after, double next, boolean capped) {
         return new Plan(PlanKind.DO, detail, after, next, capped, null, null, false);
     }
 

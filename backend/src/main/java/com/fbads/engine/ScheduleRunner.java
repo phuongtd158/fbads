@@ -3,8 +3,11 @@ package com.fbads.engine;
 import com.fbads.client.RateLimits;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogAction;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogError;
 import com.fbads.entity.LogKind;
+import com.fbads.entity.LogTarget;
 import com.fbads.entity.Schedule;
 import com.fbads.entity.ScheduleAction;
 import com.fbads.repository.ScheduleRepository;
@@ -15,7 +18,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,6 +28,7 @@ import java.util.Set;
 public class ScheduleRunner {
     public static final int GRACE_MIN = 10;
     static final long WRITE_GAP_MS = 300; // giãn nhịp giữa các lần đổi của lịch theo điều kiện (đỡ chạm giới hạn số lần gọi)
+    private static final String RATE_LIMITED = "Facebook đang giới hạn số lần gọi (rate limit).";
 
     /** Kết quả chạy một lịch: BLOCKED = Facebook đang giới hạn và lịch CHƯA làm gì (thử lại lượt sau) */
     public enum RunResult { DONE, BLOCKED }
@@ -93,7 +96,7 @@ public class ScheduleRunner {
                         e.setOk(false);
                         e.setDetail("Không chạy được lượt " + ev.time() + ": Facebook giới hạn số lần gọi suốt " + GRACE_MIN
                                 + " phút sau giờ hẹn.");
-                        e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
+                        e.setError(LogError.of(RATE_LIMITED));
                         executor.record(e, false);
                     }
                 }
@@ -124,13 +127,9 @@ public class ScheduleRunner {
                 LogEntry e = entry(sch, id);
                 e.setDetail("Không tìm thấy đối tượng");
                 e.setOk(false);
-                e.setTarget(Map.of("id", id));
-                Map<String, Object> aj = new LinkedHashMap<>();
-                aj.put("type", action.type().code());
-                aj.put("mode", sch.getMode());
-                aj.put("value", sch.getValue());
-                e.setAction(aj);
-                e.setError(Map.of("message", "Không tìm thấy đối tượng trên tài khoản quảng cáo (có thể đã bị xoá hoặc đổi cấp)."));
+                e.setTarget(LogTarget.idOnly(id));
+                e.setAction(LogAction.of(action));
+                e.setError(LogError.of("Không tìm thấy đối tượng trên tài khoản quảng cáo (có thể đã bị xoá hoặc đổi cấp)."));
                 executor.record(e, false);
                 continue;
             }
@@ -155,7 +154,7 @@ public class ScheduleRunner {
         LogEntry e = entry(sch, "-");
         e.setOk(false);
         e.setDetail("Dừng giữa chừng: Facebook đang giới hạn số lần gọi, còn " + left + " mục chưa xử lý ở lượt này.");
-        e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
+        e.setError(LogError.of(RATE_LIMITED));
         executor.record(e, false);
     }
 
@@ -195,15 +194,12 @@ public class ScheduleRunner {
                 : "Khớp " + list.size() + " mục (" + desc + "): " + (dry ? "sẽ đổi" : "đã đổi") + " " + ok
                 + (same > 0 ? ", đã đúng sẵn/bỏ qua " + same : "") + (fail > 0 ? ", lỗi " + fail : "")
                 + (left > 0 ? ". Dừng vì Facebook giới hạn số lần gọi, còn " + left + " mục chưa xử lý" : "") + ".";
-        Map<String, Object> aj = new LinkedHashMap<>();
-        aj.put("type", action.type().code());
-        if (action.isBudget()) { aj.put("mode", action.mode().code()); aj.put("value", action.value()); }
         LogEntry e = entry(sch, desc);
         e.setDry(dry);
         e.setOk(fail == 0 && left == 0);
-        e.setAction(aj);
+        e.setAction(LogAction.of(action));
         e.setDetail(detail);
-        if (fail > 0 || left > 0) e.setError(Map.of("message", left > 0 ? "Facebook đang giới hạn số lần gọi (rate limit)."
+        if (fail > 0 || left > 0) e.setError(LogError.of(left > 0 ? RATE_LIMITED
                 : fail + " mục lỗi, xem các dòng nhật ký của lịch này."));
         executor.record(e, ok == 0 && fail == 0 && left == 0);
     }

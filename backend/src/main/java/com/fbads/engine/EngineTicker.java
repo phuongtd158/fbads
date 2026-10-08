@@ -1,21 +1,21 @@
 package com.fbads.engine;
 
-import com.fbads.client.FbException;
 import com.fbads.company.CompanyReportService;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogError;
 import com.fbads.entity.LogKind;
+import com.fbads.event.AppEvent;
+import com.fbads.event.EventBus;
 import com.fbads.repository.WorkspaceRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.event.AppEvent;
-import com.fbads.event.EventBus;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -143,7 +143,7 @@ public class EngineTicker {
                 l.setDetail(e.getMessage());
                 l.setOk(false);
                 l.setMode(settings.get().mode());
-                l.setError(FbException.describe(e));
+                l.setError(LogError.of(e));
                 logs.add(l);
             } catch (RuntimeException ignored) { /* DB lỗi: đã ghi log ra console */ }
             return e;

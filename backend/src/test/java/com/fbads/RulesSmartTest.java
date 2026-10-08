@@ -9,6 +9,7 @@ import com.fbads.engine.DecisionStatus;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.RuleEvaluator;
 import com.fbads.engine.RuleRunner;
+import com.fbads.entity.LogCondition;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.entity.Rule;
@@ -270,9 +271,9 @@ class RulesSmartTest extends IntegrationBase {
         created.add(saved.getId());
         runner.runRules();
         LogEntry l = logs.ofKind(LogKind.RULE).stream().filter(x -> saved.getId().equals(x.getRefId())).findFirst().orElseThrow();
-        Map<String, Object> c0 = ((List<Map<String, Object>>) l.getCondition().get("conditions")).getFirst();
-        assertThat(c0.get("tierMetric")).isEqualTo("leads");
-        assertThat(c0.get("tierCount")).isInstanceOf(Number.class);
+        LogCondition.Hit c0 = l.getCondition().conditions().getFirst();
+        assertThat(c0.tierMetric()).isEqualTo("leads");
+        assertThat(c0.tierCount()).isNotNull();
         assertThat(l.getDetail()).containsPattern("đã có \\d+ Lead");
     }
 
@@ -394,7 +395,7 @@ class RulesSmartTest extends IntegrationBase {
         runner.runRules();
         List<LogEntry> l = logs.ofKind(LogKind.RULE).stream().filter(x -> saved.getId().equals(x.getRefId()) && !Boolean.TRUE.equals(x.getSkipped())).toList();
         assertThat(l).as("có camp mock được tăng").isNotEmpty();
-        assertThat(((Map<String, Object>) l.getFirst().getCondition().get("ladder")).get("step")).isEqualTo(1);
+        assertThat(l.getFirst().getCondition().ladder().step()).isEqualTo(1);
         assertThat(l.getFirst().getSource()).containsPattern("Bậc 1: có \\d+ kết quả");
         runner.runRules();
         assertThat(logs.ofKind(LogKind.RULE).stream().filter(x -> saved.getId().equals(x.getRefId()) && !Boolean.TRUE.equals(x.getSkipped())).count())

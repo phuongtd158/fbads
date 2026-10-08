@@ -1,7 +1,5 @@
 package com.fbads.entity;
 
-import org.hibernate.annotations.TenantId;
-import com.fbads.common.JsonConverters;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.Column;
@@ -9,13 +7,13 @@ import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.TenantId;
 
 import java.time.Instant;
-import java.util.Map;
 
 /**
- * Một dòng nhật ký. Các phần lồng nhau (target, action, before, after, condition, error, undone) giữ dạng JSON tự do
- * như bản Node: có khoá nào thì ghi khoá đó (giao diện và hoàn tác phân biệt "không có" với "null").
+ * Một dòng nhật ký. Các phần lồng nhau là record riêng, lưu thành cột JSON: target (camp nào), action (làm gì),
+ * before (trước đó), after (sau đó), condition (điều kiện đã khớp), error (lỗi), undone (đã hoàn tác chưa).
  */
 @Entity
 @Table(name = "logs")
@@ -44,25 +42,25 @@ public class LogEntry {
     private String refId;
     private String refName;
     private String refLogId;
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> target;
+    @Convert(converter = LogTarget.Converter.class)
+    private LogTarget target;
     @Column(name = "action_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> action;
+    @Convert(converter = LogAction.Converter.class)
+    private LogAction action;
     @Column(name = "before_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> before;
+    @Convert(converter = LogSnapshot.Converter.class)
+    private LogSnapshot before;
     @Column(name = "after_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> after;
+    @Convert(converter = LogChange.Converter.class)
+    private LogChange after;
     @Column(name = "condition_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> condition;
+    @Convert(converter = LogCondition.Converter.class)
+    private LogCondition condition;
     @Column(name = "error_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> error;
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> undone;
+    @Convert(converter = LogError.Converter.class)
+    private LogError error;
+    @Convert(converter = LogUndone.Converter.class)
+    private LogUndone undone;
 
     /** Dòng nhật ký mới: nguồn (kind), chữ hiện ở cột Nguồn (source) và tên camp/việc (name). Các trường khác đặt bằng setter. */
     public static LogEntry of(LogKind kind, String source, String name) {
@@ -99,20 +97,20 @@ public class LogEntry {
     public void setRefName(String refName) { this.refName = refName; }
     public String getRefLogId() { return refLogId; }
     public void setRefLogId(String refLogId) { this.refLogId = refLogId; }
-    public Map<String, Object> getTarget() { return target; }
-    public void setTarget(Map<String, Object> target) { this.target = target; }
-    public Map<String, Object> getAction() { return action; }
-    public void setAction(Map<String, Object> action) { this.action = action; }
-    public Map<String, Object> getBefore() { return before; }
-    public void setBefore(Map<String, Object> before) { this.before = before; }
-    public Map<String, Object> getAfter() { return after; }
-    public void setAfter(Map<String, Object> after) { this.after = after; }
-    public Map<String, Object> getCondition() { return condition; }
-    public void setCondition(Map<String, Object> condition) { this.condition = condition; }
-    public Map<String, Object> getError() { return error; }
-    public void setError(Map<String, Object> error) { this.error = error; }
-    public Map<String, Object> getUndone() { return undone; }
-    public void setUndone(Map<String, Object> undone) { this.undone = undone; }
+    public LogTarget getTarget() { return target; }
+    public void setTarget(LogTarget target) { this.target = target; }
+    public LogAction getAction() { return action; }
+    public void setAction(LogAction action) { this.action = action; }
+    public LogSnapshot getBefore() { return before; }
+    public void setBefore(LogSnapshot before) { this.before = before; }
+    public LogChange getAfter() { return after; }
+    public void setAfter(LogChange after) { this.after = after; }
+    public LogCondition getCondition() { return condition; }
+    public void setCondition(LogCondition condition) { this.condition = condition; }
+    public LogError getError() { return error; }
+    public void setError(LogError error) { this.error = error; }
+    public LogUndone getUndone() { return undone; }
+    public void setUndone(LogUndone undone) { this.undone = undone; }
 
     /** Thành công? (thiếu ok = thành công, như bản Node). Không đặt tên isOk để Jackson không nhầm với thuộc tính "ok". */
     public boolean succeeded() { return !Boolean.FALSE.equals(ok); }

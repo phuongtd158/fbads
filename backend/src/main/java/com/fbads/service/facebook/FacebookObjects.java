@@ -161,27 +161,6 @@ public class FacebookObjects {
         return out;
     }
 
-    /** Ảnh chụp trạng thái một camp lúc thao tác (để xem trước/sau trong nhật ký) */
-    public static Map<String, Object> snapshot(AdObject o) {
-        if (o == null) return null;
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("level", o.level == null ? null : o.level.code());
-        m.put("status", o.status);
-        m.put("effective", o.effective);
-        m.put("dailyBudget", o.dailyBudget);
-        if (o.metrics != null) {
-            Map<String, Object> mm = new LinkedHashMap<>();
-            mm.put("spend", o.metrics.spend());
-            mm.put("results", o.metrics.results());
-            mm.put("cpa", o.metrics.cpa());
-            mm.put("roas", o.metrics.roas());
-            m.put("metrics", mm);
-        } else {
-            m.put("metrics", null);
-        }
-        return m;
-    }
-
     // ------------------------------------------------------------------ Tải từ Facebook
 
     /** Tải lần lượt từng tài khoản. Một tài khoản lỗi thì bỏ qua và báo; bị giới hạn số lần gọi thì dừng cả lượt. */

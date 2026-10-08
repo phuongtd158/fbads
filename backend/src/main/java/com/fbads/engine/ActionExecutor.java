@@ -1,21 +1,21 @@
 package com.fbads.engine;
 
-import com.fbads.client.FbException;
 import com.fbads.common.Fmt;
 import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogAction;
+import com.fbads.entity.LogChange;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogError;
 import com.fbads.entity.LogKind;
+import com.fbads.entity.LogSnapshot;
+import com.fbads.entity.LogTarget;
 import com.fbads.service.EngineState;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookActions;
-import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
  * Lập kế hoạch (plan) và thực thi (act) một hành động lên camp/nhóm QC, tôn trọng chế độ chạy thử,
@@ -44,27 +44,6 @@ public class ActionExecutor {
         return logs.add(e, !silent);
     }
 
-    public static Map<String, Object> target(AdObject o) {
-        Map<String, Object> t = new LinkedHashMap<>();
-        t.put("id", o.id);
-        t.put("name", o.name);
-        t.put("level", o.level.code());
-        if (o.accountId != null) { t.put("accountId", o.accountId); t.put("accountName", o.accountName); }
-        return t;
-    }
-
-    public static Map<String, Object> actionJson(Action a) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("type", a.type().code());
-        if (a.isBudget()) {
-            m.put("mode", a.mode().code());
-            m.put("value", a.value());
-            if (a.max() != 0) m.put("max", a.max());
-            if (a.min() != 0) m.put("min", a.min());
-        }
-        return m;
-    }
-
     // ------------------------------------------------------------------ Bảo vệ ngân sách
     /** Ngân sách chỉ nằm ở 1 cấp: camp CBO giữ ngân sách (nhóm QC không có), camp ABO thì ngược lại */
     public static String noBudgetReason(AdObject o) {
@@ -85,9 +64,7 @@ public class ActionExecutor {
         if (action.isOnOff()) {
             boolean want = action.type() == ActionType.ON;
             if (obj.isActive() == want) return Plan.noop(); // đã đúng trạng thái
-            Map<String, Object> after = new LinkedHashMap<>();
-            after.put("status", want ? "ACTIVE" : "PAUSED");
-            return Plan.doIt((want ? "Bật " : "Tắt ") + obj.unit(), after, 0, false);
+            return Plan.doIt((want ? "Bật " : "Tắt ") + obj.unit(), LogChange.status(want), 0, false);
         }
         if (obj.dailyBudget == null) return Plan.error(noBudgetReason(obj) + ".");
         AppSettings s = settings.get();
@@ -120,10 +97,8 @@ public class ActionExecutor {
             return capped ? Plan.skip("cap", "Đã đạt giới hạn thay đổi " + capPct + "% mỗi ngày (ngân sách gốc hôm nay "
                     + Fmt.money(base) + ").") : Plan.noop();
         }
-        Map<String, Object> after = new LinkedHashMap<>();
-        after.put("dailyBudget", next);
         return Plan.doIt("Ngân sách " + Fmt.money(cur) + " → " + Fmt.money(next)
-                + (capped ? " (chạm giới hạn " + capPct + "%/ngày)" : ""), after, next, capped);
+                + (capped ? " (chạm giới hạn " + capPct + "%/ngày)" : ""), LogChange.budget(next), next, capped);
     }
 
     /**
@@ -132,7 +107,7 @@ public class ActionExecutor {
      */
     public ActResult act(AdObject obj, Action action, String source, ActCtx ctx) {
         boolean dry = settings.get().isDry();
-        Map<String, Object> before = FacebookObjects.snapshot(obj);
+        LogSnapshot before = LogSnapshot.of(obj);
         Plan p = plan(obj, action, ctx);
         return switch (p.kind()) {
             case NOOP -> ActResult.NOOP;
@@ -143,7 +118,7 @@ public class ActionExecutor {
     }
 
     /** Ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram */
-    private ActResult recordSkip(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+    private ActResult recordSkip(AdObject obj, Action action, String source, ActCtx ctx, Plan p, LogSnapshot before,
             boolean dry) {
         String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id + ":" + p.code();
         if (state.hasDaily(day, key)) return ActResult.SKIP;
@@ -158,25 +133,25 @@ public class ActionExecutor {
     }
 
     /** Kế hoạch không làm được (vd ngân sách mới ≤ 0): chỉ ghi lỗi, không gọi Facebook */
-    private ActResult recordError(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+    private ActResult recordError(AdObject obj, Action action, String source, ActCtx ctx, Plan p, LogSnapshot before,
             boolean dry) {
         LogEntry e = entry(obj, action, source, ctx, before);
         e.setDetail(p.detail());
         e.setOk(false);
         e.setDry(dry);
-        e.setError(Map.of("message", p.detail()));
+        e.setError(LogError.of(p.detail()));
         record(e, ctx.silent());
         return ActResult.ERROR;
     }
 
     /** Làm theo kế hoạch (gọi Facebook, trừ khi chạy thử hoặc chỉ thông báo) rồi ghi nhật ký */
-    private ActResult carryOut(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+    private ActResult carryOut(AdObject obj, Action action, String source, ActCtx ctx, Plan p, LogSnapshot before,
             boolean dry) {
         try {
             if (!action.isNotify() && !dry) {
-                if (p.after().containsKey("status")) {
-                    actions.setStatus(obj.id, "ACTIVE".equals(p.after().get("status")));
-                    obj.status = obj.effective = (String) p.after().get("status");
+                if (p.after().changesStatus()) {
+                    actions.setStatus(obj.id, p.after().turnsOn());
+                    obj.status = obj.effective = p.after().status();
                 } else {
                     actions.setBudget(obj.id, p.next());
                     if (ctx.isRule()) {
@@ -198,22 +173,22 @@ public class ActionExecutor {
             e.setDetail(ex.getMessage());
             e.setOk(false);
             e.setDry(dry);
-            e.setError(FbException.describe(ex));
+            e.setError(LogError.of(ex));
             record(e, ctx.silent());
             return ActResult.FAIL;
         }
     }
 
     /** Phần chung của mọi dòng nhật ký do act() ghi: ai làm, làm gì, lên camp nào, trạng thái trước đó */
-    private LogEntry entry(AdObject obj, Action action, String source, ActCtx ctx, Map<String, Object> before) {
+    private LogEntry entry(AdObject obj, Action action, String source, ActCtx ctx, LogSnapshot before) {
         LogEntry e = LogEntry.of(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL, source, obj.name);
         e.setRefId(ctx.refId());
         e.setRefName(ctx.refName());
         if (ctx.condition() != null) e.setCondition(ctx.condition());
-        e.setTarget(target(obj));
+        e.setTarget(LogTarget.of(obj));
         e.setMode(settings.get().mode());
         e.setBefore(before);
-        e.setAction(actionJson(action));
+        e.setAction(LogAction.of(action));
         return e;
     }
 }
