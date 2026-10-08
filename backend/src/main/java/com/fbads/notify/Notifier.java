@@ -1,9 +1,9 @@
 package com.fbads.notify;
 
+import com.fbads.entity.AppSettings;
 import com.fbads.event.AppEvent;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.SettingsService;
-import com.fbads.entity.AppSettings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -59,17 +59,21 @@ public class Notifier {
         this.json = json;
     }
 
-    /** Các kênh của workspace hiện tại. Hiện chỉ có Telegram, cấu hình lấy từ Cài đặt. */
-    List<Target> targets() {
+    /** Các kênh của workspace hiện tại nhận loại tin này. Hiện chỉ có Telegram (nhận mọi loại tin), cấu hình lấy từ Cài đặt. */
+    List<Target> targets(Notice.Topic topic) {
         AppSettings s = settings.get();
+        if (s.getTelegramToken().isEmpty()) return List.of();
         JsonNode cfg = json.valueToTree(Map.of("token", s.getTelegramToken(), "chatId", s.getTelegramChatId()));
         return List.of(new Target("settings", "Telegram", channels.get(TelegramChannel.TYPE), cfg));
     }
 
+    /** Workspace có kênh nào nhận loại tin này không (vd chưa cài kênh nào thì khỏi soạn báo cáo) */
+    public boolean hasChannelFor(Notice.Topic topic) { return !targets(topic).isEmpty(); }
+
     /** Gửi ngay cho mọi kênh (nút "Gửi báo cáo ngay", "Gửi tin thử"): trả kết quả từng người nhận, không ném lỗi */
     public SendResult sendNow(Notice n) {
         List<SendResult> all = new ArrayList<>();
-        for (Target t : targets()) all.add(t.send(n));
+        for (Target t : targets(n.topic())) all.add(t.send(n));
         return SendResult.merge(all);
     }
 
@@ -100,7 +104,7 @@ public class Notifier {
      */
     private void deliver(Notice n, java.util.function.Predicate<Target> claim, java.util.function.Consumer<Target> onError) {
         NotifyFailure firstRetryable = null, firstPermanent = null;
-        for (Target t : targets()) {
+        for (Target t : targets(n.topic())) {
             if (!claim.test(t)) {
                 log.info("Bỏ qua kênh {}: đã gửi thông báo này rồi", t.name());
                 continue;
@@ -144,14 +148,15 @@ public class Notifier {
     /**
      * Thông báo cho sự kiện, null = sự kiện này không cần báo.
      *  - log.created có cờ báo (lịch, rule, dừng khẩn, hoàn tác): một dòng tóm tắt;
-     *  - report.daily: báo cáo hằng ngày; telegram.text: tin soạn sẵn (cảnh báo, báo cáo tuần…).
+     *  - report.daily: báo cáo hằng ngày;
+     *  - notice: thông báo soạn sẵn (cảnh báo, báo cáo tuần, báo cáo công ty…), loại tin nằm trong data.topic.
      */
     public static Notice noticeOf(AppEvent e) {
-        if (!e.telegram() || e.data() == null) return null;
+        if (!e.shouldNotify() || e.data() == null) return null;
         return switch (e.type()) {
             case AppEvent.LOG_CREATED -> new Notice(Notice.Topic.LOG, logLine(e.data()));
             case AppEvent.DAILY_REPORT -> text(Notice.Topic.REPORT, e.data());
-            case AppEvent.TELEGRAM_TEXT -> text(topicOf(e.data()), e.data());
+            case AppEvent.NOTICE, AppEvent.LEGACY_TELEGRAM_TEXT -> text(topicOf(e.data()), e.data());
             default -> null;
         };
     }
@@ -161,7 +166,7 @@ public class Notifier {
         return t == null ? null : new Notice(topic, t);
     }
 
-    /** data.topic = tên Notice.Topic; thiếu hoặc sai thì coi là cảnh báo */
+    /** data.topic = tên Notice.Topic; thiếu (bản ghi cũ) hoặc sai thì coi là cảnh báo */
     private static Notice.Topic topicOf(JsonNode data) {
         try {
             return Notice.Topic.valueOf(data.path("topic").asString("ALERT"));

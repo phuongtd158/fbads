@@ -291,7 +291,7 @@ class CompanySender {
                 reports.save(r);
                 messages.log(r, CompanyReportService.AUTO_SOURCE, "Chưa tự gửi báo cáo " + r.getSlot() + "h ngày "
                         + CompanyRules.dm(r.getDate()) + ": " + String.join("; ", reasons), false, null, true);
-                messages.telegram(messages.summary(r, "⚠️") + "\n\nChưa tự gửi vì số trông bất thường:\n"
+                messages.notify(messages.summary(r, "⚠️") + "\n\nChưa tự gửi vì số trông bất thường:\n"
                         + String.join("\n", reasons.stream().map(x -> "• " + esc(x)).toList()) + "\n" + MANUAL_HINT);
                 continue;
             }
@@ -313,14 +313,14 @@ class CompanySender {
             String done = "update".equals(r.getSentAs())
                     ? "Đã tự cập nhật vào báo cáo " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + " trên công ty"
                     : "Đã tự gửi lên công ty";
-            messages.telegram(messages.summary(r, "✅") + "\n\n" + done
+            messages.notify(messages.summary(r, "✅") + "\n\n" + done
                     + ("LATE".equals(r.getRemoteStatus()) ? " (công ty ghi nhận nộp muộn)" : "") + ".");
         } catch (RuntimeException e) {
             if ("exists".equals(r.getStatus())) {
                 String why = CompanyRules.updatesExisting(r.getSlot()) && r.getRemote() != null && r.getRemote().locked()
                         ? "báo cáo của mốc này trên công ty đã khoá nên tool không cập nhật được."
                         : "hệ thống công ty đã có báo cáo của mốc này nên tool không gửi đè.";
-                messages.telegram("ℹ️ <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate())
+                messages.notify("ℹ️ <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate())
                         + "</b>\n<b>" + esc(teamLabel(r)) + "</b>: " + why + existsFoot(r));
                 return;
             }
@@ -334,7 +334,7 @@ class CompanySender {
             r.setNextTryAt(null);
             reports.save(r);
             String tries = r.getAttempts() > 1 ? " (đã thử " + r.getAttempts() + " lần)" : "";
-            messages.telegram(messages.summary(r, "❌") + "\n\nKhông tự gửi được" + tries + ": " + esc(e.getMessage())
+            messages.notify(messages.summary(r, "❌") + "\n\nKhông tự gửi được" + tries + ": " + esc(e.getMessage())
                     + "\n" + MANUAL_HINT);
         }
     }

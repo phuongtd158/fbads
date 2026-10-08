@@ -3,8 +3,8 @@ package com.fbads.engine;
 import com.fbads.client.FbException;
 import com.fbads.common.Hash;
 import com.fbads.entity.AppSettings;
-import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.notify.Notice;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
@@ -82,7 +82,7 @@ public class EngineWatch {
 
     private Run run() { return runs.computeIfAbsent(WorkspaceContext.require(), k -> new Run()); }
 
-    /** Ghi nhật ký (nguồn "Hệ thống") và gửi Telegram của workspace hiện tại */
+    /** Ghi nhật ký (nguồn "Hệ thống") và gửi thông báo cho workspace hiện tại */
     void alert(String name, String detail, String text, boolean ok) {
         String mode = settings.get().mode();
         logs.log(l -> {
@@ -93,10 +93,10 @@ public class EngineWatch {
             l.setOk(ok);
             l.setMode(mode);
         });
-        telegram(text);
+        notify(text);
     }
 
-    void telegram(String text) { events.publish(AppEvent.TELEGRAM_TEXT, "alerts", true, Map.of("text", text)); }
+    void notify(String text) { events.notify("alerts", new Notice(Notice.Topic.ALERT, text)); }
 
     // ------------------------------------------------------------------ Token Facebook
     /** Mỗi lượt, trong workspace hiện tại. Kiểm tra token mỗi ngày một lần; Facebook vừa báo token hỏng thì báo ngay. */
@@ -161,7 +161,7 @@ public class EngineWatch {
             r.lastError = err.getMessage() == null ? err.toString() : err.getMessage();
             if (r.errorsInRow >= ERRORS_ALERT && !r.errorAlerted) {
                 r.errorAlerted = true;
-                telegram("⚠️ <b>Vòng tự động lỗi " + r.errorsInRow + " lượt liên tiếp</b>\n" + r.lastError
+                notify("⚠️ <b>Vòng tự động lỗi " + r.errorsInRow + " lượt liên tiếp</b>\n" + r.lastError
                         + "\nLịch và rule có thể không chạy. Xem Nhật ký để biết chi tiết.");
             }
             return;

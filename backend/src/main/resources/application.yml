@@ -95,8 +95,8 @@ fbads:
     tick-ms: 30000
   kafka:
     enabled: ${KAFKA_ENABLED:false}              # chỉ "true" mới bật Kafka; giá trị khác: sự kiện đi bằng Spring events trong ứng dụng
-    telegram:
-      attempts: 4                                # gửi Telegram: 1 lần + 3 lần thử lại (5 giây, 15 giây, 45 giây) rồi vào DLT
+    notify:
+      attempts: 4                                # gửi thông báo: 1 lần + 3 lần thử lại (5 giây, 15 giây, 45 giây) rồi vào DLT
       backoff-ms: 5000
   import:
     file: ${IMPORT_FILE:}                        # đường dẫn data.json của bản Node → nhập 1 lần vào DB

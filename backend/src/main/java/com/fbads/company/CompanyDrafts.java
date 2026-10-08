@@ -74,7 +74,7 @@ class CompanyDrafts {
                         "Không lấy được số Facebook cho mốc " + slot + "h: " + e.getMessage(), false,
                         String.valueOf(e.getMessage()), false);
                 if (!silent || "auto".equals(c.getMode())) {
-                    messages.telegram("❌ <b>Báo cáo công ty · " + slot + "h ngày " + CompanyRules.dm(date) + "</b>\n<b>"
+                    messages.notify("❌ <b>Báo cáo công ty · " + slot + "h ngày " + CompanyRules.dm(date) + "</b>\n<b>"
                             + esc(label) + "</b>: không lấy được số Facebook nên chưa tạo báo cáo.\n"
                             + esc(e.getMessage()));
                 }

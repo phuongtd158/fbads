@@ -1,6 +1,7 @@
 package com.fbads.event;
 
 import com.fbads.engine.EngineClock;
+import com.fbads.notify.Notice;
 import com.fbads.security.WorkspaceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,6 +10,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -33,13 +35,13 @@ public class EventBus {
     /**
      * @param type   loại sự kiện (AppEvent.LOG_CREATED…)
      * @param key    khoá phân vùng: sự kiện cùng khoá được nhận theo đúng thứ tự phát (tự thêm tiền tố workspace: "{id}:key")
-     * @param telegram gửi Telegram cho sự kiện này
+     * @param notify gửi thông báo cho sự kiện này (Telegram, Gmail… tuỳ kênh workspace đã cài)
      * @param data   nội dung, chuyển sang JSON ngay lúc phát (đối tượng gốc có thể bị sửa sau đó)
      */
-    public void publish(String type, String key, boolean telegram, Object data) {
+    public void publish(String type, String key, boolean notify, Object data) {
         Long ws = WorkspaceContext.current();
         AppEvent e = new AppEvent(UUID.randomUUID().toString(), type, ws == null ? key : ws + ":" + key, clock.millis(),
-                telegram, json.valueToTree(data), ws);
+                notify, json.valueToTree(data), ws);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -48,6 +50,15 @@ public class EventBus {
         } else {
             send(e);
         }
+    }
+
+    /**
+     * Phát một thông báo soạn sẵn. Nơi phát không biết thông báo đi kênh nào: Notifier chọn theo cài đặt của workspace.
+     *
+     * @param key khoá phân vùng: thông báo cùng khoá đến theo đúng thứ tự phát
+     */
+    public void notify(String key, Notice notice) {
+        publish(AppEvent.NOTICE, key, true, Map.of("topic", notice.topic().name(), "text", notice.html()));
     }
 
     /** Gửi lỗi (Kafka không chạy…) chỉ ghi log: dữ liệu đã nằm trong DB, mất sự kiện thì chỉ mất thông báo/cập nhật tức thì */

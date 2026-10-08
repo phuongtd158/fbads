@@ -4,8 +4,8 @@ import com.fbads.client.FbException;
 import com.fbads.client.RateLimits;
 import com.fbads.common.Fmt;
 import com.fbads.entity.AppSettings;
-import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.notify.Notice;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
@@ -88,7 +88,7 @@ public class AlertWatch {
             l.setOk(ok);
             l.setMode(mode);
         });
-        events.publish(AppEvent.TELEGRAM_TEXT, "alerts", true, Map.of("text", text));
+        events.notify("alerts", new Notice(Notice.Topic.ALERT, text));
     }
 
     /**

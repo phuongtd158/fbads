@@ -70,7 +70,7 @@ import static org.awaitility.Awaitility.await;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "fbads.engine.enabled=false", "fbads.kafka.enabled=true",
-        "fbads.kafka.telegram.attempts=3", "fbads.kafka.telegram.backoff-ms=300"})
+        "fbads.kafka.notify.attempts=3", "fbads.kafka.notify.backoff-ms=300"})
 class KafkaEventsTest {
     @Container
     @ServiceConnection
@@ -154,7 +154,7 @@ class KafkaEventsTest {
             assertThat(rec.key()).isEqualTo("1:logs"); // mọi sự kiện nhật ký của một workspace chung một khoá → đúng thứ tự
             JsonNode ev = json.readTree(rec.value());
             assertThat(ev.get("type").asString()).isEqualTo(AppEvent.LOG_CREATED);
-            assertThat(ev.get("telegram").asBoolean()).isTrue();
+            assertThat(ev.get("notify").asBoolean()).isTrue();
 
             // 1) Telegram, đúng một lần
             String text = "✅ <b>Rule · CPA cao</b>\n" + name + ": Đã tắt";
@@ -192,7 +192,7 @@ class KafkaEventsTest {
             Thread.sleep(1500);
             assertThat(reportsSent()).isEqualTo(1);
             ConsumerRecord<String, String> rec = find(EventTopics.EVENTS, r -> r.value().contains(AppEvent.DAILY_REPORT));
-            assertThat(json.readTree(rec.value()).get("telegram").asBoolean()).isTrue();
+            assertThat(json.readTree(rec.value()).get("notify").asBoolean()).isTrue();
         } finally {
             clock.setClock(Clock.systemUTC());
             settings.update(s -> s.setReportTime(before));
@@ -243,7 +243,7 @@ class KafkaEventsTest {
 
         // trước đây mỗi bản ghi hỏng bị thử lại 5 lần × 2 giây
         await().atMost(Duration.ofSeconds(5)).until(() -> actions(today, source) == 1);
-        ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().equals(broken));
+        ConsumerRecord<String, String> dead = find(EventTopics.NOTIFY_DLT, r -> r.value().equals(broken));
         assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("BadEventException");
     }
 
@@ -254,7 +254,7 @@ class KafkaEventsTest {
         String name = "Retry " + UUID.randomUUID();
         String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
 
-        ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().contains(logId));
+        ConsumerRecord<String, String> dead = find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã bật")).isEqualTo(3);
         assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Retryable");
         assertThat(header(dead, "kafka_exception-message")).contains("Internal Server Error");
@@ -267,7 +267,7 @@ class KafkaEventsTest {
         String name = "Bad chat " + UUID.randomUUID();
         String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
 
-        ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().contains(logId));
+        ConsumerRecord<String, String> dead = find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
         assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Permanent");
         Thread.sleep(1500); // nếu có thử lại (300 ms) thì đã kịp gọi thêm
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã tắt")).isEqualTo(1);

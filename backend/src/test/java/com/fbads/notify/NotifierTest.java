@@ -45,6 +45,17 @@ class NotifierTest {
                 .isEqualTo(new Notice(Notice.Topic.REPORT, "📊 Báo cáo"));
     }
 
+    /** Bản ghi cũ trong Kafka: cờ tên "telegram", loại "telegram.text" không có topic → vẫn gửi, coi là cảnh báo */
+    @Test
+    void readsEventsWrittenBeforeTheRename() {
+        AppEvent old = JSON.readValue("{\"id\":\"e1\",\"type\":\"telegram.text\",\"key\":\"1:alerts\",\"at\":0,"
+                + "\"telegram\":true,\"data\":{\"text\":\"⚠️ cũ\"}}", AppEvent.class);
+        assertThat(old.shouldNotify()).isTrue();
+        assertThat(Notifier.noticeOf(old)).isEqualTo(new Notice(Notice.Topic.ALERT, "⚠️ cũ"));
+        assertThat(Notifier.noticeOf(ev(AppEvent.NOTICE, true, Map.of("topic", "COMPANY", "text", "📋 x"))))
+                .isEqualTo(new Notice(Notice.Topic.COMPANY, "📋 x"));
+    }
+
     @Test
     void noticeTitleAndPlainText() {
         Notice n = new Notice(Notice.Topic.ALERT, "⚠️ <b>Chi tiêu tăng vọt</b>\nCamp &lt;A&gt; &amp; B");

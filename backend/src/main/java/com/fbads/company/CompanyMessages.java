@@ -3,8 +3,8 @@ package com.fbads.company;
 import com.fbads.common.Fmt;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
-import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.notify.Notice;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;
@@ -38,13 +38,13 @@ class CompanyMessages {
         return s.isEmpty() ? r.getTeamId() : s;
     }
 
-    /** Thoát ký tự HTML cho tin Telegram */
+    /** Thoát ký tự HTML cho thông báo (Notice viết bằng HTML rút gọn) */
     static String esc(String t) {
         return t == null ? "" : t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
-    void telegram(String text) {
-        events.publish(AppEvent.TELEGRAM_TEXT, "company", true, Map.of("text", text));
+    void notify(String text) {
+        events.notify("company", new Notice(Notice.Topic.COMPANY, text));
     }
 
     /** Ghi Nhật ký với tên = Team của bản báo cáo */
@@ -92,6 +92,6 @@ class CompanyMessages {
         if (!c.canSend()) foot = "\n\n<i>Chế độ Chỉ xem: tool không gửi báo cáo này lên công ty.</i>";
         else if (settings.get().isMock()) foot = "\n\n<i>Đang dùng dữ liệu giả (Dùng thử): tool không gửi lên công ty.</i>";
         else foot = "\n\n" + MANUAL_HINT;
-        telegram(summary(r, "📋") + foot);
+        notify(summary(r, "📋") + foot);
     }
 }

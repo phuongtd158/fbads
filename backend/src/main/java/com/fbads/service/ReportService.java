@@ -81,7 +81,7 @@ public class ReportService {
     /** Tới giờ báo cáo (trễ tối đa 10 phút) và hôm nay chưa gửi → gửi. Thứ Hai gửi thêm báo cáo tuần (nếu bật). */
     public void tick() {
         AppSettings s = settings.get();
-        if (s.getReportTime() == null || s.getReportTime().isEmpty() || s.getTelegramToken().isEmpty()) return;
+        if (s.getReportTime() == null || s.getReportTime().isEmpty() || !notifier.hasChannelFor(Notice.Topic.REPORT)) return;
         EngineClock.Now now = clock.now();
         int at = EngineClock.toMin(s.getReportTime());
         if (now.minutes() < at || now.minutes() - at > ScheduleRunner.GRACE_MIN) return;
@@ -91,7 +91,7 @@ public class ReportService {
         }
         if (s.isWeeklyReport() && now.day() == 1 && !state.hasDaily(now.date(), "weekly")) { // thứ Hai
             state.putDaily(now.date(), "weekly", null);
-            events.publish(AppEvent.TELEGRAM_TEXT, "report", true, Map.of("text", weeklyText(now)));
+            events.notify("report", new Notice(Notice.Topic.REPORT, weeklyText(now)));
         }
     }
 

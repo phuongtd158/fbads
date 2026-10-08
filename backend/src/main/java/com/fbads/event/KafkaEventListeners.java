@@ -21,9 +21,9 @@ import tools.jackson.databind.json.JsonMapper;
  * Các consumer đọc topic fbads.events khi bật Kafka. Mỗi consumer một group id riêng: Kafka giao mọi bản ghi
  * cho từng group, nên thêm consumer mới không ảnh hưởng consumer cũ.
  *
- *  - fbads-telegram: gửi thông báo, mỗi sự kiện mỗi kênh một lần (Notifier.handleOnce). Lỗi tạm thời → bản ghi chuyển sang
- *    topic thử lại fbads.events-telegram-retry-0, -1… (chờ tăng dần), hết lượt → fbads.events-telegram-dlt.
- *    Lỗi cố định (token/chat id sai) hoặc bản ghi hỏng → vào thẳng DLT.
+ *  - fbads-telegram (tên cũ từ khi chỉ có Telegram, xem notify()): gửi thông báo, mỗi sự kiện mỗi kênh một lần
+ *    (Notifier.handleOnce). Lỗi tạm thời → bản ghi chuyển sang topic thử lại fbads.events-notify-retry-0, -1… (chờ tăng dần),
+ *    hết lượt → fbads.events-notify-dlt. Lỗi cố định (token/người nhận sai) hoặc bản ghi hỏng → vào thẳng DLT.
  *    Thử lại bằng topic riêng nên một tin lỗi không chặn các tin sau; đổi lại, tin được thử lại sẽ đến sau các tin phát sau nó.
  *  - fbads-stats: đếm thao tác theo ngày. Nhiều bản tool dùng chung group này → mỗi sự kiện chỉ đếm một lần.
  *  - fbads-live-{ngẫu nhiên}: đẩy xuống trình duyệt. Mỗi bản tool một group riêng → bản nào cũng nhận đủ,
@@ -47,7 +47,7 @@ public class KafkaEventListeners {
         this.json = json;
     }
 
-    /** Bản ghi không đọc được: thử lại cũng vô ích → vào thẳng DLT (Telegram) hoặc bỏ qua (thống kê, WebSocket) */
+    /** Bản ghi không đọc được: thử lại cũng vô ích → vào thẳng DLT (thông báo) hoặc bỏ qua (thống kê, WebSocket) */
     static class BadEventException extends RuntimeException {
         BadEventException(String why, Throwable cause) { super("Sự kiện không đọc được: " + why, cause); }
     }
@@ -64,24 +64,26 @@ public class KafkaEventListeners {
     }
 
     @RetryableTopic(
-            attempts = "${fbads.kafka.telegram.attempts:4}",
-            backOff = @BackOff(delayString = "${fbads.kafka.telegram.backoff-ms:5000}", multiplier = 3.0, maxDelay = 300_000),
-            retryTopicSuffix = EventTopics.TELEGRAM_RETRY_SUFFIX,
-            dltTopicSuffix = EventTopics.TELEGRAM_DLT_SUFFIX,
+            attempts = "${fbads.kafka.notify.attempts:4}",
+            backOff = @BackOff(delayString = "${fbads.kafka.notify.backoff-ms:5000}", multiplier = 3.0, maxDelay = 300_000),
+            retryTopicSuffix = EventTopics.NOTIFY_RETRY_SUFFIX,
+            dltTopicSuffix = EventTopics.NOTIFY_DLT_SUFFIX,
             topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
             exclude = {NotifyFailure.Permanent.class, BadEventException.class},
             numPartitions = EventTopics.PARTITIONS + "",
             replicationFactor = "1")
     // RECORD: báo đã đọc sau từng tin, tool chết giữa chừng thì ít tin phải đọc lại (tin đã gửi vẫn không gửi lại, xem handleOnce)
+    // Giữ group id cũ "fbads-telegram": đổi tên thì Kafka coi là group mới và đọc lại từ đầu topic (auto-offset-reset: earliest),
+    // tức là gửi lại mọi thông báo cũ.
     @KafkaListener(id = "fbads-telegram", groupId = "fbads-telegram", topics = EventTopics.EVENTS, ackMode = "RECORD")
-    public void telegram(String payload) {
+    public void notify(String payload) {
         AppEvent e = parse(payload);
         e.runInWorkspace(() -> notifier.handleOnce(e));
     }
 
-    /** Tin Telegram đã hết lượt thử (hoặc lỗi cố định): nằm lại ở topic DLT để xem sau, ở đây chỉ ghi log (không kèm nội dung tin) */
+    /** Thông báo đã hết lượt thử (hoặc lỗi cố định): nằm lại ở topic DLT để xem sau, ở đây chỉ ghi log (không kèm nội dung tin) */
     @DltHandler
-    public void telegramFailed(String payload, @Header(name = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String error) {
+    public void notifyFailed(String payload, @Header(name = KafkaHeaders.EXCEPTION_MESSAGE, required = false) String error) {
         String what;
         try {
             AppEvent e = parse(payload);
@@ -89,8 +91,8 @@ public class KafkaEventListeners {
         } catch (BadEventException ex) {
             what = "hỏng, " + payload.length() + " byte";
         }
-        log.error("Bỏ tin Telegram (sự kiện {}) sau khi thử lại không được: {}. Bản ghi còn ở topic {}", what, error,
-                EventTopics.TELEGRAM_DLT);
+        log.error("Bỏ thông báo (sự kiện {}) sau khi thử lại không được: {}. Bản ghi còn ở topic {}", what, error,
+                EventTopics.NOTIFY_DLT);
     }
 
     @KafkaListener(id = "fbads-stats", groupId = "fbads-stats", topics = EventTopics.EVENTS)
