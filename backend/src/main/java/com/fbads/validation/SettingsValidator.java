@@ -19,7 +19,7 @@ public final class SettingsValidator {
 
     public static Result<Map<String, Object>> validate(SettingsPatch patch, AppSettings current) {
         Result.Collector c = new Result.Collector();
-        Map<String, String> e = c.e;
+        Map<String, String> e = c.errors();
         Map<String, Object> v = new LinkedHashMap<>();
 
         if (patch.has("timezone")) {

@@ -3,7 +3,7 @@ package com.fbads.service;
 import com.fbads.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
  *  - fbads:login:lock:{ip}  có khoá này = đang bị chặn; TTL của khoá = thời gian còn phải chờ
  * Sau proxy chỉ tin đúng tiêu đề IP của nền tảng đang chạy (Render: cf-connecting-ip), vì nơi khác người dùng có thể tự gửi tiêu đề này.
  */
-@Component
+@Service
 public class LoginAttempts {
     static final int MAX_FAILS = 5;
     static final Duration WINDOW = Duration.ofMinutes(15);

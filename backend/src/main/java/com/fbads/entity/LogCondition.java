@@ -3,6 +3,8 @@ package com.fbads.entity;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fbads.common.JsonConverters;
+import com.fbads.rule.MatchMode;
+import com.fbads.rule.RuleRange;
 
 import java.util.List;
 

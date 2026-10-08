@@ -6,6 +6,7 @@ import com.fbads.entity.LogKind;
 import com.fbads.notify.LegacyTelegramMove;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.NotifyTargetRepository;
+import com.fbads.rule.Rule;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.SettingsService;
 import org.junit.jupiter.api.AfterEach;

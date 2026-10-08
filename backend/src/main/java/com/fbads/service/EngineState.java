@@ -1,14 +1,14 @@
 package com.fbads.service;
 
 import com.fbads.entity.DailyMark;
-import com.fbads.entity.RuleMark;
-import com.fbads.entity.RuleObjKey;
-import com.fbads.entity.RuleResume;
-import com.fbads.entity.ScheduleRun;
 import com.fbads.repository.DailyMarkRepository;
-import com.fbads.repository.RuleMarkRepository;
-import com.fbads.repository.RuleResumeRepository;
-import com.fbads.repository.ScheduleRunRepository;
+import com.fbads.rule.RuleMark;
+import com.fbads.rule.RuleMarkRepository;
+import com.fbads.rule.RuleObjKey;
+import com.fbads.rule.RuleResume;
+import com.fbads.rule.RuleResumeRepository;
+import com.fbads.schedule.ScheduleRun;
+import com.fbads.schedule.ScheduleRunRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;

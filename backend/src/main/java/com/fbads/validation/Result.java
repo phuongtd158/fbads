@@ -14,8 +14,8 @@ public record Result<T>(Map<String, String> errors, List<String> warnings, T val
 
     /** Bộ gom lỗi/cảnh báo: chỉ giữ lỗi ĐẦU TIÊN của mỗi trường... trừ khi ghi đè có chủ ý (như `e.x = …` trong JS) */
     public static final class Collector {
-        final Map<String, String> e = new LinkedHashMap<>();
-        final List<String> w = new ArrayList<>();
+        private final Map<String, String> e = new LinkedHashMap<>();
+        private final List<String> w = new ArrayList<>();
 
         public void err(String field, String msg) { e.put(field, msg); }
 
@@ -24,6 +24,9 @@ public record Result<T>(Map<String, String> errors, List<String> warnings, T val
         public void warn(String msg) { w.add(msg); }
 
         public boolean empty() { return e.isEmpty(); }
+
+        /** Bảng lỗi theo trường, để validator ghi thẳng (lỗi ghi sau đè lỗi trước) */
+        public Map<String, String> errors() { return e; }
 
         public <T> Result<T> done(T value) { return new Result<>(e, w, value); }
     }

@@ -4,14 +4,13 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.fbads.company.CompanyApi;
-import com.fbads.engine.DecisionStatus;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.CompanyReport;
 import com.fbads.entity.LogEntry;
-import com.fbads.entity.Rule;
-import com.fbads.entity.Schedule;
 import com.fbads.entity.User;
 import com.fbads.notify.ConfigField;
+import com.fbads.rule.Rule;
+import com.fbads.schedule.Schedule;
 import com.fbads.service.AuthService;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -163,40 +162,6 @@ public final class Responses {
 
     /** GET /api/health: ok = vòng tự động còn chạy; lastTickAt = lúc xong lượt gần nhất (ISO) */
     public record Health(boolean ok, String lastTickAt) {}
-
-    // ------------------------------------------------------------------ Rule (AutomationController)
-
-    /** Xem trước rule: khoảng tính, chế độ, có thay đổi thật không, từng camp và kết quả xét */
-    public record RulePreview(String range, String mode, boolean willChange, List<PreviewItem> items, Counts counts,
-            List<String> warnings) {
-        public RulePreview withWarnings(List<String> w) { return new RulePreview(range, mode, willChange, items, counts, w); }
-    }
-
-    /** Một camp trong xem trước: trạng thái xét (status/code/reason), giá trị so sánh, từng điều kiện, việc sẽ làm */
-    public record PreviewItem(String id, String name, AdLevel level, String effective, boolean learning, Double budget,
-            DecisionStatus status, String code, String reason, boolean hit, Double value, boolean inf, double spend,
-            double results, List<PreviewCond> conds, PreviewResult result) {}
-
-    /** Một điều kiện trong xem trước. Các trường cuối chỉ có khi dùng: khoảng so sánh, bậc theo kết quả, rule tăng theo bậc */
-    public record PreviewCond(String metric, String op, String vs, Double factor, Double threshold, Double actual, boolean inf,
-            boolean hit, boolean unknown,
-            @JsonInclude(JsonInclude.Include.NON_NULL) String compareRange,
-            @JsonInclude(JsonInclude.Include.NON_NULL) String tierMetric,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Double tierCount,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Double tierAt,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Integer ladderStep,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Integer ladderNeed) {}
-
-    /** Việc rule sẽ làm với camp này; notify = chỉ báo, không đổi gì */
-    public record PreviewResult(String detail, @JsonProperty("notify") boolean notifyOnly) {}
-
-    public record Counts(long match, int total) {}
-
-    /** Hoạt động 7 ngày của một rule: số lần tác động, số lần lỗi, lần gần nhất, số mục đang chờ bật lại */
-    public record RuleActivity(int acts, int errors, LastRun last, int resumePending) {}
-
-    /** Lần chạy gần nhất của một rule (theo nhật ký) */
-    public record LastRun(String ts, String name, String detail, boolean ok, boolean dry) {}
 
     // ------------------------------------------------------------------ Kết nối Facebook (FacebookController)
 

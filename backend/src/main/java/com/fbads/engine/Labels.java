@@ -1,7 +1,7 @@
 package com.fbads.engine;
 
 import com.fbads.common.Fmt;
-import com.fbads.entity.RuleRange;
+import com.fbads.rule.RuleRange;
 
 import java.util.Map;
 

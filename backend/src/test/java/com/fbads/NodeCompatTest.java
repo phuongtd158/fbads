@@ -2,10 +2,10 @@ package com.fbads;
 
 import com.fbads.common.UpstashCodec;
 import com.fbads.engine.EngineClock;
-import com.fbads.engine.ScheduleRunner;
-import com.fbads.entity.Schedule;
-import com.fbads.entity.ScheduleAction;
-import com.fbads.entity.ScheduleWindow;
+import com.fbads.schedule.Schedule;
+import com.fbads.schedule.ScheduleAction;
+import com.fbads.schedule.ScheduleRunner;
+import com.fbads.schedule.ScheduleWindow;
 import com.fbads.security.NodeScryptPasswordEncoder;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -13,7 +13,6 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.io.InputStream;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

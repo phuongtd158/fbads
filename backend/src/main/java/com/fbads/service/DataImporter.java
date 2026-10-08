@@ -3,11 +3,11 @@ package com.fbads.service;
 import com.fbads.common.UpstashCodec;
 import com.fbads.config.AppProperties;
 import com.fbads.entity.LogEntry;
-import com.fbads.entity.Rule;
-import com.fbads.entity.Schedule;
 import com.fbads.repository.LogRepository;
-import com.fbads.repository.RuleRepository;
-import com.fbads.repository.ScheduleRepository;
+import com.fbads.rule.Rule;
+import com.fbads.rule.RuleRepository;
+import com.fbads.schedule.Schedule;
+import com.fbads.schedule.ScheduleRepository;
 import com.fbads.security.WorkspaceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +15,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.DeserializationFeature;
@@ -34,7 +34,7 @@ import java.util.Map;
  * Nhập vào workspace 1: cài đặt, mật khẩu đã băm (thành tài khoản "admin"), lịch, rule, nhật ký, các camp đang chờ bật lại hôm sau.
  * Không nhập các dấu "đã chạy hôm nay" (fired, lastRule…): engine tự làm lại từ đầu, lịch đã qua giờ quá 10 phút không chạy lại.
  */
-@Component
+@Service
 @Order(50)
 public class DataImporter implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(DataImporter.class);

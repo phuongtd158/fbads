@@ -11,7 +11,6 @@ import com.fbads.service.SettingsService;
 import com.fbads.service.WsState;
 import com.fbads.service.facebook.FacebookGraph;
 import com.fbads.service.facebook.FacebookInsights.HourSpend;
-import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

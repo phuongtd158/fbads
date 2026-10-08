@@ -13,11 +13,11 @@ import com.fbads.entity.LogAction;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.report.ReportService;
 import com.fbads.repository.LogRepository;
 import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookGraph;
 import com.fbads.service.facebook.FacebookInsights;
@@ -28,16 +28,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -95,7 +90,6 @@ class TrendWeeklyTest extends IntegrationBase {
         tg.close();
         ws.close();
     }
-
 
     @Test
     void liveTrendFillsGapsAndCaches() {
