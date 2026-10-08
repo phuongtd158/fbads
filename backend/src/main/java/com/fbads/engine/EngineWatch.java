@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.client.FbException;
 import com.fbads.common.Hash;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
 import com.fbads.security.WorkspaceContext;
@@ -86,7 +87,7 @@ public class EngineWatch {
     void alert(String name, String detail, String text, boolean ok) {
         String mode = settings.get().mode();
         logs.log(l -> {
-            l.setKind("system");
+            l.setKind(LogKind.SYSTEM);
             l.setSource("Hệ thống");
             l.setName(name);
             l.setDetail(detail);

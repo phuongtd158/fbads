@@ -3,6 +3,7 @@ package com.fbads.company;
 import com.fbads.common.Fmt;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
+import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
 import com.fbads.service.LogService;
@@ -55,7 +56,7 @@ class CompanyMessages {
     void log(String name, String source, String detail, boolean ok, String error, boolean skipped) {
         String mode = settings.get().mode();
         logs.log(l -> {
-            l.setKind("company");
+            l.setKind(LogKind.COMPANY);
             l.setSource(source);
             l.setName(name);
             l.setDetail(detail);

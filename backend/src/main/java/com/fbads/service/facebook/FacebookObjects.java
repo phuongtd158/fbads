@@ -3,6 +3,7 @@ package com.fbads.service.facebook;
 import com.fbads.client.FbException;
 import com.fbads.client.MockAds;
 import com.fbads.client.RateLimits;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
 import com.fbads.dto.Responses.ObjectsMeta;
@@ -162,7 +163,7 @@ public class FacebookObjects {
     public static Map<String, Object> snapshot(AdObject o) {
         if (o == null) return null;
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("level", o.level);
+        m.put("level", o.level == null ? null : o.level.code());
         m.put("status", o.status);
         m.put("effective", o.effective);
         m.put("dailyBudget", o.dailyBudget);
@@ -263,14 +264,14 @@ public class FacebookObjects {
 
             List<AdObject> out = new ArrayList<>();
             for (JsonNode c : camps) {
-                AdObject o = base(c, "campaign", id, info);
+                AdObject o = base(c, AdLevel.CAMPAIGN, id, info);
                 o.dailyBudget = conv.apply(c.get("daily_budget"));
                 o.learning = learningCamps.contains(o.id);
                 o.metrics = mc.getOrDefault(o.id, Metrics.EMPTY);
                 out.add(o);
             }
             for (JsonNode a : adsets) {
-                AdObject o = base(a, "adset", id, info);
+                AdObject o = base(a, AdLevel.ADSET, id, info);
                 o.campaignId = a.path("campaign_id").asString();
                 o.dailyBudget = conv.apply(a.get("daily_budget"));
                 o.learning = isLearning.apply(a);
@@ -283,7 +284,7 @@ public class FacebookObjects {
         }
     }
 
-    private static AdObject base(JsonNode n, String level, String accountId, AccInfo info) {
+    private static AdObject base(JsonNode n, AdLevel level, String accountId, AccInfo info) {
         AdObject o = new AdObject();
         o.id = n.path("id").asString();
         o.name = n.path("name").asString("");

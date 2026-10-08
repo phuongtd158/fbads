@@ -12,7 +12,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public class AdObject {
     public String id;
     public String name;
-    public String level;          // campaign | adset
+    public AdLevel level;
     public String campaignId;     // chỉ nhóm QC
     public volatile String status;         // ACTIVE | PAUSED | …  (trạng thái bật/tắt do người dùng đặt)
     public volatile String effective;      // effective_status: trạng thái thực tế Facebook báo
@@ -37,12 +37,12 @@ public class AdObject {
     }
 
     @JsonIgnore
-    public boolean isCampaign() { return "campaign".equals(level); }
+    public boolean isCampaign() { return level == AdLevel.CAMPAIGN; }
 
     @JsonIgnore
     public boolean isActive() { return "ACTIVE".equals(effective); }
 
     /** "camp" hoặc "nhóm QC" để ghép câu */
     @JsonIgnore
-    public String unit() { return "adset".equals(level) ? "nhóm QC" : "camp"; }
+    public String unit() { return level == AdLevel.ADSET ? "nhóm QC" : "camp"; }
 }

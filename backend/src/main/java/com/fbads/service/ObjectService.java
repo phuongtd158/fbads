@@ -11,6 +11,7 @@ import com.fbads.dto.Responses.ObjectsMeta;
 import com.fbads.dto.Responses.Trend;
 import com.fbads.dto.Responses.TrendEvent;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;
@@ -125,13 +126,13 @@ public class ObjectService {
         target.put("id", id);
         target.put("name", label);
         if (cur != null) {
-            target.put("level", cur.level);
+            target.put("level", cur.level.code());
             if (cur.accountId != null) { target.put("accountId", cur.accountId); target.put("accountName", cur.accountName); }
         }
         Map<String, Object> before = FacebookObjects.snapshot(cur);
         String mode = settings.get().mode();
         Consumer<LogEntry> base = e -> {
-            e.setKind("manual"); e.setSource("Thủ công"); e.setName(label); e.setTarget(target); e.setAction(action);
+            e.setKind(LogKind.MANUAL); e.setSource("Thủ công"); e.setName(label); e.setTarget(target); e.setAction(action);
             e.setBefore(before); e.setMode(mode);
         };
         try {

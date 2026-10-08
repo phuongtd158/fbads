@@ -32,7 +32,8 @@ public class LogEntry {
     @JsonIgnore
     private Long seq;
     private Instant ts;
-    private String kind;          // manual | schedule | rule | system | undo
+    @Convert(converter = LogKind.Converter.class)
+    private LogKind kind;
     private String source;
     private String name;
     private String detail;
@@ -67,8 +68,8 @@ public class LogEntry {
     public void setId(String id) { this.id = id; }
     public Instant getTs() { return ts; }
     public void setTs(Instant ts) { this.ts = ts; }
-    public String getKind() { return kind; }
-    public void setKind(String kind) { this.kind = kind; }
+    public LogKind getKind() { return kind; }
+    public void setKind(LogKind kind) { this.kind = kind; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
     public String getName() { return name; }

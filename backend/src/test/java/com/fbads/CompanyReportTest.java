@@ -4,6 +4,7 @@ import com.fbads.common.ApiException;
 import com.fbads.company.CompanyApi;
 import com.fbads.company.CompanyReportService;
 import com.fbads.company.CompanyRules;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.CompanyConfigPatch;
 import com.fbads.dto.CompanyReportPatch;
@@ -13,6 +14,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.CompanyConfigRepository;
 import com.fbads.repository.CompanyReportRepository;
@@ -257,13 +259,13 @@ class CompanyReportTest extends IntegrationBase {
     // ------------------------------------------------------------------ Tạo báo cáo theo mốc (dữ liệu giả)
     static AdObject camp(String id, String acc, String name) {
         AdObject o = new AdObject();
-        o.id = id; o.accountId = acc; o.name = name; o.level = "campaign"; o.status = o.effective = "ACTIVE";
+        o.id = id; o.accountId = acc; o.name = name; o.level = AdLevel.CAMPAIGN; o.status = o.effective = "ACTIVE";
         return o;
     }
 
     static AdObject adset(String id, String acc, String name) {
         AdObject o = camp(id, acc, name);
-        o.level = "adset";
+        o.level = AdLevel.ADSET;
         return o;
     }
 
@@ -371,7 +373,7 @@ class CompanyReportTest extends IntegrationBase {
         assertThat(r.getRemote().revision()).isEqualTo(1);
         assertThat(r.getRemote().locked()).isFalse();
         LogEntry l = lastLog();
-        assertThat(l.getKind()).isEqualTo("company");
+        assertThat(l.getKind()).isEqualTo(LogKind.COMPANY);
         assertThat(l.getOk()).isTrue();
         assertThat(logs.recent(50).stream().map(x -> x.getDetail() + x.getError()).toList().toString()).as("mật khẩu không bao giờ vào nhật ký").doesNotContain(CompanyStub.GOOD_LOGIN);
         String id = r.getId();

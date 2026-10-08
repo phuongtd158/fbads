@@ -7,7 +7,11 @@ import com.fbads.dto.Condition;
 import com.fbads.dto.Metrics;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
+import com.fbads.entity.MatchMode;
 import com.fbads.entity.Rule;
+import com.fbads.entity.RuleAction;
+import com.fbads.entity.RuleRange;
 import com.fbads.entity.RuleResume;
 import com.fbads.repository.RuleRepository;
 import com.fbads.service.EngineState;
@@ -61,13 +65,13 @@ public class RuleRunner {
 
     private static Double finite(double v) { return Double.isFinite(v) ? v : null; }
 
-    private static String rangeOf(Rule r) { return r.getRange() == null || r.getRange().isEmpty() ? "today" : r.getRange(); }
+    private static RuleRange rangeOf(Rule r) { return r.getRange() == null ? RuleRange.TODAY : r.getRange(); }
 
     /** Số liệu của mọi khoảng các rule cần: khoảng tính của rule và các khoảng so sánh trong điều kiện */
     private Map<String, Map<String, Metrics>> loadMaps(List<Rule> list, boolean force) {
         LinkedHashSet<String> ranges = new LinkedHashSet<>();
         for (Rule r : list) {
-            ranges.add(rangeOf(r));
+            ranges.add(rangeOf(r).code());
             for (Condition c : r.conditionList()) if (c.vsRange()) ranges.add(c.compareRange());
         }
         Map<String, Map<String, Metrics>> maps = new LinkedHashMap<>();
@@ -98,8 +102,8 @@ public class RuleRunner {
             for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, running)) {
                 if (!d.eligible) continue;
                 // Chỉ bắt đầu "thời gian nghỉ" khi thật sự có hành động/lỗi; bỏ qua (đang học, chạm giới hạn ngày) thì xét lại lần sau
-                if (d.plan.is("do") || d.plan.is("error")) state.setLastRun(rule.getId(), d.obj.id, clock.millis());
-                String range = d.range.equals("today") ? "" : " " + Labels.range(d.range);
+                if (d.plan.is(PlanKind.DO) || d.plan.is(PlanKind.ERROR)) state.setLastRun(rule.getId(), d.obj.id, clock.millis());
+                String range = d.range == RuleRange.TODAY ? "" : " " + Labels.range(d.range);
                 RuleEvaluator.CondEval c0 = d.conds.getFirst();
                 String what = d.ladder != null
                         ? "Bậc " + (d.ladder.step() + 1) + ": có " + Fmt.num(d.ladder.count()) + " "
@@ -109,13 +113,13 @@ public class RuleRunner {
                         : String.join(" · ", d.conds.stream()
                                 .map(c -> Labels.metric(c.metric()) + " " + Labels.show(c.actual(), c.metric())).toList())
                           + (range.isEmpty() ? "" : " –" + range);
-                String r = executor.act(d.obj, d.action, "Rule: " + rule.getName() + " [" + what + "]",
-                        (d.planCtx != null ? d.planCtx : ActCtx.of("rule", rule.getId(),
+                ActResult r = executor.act(d.obj, d.action, "Rule: " + rule.getName() + " [" + what + "]",
+                        (d.planCtx != null ? d.planCtx : ActCtx.of(LogKind.RULE, rule.getId(),
                                 rule.getName())).withCondition(condition(rule, d, c0)));
-                if (d.ladder != null && "ok".equals(r))
+                if (d.ladder != null && r == ActResult.OK)
                     state.setLadder(rule.getId(), d.obj.id, clock.now().date(), d.ladder.step(), clock.millis());
                 // Rule tắt có hẹn bật lại: ghi nhớ để bật lại vào giờ hẹn ngày hôm sau (chạy thử thì camp không bị tắt thật nên không cần)
-                if ("ok".equals(r) && "off".equals(d.action.type()) && "nextday".equals(rule.getResume()) && !settings.get().isDry())
+                if (r == ActResult.OK && d.action.type() == ActionType.OFF && "nextday".equals(rule.getResume()) && !settings.get().isDry())
                     state.addResume(rule.getId(), d.obj.id, clock.now().date());
             }
         }
@@ -124,10 +128,10 @@ public class RuleRunner {
     /** Điều kiện đã khớp, lưu vào nhật ký (6 trường đầu = điều kiện đầu tiên, giữ cho nhật ký cũ; conditions = đầy đủ) */
     private static Map<String, Object> condition(Rule rule, RuleEvaluator.Decision d, RuleEvaluator.CondEval c0) {
         Map<String, Object> c = new LinkedHashMap<>();
-        c.put("metric", c0.metric()); c.put("op", c0.op()); c.put("range", d.range); c.put("threshold", c0.threshold());
+        c.put("metric", c0.metric()); c.put("op", c0.op()); c.put("range", d.range.code()); c.put("threshold", c0.threshold());
         c.put("actual", finite(c0.actual())); c.put("actualInf", c0.actual() == Double.POSITIVE_INFINITY);
         c.put("minSpend", rule.getMinSpend()); c.put("spend", d.metrics.spend()); c.put("cooldownHours", rule.getCooldownHours());
-        c.put("match", "any".equals(rule.getMatch()) ? "any" : "all");
+        c.put("match", rule.getMatch() == MatchMode.ANY ? "any" : "all");
         List<Map<String, Object>> list = new ArrayList<>();
         for (RuleEvaluator.CondEval x : d.conds) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -161,7 +165,7 @@ public class RuleRunner {
         List<RuleResume> due = new ArrayList<>();
         for (RuleResume p : pending) {
             Rule rule = byId.get(p.getKey().ruleId());
-            if (rule == null || !"pause".equals(rule.getAction()) || !"nextday".equals(rule.getResume())) {
+            if (rule == null || rule.getAction() != RuleAction.PAUSE || !"nextday".equals(rule.getResume())) {
                 state.removeResume(p.getKey());
                 continue;
             }
@@ -179,7 +183,7 @@ public class RuleRunner {
             if (obj == null || "ACTIVE".equals(obj.status)) continue;
             String at = rule.getResumeAt() == null || rule.getResumeAt().isEmpty() ? "06:00" : rule.getResumeAt();
             executor.act(obj, Action.on(), "Rule: " + rule.getName() + " [bật lại theo hẹn " + at + "]",
-                    ActCtx.of("rule", rule.getId(), rule.getName()));
+                    ActCtx.of(LogKind.RULE, rule.getId(), rule.getName()));
         }
     }
 
@@ -190,9 +194,9 @@ public class RuleRunner {
         List<Map<String, Object>> items = new ArrayList<>();
         for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, new Delivery.View(objs))) {
             Map<String, Object> i = new LinkedHashMap<>();
-            i.put("id", d.obj.id); i.put("name", d.obj.name); i.put("level", d.obj.level); i.put("effective", d.obj.effective);
+            i.put("id", d.obj.id); i.put("name", d.obj.name); i.put("level", d.obj.level.code()); i.put("effective", d.obj.effective);
             i.put("learning", d.obj.learning); i.put("budget", d.obj.dailyBudget);
-            i.put("status", d.status); i.put("code", d.code); i.put("reason", d.reason); i.put("hit", d.hit);
+            i.put("status", d.status.code()); i.put("code", d.code); i.put("reason", d.reason); i.put("hit", d.hit);
             i.put("value", d.value == null ? null : finite(d.value)); i.put("inf", d.value != null && d.value == Double.POSITIVE_INFINITY);
             i.put("spend", d.metrics.spend()); i.put("results", d.metrics.results());
             List<Map<String, Object>> conds = new ArrayList<>();
@@ -206,12 +210,12 @@ public class RuleRunner {
                 conds.add(m);
             }
             i.put("conds", conds);
-            i.put("result", d.plan != null && d.plan.is("do") ? Map.of("detail", d.plan.detail(), "notify", d.plan.notifyOnly()) : null);
+            i.put("result", d.plan != null && d.plan.is(PlanKind.DO) ? Map.of("detail", d.plan.detail(), "notify", d.plan.notifyOnly()) : null);
             items.add(i);
         }
         AppSettings s = settings.get();
         Map<String, Object> out = new LinkedHashMap<>();
-        out.put("range", rangeOf(rule));
+        out.put("range", rangeOf(rule).code());
         out.put("mode", s.mode());
         out.put("willChange", !s.isDry());
         out.put("items", items);
@@ -231,7 +235,7 @@ public class RuleRunner {
             a.put("acts", 0); a.put("errors", 0); a.put("last", null); a.put("resumePending", 0);
             return a;
         });
-        for (LogEntry l : logs.ofKind("rule")) { // mới nhất trước
+        for (LogEntry l : logs.ofKind(LogKind.RULE)) { // mới nhất trước
             if (l.getRefId() == null || Boolean.TRUE.equals(l.getSkipped())) continue;
             Map<String, Object> a = get.apply(l.getRefId());
             if (a.get("last") == null) {

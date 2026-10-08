@@ -38,7 +38,8 @@ public class Schedule {
     @JsonIgnore
     private Long seq;
     private String name;
-    private String action;              // on | off | budget | window
+    @Convert(converter = ScheduleAction.Converter.class)
+    private ScheduleAction action;
     @Column(name = "first_time")
     private String time;                // giờ chạy sớm nhất (giữ cho dữ liệu cũ)
     @Convert(converter = JsonConverters.StringList.class)
@@ -74,8 +75,8 @@ public class Schedule {
     public void setId(String id) { this.id = id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-    public String getAction() { return action; }
-    public void setAction(String action) { this.action = action; }
+    public ScheduleAction getAction() { return action; }
+    public void setAction(ScheduleAction action) { this.action = action; }
     public String getTime() { return time; }
     public void setTime(String time) { this.time = time; }
     public List<String> getTimes() { return times; }

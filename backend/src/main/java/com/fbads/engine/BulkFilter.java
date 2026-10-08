@@ -1,6 +1,7 @@
 package com.fbads.engine;
 
 import com.fbads.common.Fmt;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 
 import java.util.ArrayList;
@@ -45,7 +46,7 @@ public final class BulkFilter {
 
     /** Các mục khớp điều kiện. Bỏ qua mục đã lưu trữ/xoá. "Đang chạy" tính như cột Phân phối. */
     public static List<AdObject> match(List<AdObject> objs, Map<String, Object> f) {
-        String level = "adset".equals(str(f, "level")) ? "adset" : "campaign";
+        AdLevel level = "adset".equals(str(f, "level")) ? AdLevel.ADSET : AdLevel.CAMPAIGN;
         List<String> terms = nameTerms(str(f, "name"));
         String op = List.of("lt", "lte", "gt", "gte", "between").contains(str(f, "op")) ? str(f, "op") : "any";
         String st = statusOf(f);
@@ -53,7 +54,7 @@ public final class BulkFilter {
         Delivery.View dv = st.equals("running") ? new Delivery.View(objs) : null;
         List<AdObject> out = new ArrayList<>();
         for (AdObject o : objs) {
-            if (!level.equals(o.level)) continue;
+            if (o.level != level) continue;
             if ("ARCHIVED".equals(o.effective) || "DELETED".equals(o.effective)) continue;
             if (!account.isEmpty() && !account.equals(o.accountId)) continue;
             if (dv != null && !dv.running(o)) continue;

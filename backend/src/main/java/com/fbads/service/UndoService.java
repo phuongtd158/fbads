@@ -7,6 +7,7 @@ import com.fbads.dto.AdObject;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
@@ -43,7 +44,7 @@ public class UndoService {
     public static String blocker(LogEntry l, long nowMs, int maxDays) {
         if (l == null) return "Không tìm thấy dòng nhật ký.";
         if (l.getUndone() != null) return "Dòng này đã được hoàn tác.";
-        if ("undo".equals(l.getKind())) return "Không thể hoàn tác một lần hoàn tác.";
+        if (l.getKind() == LogKind.UNDO) return "Không thể hoàn tác một lần hoàn tác.";
         if (!l.succeeded()) return "Thao tác này đã thất bại nên không có gì để hoàn tác.";
         if (Boolean.TRUE.equals(l.getSkipped())) return "Dòng này chỉ ghi nhận việc bỏ qua, không thay đổi gì.";
         if (Boolean.TRUE.equals(l.getDry())) return "Đây là bản chạy thử (chưa thay đổi thật) nên không cần hoàn tác.";
@@ -105,7 +106,7 @@ public class UndoService {
             }
         } catch (RuntimeException ex) {
             executor.record(false, e -> {
-                e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
+                e.setKind(LogKind.UNDO); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
                 e.setTarget(l.getTarget()); e.setMode(mode);
                 e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(ex.getMessage()); e.setOk(false);
                 e.setError(FbException.describe(ex));
@@ -114,14 +115,14 @@ public class UndoService {
         }
         String fDetail = detail;
         LogEntry entry = executor.record(false, e -> {
-            e.setKind("undo"); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
+            e.setKind(LogKind.UNDO); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
             e.setTarget(l.getTarget()); e.setMode(mode);
             e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(fDetail); e.setOk(true); e.setAfter(newAfter);
         });
         l.setUndone(Map.of("at", entry.getTs().toString(), "logId", entry.getId()));
         logs.save(l);
         // Việc gốc do rule làm: tạm hoãn rule đó với camp này để nó không làm lại ngay ở lần kiểm tra sau
-        if ("rule".equals(l.getKind()) && l.getRefId() != null)
+        if (l.getKind() == LogKind.RULE && l.getRefId() != null)
             state.setHold(l.getRefId(), targetId, System.currentTimeMillis() + UNDO_HOLD_H * 3_600_000L);
         return entry;
     }

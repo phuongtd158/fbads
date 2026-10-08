@@ -3,6 +3,7 @@ package com.fbads;
 import com.fbads.common.Ids;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
+import com.fbads.entity.LogKind;
 import com.fbads.entity.NotifyTarget;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventTopics;
@@ -153,7 +154,7 @@ class KafkaEventsTest {
             int before = actions(today, "rule");
             String name = "Camp " + UUID.randomUUID();
 
-            String logId = executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule · CPA cao"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
+            String logId = executor.record(false, e -> { e.setKind(LogKind.RULE); e.setSource("Rule · CPA cao"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
 
             // sự kiện nằm trên topic fbads.events, có cờ gửi Telegram
             ConsumerRecord<String, String> rec = find(EventTopics.EVENTS, r -> r.value().contains(logId));
@@ -258,7 +259,7 @@ class KafkaEventsTest {
     void transientTelegramErrorsAreRetriedThenDeadLettered() {
         tg.status = 500;
         String name = "Retry " + UUID.randomUUID();
-        String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
+        String logId = executor.record(false, e -> { e.setKind(LogKind.SCHEDULE); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
 
         ConsumerRecord<String, String> dead = find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã bật")).isEqualTo(3);
@@ -280,7 +281,7 @@ class KafkaEventsTest {
         notifyTargets.save(second);
         tg.failChat = "999";
         String name = "Hai kênh " + UUID.randomUUID();
-        String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
+        String logId = executor.record(false, e -> { e.setKind(LogKind.SCHEDULE); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
 
         find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
         String text = "✅ <b>Lịch</b>\n" + name + ": Đã bật";
@@ -295,7 +296,7 @@ class KafkaEventsTest {
     void permanentTelegramErrorsGoStraightToDeadLetter() throws Exception {
         tg.status = 400;
         String name = "Bad chat " + UUID.randomUUID();
-        String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
+        String logId = executor.record(false, e -> { e.setKind(LogKind.SCHEDULE); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
 
         ConsumerRecord<String, String> dead = find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
         assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Permanent");

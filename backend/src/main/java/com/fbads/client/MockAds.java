@@ -1,5 +1,6 @@
 package com.fbads.client;
 
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
 import java.time.LocalDate;
@@ -31,7 +32,7 @@ public class MockAds {
                 AdObject o = new AdObject();
                 o.id = "mock_" + (i + 1);
                 o.name = NAMES[i];
-                o.level = "campaign";
+                o.level = AdLevel.CAMPAIGN;
                 o.status = o.effective = i % 3 == 2 ? "PAUSED" : "ACTIVE";
                 o.dailyBudget = BUDGETS[i];
                 o.seed = i + 1;

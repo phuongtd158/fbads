@@ -4,6 +4,7 @@ import com.fbads.common.UpstashCodec;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.Schedule;
+import com.fbads.entity.ScheduleAction;
 import com.fbads.security.NodeScryptPasswordEncoder;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
@@ -50,12 +51,12 @@ class NodeCompatTest {
     @Test
     void windowSchedulesCrossMidnight() {
         Schedule s = new Schedule();
-        s.setAction("window");
+        s.setAction(ScheduleAction.WINDOW);
         s.setWindow(Map.of("on", "22:00", "off", "06:00"));
         s.setDays(List.of(1));
         assertThat(ScheduleRunner.windowIsOn(s, new EngineClock.Now("2026-09-28", EngineClock.toMin("23:30"), 1))).isTrue();
         assertThat(ScheduleRunner.windowIsOn(s, new EngineClock.Now("2026-09-29", EngineClock.toMin("05:00"), 2))).isTrue();
         assertThat(ScheduleRunner.windowIsOn(s, new EngineClock.Now("2026-09-29", EngineClock.toMin("07:00"), 2))).isFalse();
-        assertThat(ScheduleRunner.events(s)).extracting(ScheduleRunner.Event::action).containsExactlyInAnyOrder("on", "off");
+        assertThat(ScheduleRunner.events(s)).extracting(ScheduleRunner.Event::action).containsExactlyInAnyOrder(ScheduleAction.ON, ScheduleAction.OFF);
     }
 }

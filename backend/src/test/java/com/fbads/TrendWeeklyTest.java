@@ -8,6 +8,7 @@ import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.LogRepository;
 import com.fbads.repository.NotifyTargetRepository;
@@ -162,7 +163,7 @@ class TrendWeeklyTest extends IntegrationBase {
 
     void addLog(String day, String kind, boolean dry, String type) {
         LogEntry l = new LogEntry();
-        l.setId(Ids.uid()); l.setTs(Instant.parse(day + "T05:00:00Z")); l.setKind(kind); l.setOk(true); l.setDry(dry); l.setMode("mock"); l.setAction(Map.of("type", type));
+        l.setId(Ids.uid()); l.setTs(Instant.parse(day + "T05:00:00Z")); l.setKind(LogKind.from(kind)); l.setOk(true); l.setDry(dry); l.setMode("mock"); l.setAction(Map.of("type", type));
         l.setSource("test"); l.setName("x"); l.setDetail("x");
         logIds.add(logRepo.save(l).getId());
     }

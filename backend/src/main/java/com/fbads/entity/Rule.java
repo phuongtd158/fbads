@@ -2,6 +2,7 @@ package com.fbads.entity;
 
 import org.hibernate.annotations.TenantId;
 import com.fbads.common.JsonConverters;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.Condition;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -46,11 +47,14 @@ public class Rule {
     @Convert(converter = ConditionList.class)
     private List<Condition> conditions = new ArrayList<>();
     @Column(name = "match_mode")
-    private String match = "all";        // all = VÀ, any = HOẶC
+    @Convert(converter = MatchMode.Converter.class)
+    private MatchMode match = MatchMode.ALL;
     @Column(name = "range_key")
-    private String range = "today";      // today | yesterday | last_3d | last_7d
+    @Convert(converter = RuleRange.Converter.class)
+    private RuleRange range = RuleRange.TODAY;
     private double minSpend;
-    private String action;               // pause | increase | decrease | notify
+    @Convert(converter = RuleAction.Converter.class)
+    private RuleAction action;
     private double pct;
     private String budgetMode = "percent";
     private double amount;
@@ -66,7 +70,8 @@ public class Rule {
     private String to = "";
     private boolean allActive = true;
     @Column(name = "ad_level")
-    private String level = "campaign";   // campaign | adset
+    @Convert(converter = AdLevel.Converter.class)
+    private AdLevel level = AdLevel.CAMPAIGN;
     @Convert(converter = JsonConverters.StringList.class)
     private List<String> accountIds = new ArrayList<>();
     @Convert(converter = JsonConverters.StringList.class)
@@ -101,7 +106,7 @@ public class Rule {
     }
 
     @JsonIgnore
-    public boolean isLadder() { return "ladder".equals(action); }
+    public boolean isLadder() { return action == RuleAction.LADDER; }
 
     /** Các điều kiện (rule cũ chỉ có metric/op/value → coi như 1 điều kiện) */
     public List<Condition> conditionList() {
@@ -140,14 +145,14 @@ public class Rule {
     public void setValue(double value) { this.value = value; }
     public List<Condition> getConditions() { return conditions; }
     public void setConditions(List<Condition> conditions) { this.conditions = conditions; }
-    public String getMatch() { return match; }
-    public void setMatch(String match) { this.match = match; }
-    public String getRange() { return range; }
-    public void setRange(String range) { this.range = range; }
+    public MatchMode getMatch() { return match; }
+    public void setMatch(MatchMode match) { this.match = match; }
+    public RuleRange getRange() { return range; }
+    public void setRange(RuleRange range) { this.range = range; }
     public double getMinSpend() { return minSpend; }
     public void setMinSpend(double minSpend) { this.minSpend = minSpend; }
-    public String getAction() { return action; }
-    public void setAction(String action) { this.action = action; }
+    public RuleAction getAction() { return action; }
+    public void setAction(RuleAction action) { this.action = action; }
     public double getPct() { return pct; }
     public void setPct(double pct) { this.pct = pct; }
     public String getBudgetMode() { return budgetMode; }
@@ -170,8 +175,8 @@ public class Rule {
     public void setTo(String to) { this.to = to; }
     public boolean isAllActive() { return allActive; }
     public void setAllActive(boolean allActive) { this.allActive = allActive; }
-    public String getLevel() { return level; }
-    public void setLevel(String level) { this.level = level; }
+    public AdLevel getLevel() { return level; }
+    public void setLevel(AdLevel level) { this.level = level; }
     public List<String> getAccountIds() { return accountIds; }
     public void setAccountIds(List<String> accountIds) { this.accountIds = accountIds; }
     public List<String> getTargets() { return targets; }

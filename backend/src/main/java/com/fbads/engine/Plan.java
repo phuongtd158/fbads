@@ -3,22 +3,21 @@ package com.fbads.engine;
 import java.util.Map;
 
 /**
- * Kế hoạch cho một hành động (tính trước, chưa gọi Facebook).
- * kind: noop (đã đúng sẵn) | skip (bỏ qua có lý do) | error | do (sẽ thực hiện).
+ * Kế hoạch cho một hành động (tính trước, chưa gọi Facebook). Xem PlanKind.
  */
-public record Plan(String kind, String detail, Map<String, Object> after, double next, boolean capped, String code,
+public record Plan(PlanKind kind, String detail, Map<String, Object> after, double next, boolean capped, String code,
         String reason, boolean notifyOnly) {
-    static Plan noop() { return new Plan("noop", null, null, 0, false, null, null, false); }
+    static Plan noop() { return new Plan(PlanKind.NOOP, null, null, 0, false, null, null, false); }
 
-    static Plan skip(String code, String reason) { return new Plan("skip", null, null, 0, false, code, reason, false); }
+    static Plan skip(String code, String reason) { return new Plan(PlanKind.SKIP, null, null, 0, false, code, reason, false); }
 
-    static Plan error(String message) { return new Plan("error", message, null, 0, false, null, message, false); }
+    static Plan error(String message) { return new Plan(PlanKind.ERROR, message, null, 0, false, null, message, false); }
 
     static Plan doIt(String detail, Map<String, Object> after, double next, boolean capped) {
-        return new Plan("do", detail, after, next, capped, null, null, false);
+        return new Plan(PlanKind.DO, detail, after, next, capped, null, null, false);
     }
 
-    static Plan notifyIt(String detail) { return new Plan("do", detail, null, 0, false, null, null, true); }
+    static Plan notifyIt(String detail) { return new Plan(PlanKind.DO, detail, null, 0, false, null, null, true); }
 
-    public boolean is(String k) { return kind.equals(k); }
+    public boolean is(PlanKind k) { return kind == k; }
 }

@@ -2,6 +2,7 @@ package com.fbads;
 
 import com.fbads.common.SecretConverter;
 import com.fbads.engine.ActionExecutor;
+import com.fbads.entity.LogKind;
 import com.fbads.notify.LegacyTelegramMove;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.NotifyTargetRepository;
@@ -111,13 +112,13 @@ class NotifyApiTest extends IntegrationBase {
             String off = api.post("/api/notify/channels", body("Đang tắt", List.of("LOG"), TOKEN, "333333")).body().get("id").asString();
             api.post("/api/notify/channels/" + off, Map.of("enabled", false));
 
-            executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule"); e.setName("Camp 1"); e.setDetail("Đã tắt"); });
+            executor.record(false, e -> { e.setKind(LogKind.RULE); e.setSource("Rule"); e.setName("Camp 1"); e.setDetail("Đã tắt"); });
             assertThat(tg.texts).containsExactly("✅ <b>Rule</b>\nCamp 1: Đã tắt");
 
             // kênh lỗi không chặn kênh khác (không Kafka: chỉ ghi log)
             api.post("/api/notify/channels/" + off, Map.of("enabled", true));
             tg.status = 500;
-            executor.record(false, e -> { e.setKind("rule"); e.setSource("Rule"); e.setName("Camp 2"); e.setDetail("Đã tắt"); });
+            executor.record(false, e -> { e.setKind(LogKind.RULE); e.setSource("Rule"); e.setName("Camp 2"); e.setDetail("Đã tắt"); });
             assertThat(tg.count("✅ <b>Rule</b>\nCamp 2: Đã tắt")).isEqualTo(2); // cả 2 kênh LOG đều được thử
         }
     }

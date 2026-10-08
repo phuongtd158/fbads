@@ -1,6 +1,7 @@
 package com.fbads.repository;
 
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -14,7 +15,7 @@ public interface LogRepository extends JpaRepository<LogEntry, String> {
     /** Mới nhất trước */
     List<LogEntry> findAllByOrderBySeqDesc(Limit limit);
 
-    List<LogEntry> findByKindOrderBySeqDesc(String kind);
+    List<LogEntry> findByKindOrderBySeqDesc(LogKind kind);
 
     List<LogEntry> findByTsGreaterThanEqualOrderBySeqAsc(Instant ts);
 

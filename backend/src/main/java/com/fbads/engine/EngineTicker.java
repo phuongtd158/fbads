@@ -2,6 +2,7 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.company.CompanyReportService;
+import com.fbads.entity.LogKind;
 import com.fbads.repository.WorkspaceRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
@@ -139,7 +140,7 @@ public class EngineTicker {
             String mode = settings.get().mode();
             try {
                 logs.log(l -> {
-                    l.setKind("system"); l.setSource("Hệ thống"); l.setName("-"); l.setDetail(e.getMessage());
+                    l.setKind(LogKind.SYSTEM); l.setSource("Hệ thống"); l.setName("-"); l.setDetail(e.getMessage());
                     l.setOk(false); l.setMode(mode);
                     l.setError(FbException.describe(e));
                 });

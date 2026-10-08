@@ -2,10 +2,12 @@ package com.fbads.validation;
 
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.ScheduleRequest;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.Schedule;
+import com.fbads.entity.ScheduleAction;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,7 +26,6 @@ import java.util.function.Predicate;
  * thay vì chú thích Bean Validation trên từng trường; câu báo lỗi giữ y hệt để giao diện hiện đúng chỗ.
  */
 public final class ScheduleValidator {
-    private static final List<String> ACTIONS = List.of("on", "off", "budget", "window");
     private static final List<String> FILTER_STATUSES = List.of("all", "running", "off");
     private static final List<String> FILTER_OPS = List.of("any", "lt", "lte", "gt", "gte", "between");
 
@@ -83,7 +84,7 @@ public final class ScheduleValidator {
             List<String> emptyCamps = targets.stream().filter(id -> {
                 AdObject o = byId.get(id);
                 if (o == null || !o.isCampaign()) return false;
-                List<AdObject> sets = objs.stream().filter(a -> "adset".equals(a.level) && id.equals(a.campaignId)
+                List<AdObject> sets = objs.stream().filter(a -> a.level == AdLevel.ADSET && id.equals(a.campaignId)
                         && live.test(a)).toList();
                 return !sets.isEmpty() && sets.stream().allMatch(a -> "PAUSED".equals(a.status) && !sel.contains(a.id));
             }).toList();
@@ -92,7 +93,7 @@ public final class ScheduleValidator {
                         + " đang tắt, bật chiến dịch xong vẫn không chạy. Hãy chọn thêm nhóm QC cần bật.");
             List<String> offParent = targets.stream().filter(id -> {
                 AdObject o = byId.get(id);
-                AdObject c = o != null && "adset".equals(o.level) ? byId.get(o.campaignId) : null;
+                AdObject c = o != null && o.level == AdLevel.ADSET ? byId.get(o.campaignId) : null;
                 return c != null && "PAUSED".equals(c.status) && !sel.contains(c.id);
             }).toList();
             if (!offParent.isEmpty())
@@ -100,7 +101,7 @@ public final class ScheduleValidator {
         }
         List<String> dup = targets.stream().filter(id -> {
             AdObject o = byId.get(id);
-            return o != null && "adset".equals(o.level) && sel.contains(o.campaignId);
+            return o != null && o.level == AdLevel.ADSET && sel.contains(o.campaignId);
         }).toList();
         if (!dup.isEmpty() && !turnsOn)
             w.add("Đã chọn cả chiến dịch lẫn nhóm QC bên trong nó (" + list(objs, dup)
@@ -116,13 +117,13 @@ public final class ScheduleValidator {
         String name = Json.str(input.name()).trim();
         if (name.length() > Checks.NAME_MAX) e.put("name", "Tên tối đa " + Checks.NAME_MAX + " ký tự");
 
-        String action = input.action();
-        if (!ACTIONS.contains(Json.str(action))) e.put("action", "Hành động không hợp lệ");
+        ScheduleAction action = ScheduleAction.from(input.action());
+        if (action == null) e.put("action", "Hành động không hợp lệ");
 
         // Khung giờ: bật lúc window.on, tắt lúc window.off (cùng danh sách camp)
         Map<String, Object> win = null;
         List<String> times;
-        if ("window".equals(action)) {
+        if (action == ScheduleAction.WINDOW) {
             ScheduleRequest.Window iw = input.window() == null ? new ScheduleRequest.Window(null, null) : input.window();
             String on = Json.str(iw.on()), off = Json.str(iw.off());
             win = new LinkedHashMap<>();
@@ -178,7 +179,7 @@ public final class ScheduleValidator {
         String im = Json.str(input.mode());
         String mode = im.equals("set") || im.equals("add") ? im : "percent";
         double value = Json.num(input.value());
-        if ("budget".equals(action)) {
+        if (action == ScheduleAction.BUDGET) {
             if (!Double.isFinite(value)) e.put("value", "Nhập giá trị đổi ngân sách");
             else if (mode.equals("add")) {
                 if (value == 0) e.put("value", "Số tiền cộng/trừ phải khác 0");
@@ -216,15 +217,15 @@ public final class ScheduleValidator {
         }
 
         // Những lựa chọn khiến lịch chạy xong vẫn không như ý (chỉ cảnh báo)
-        boolean turnsOn = "on".equals(action) || "window".equals(action);
+        boolean turnsOn = action == ScheduleAction.ON || action == ScheduleAction.WINDOW;
         if (targetMode.equals("filter") && filter != null && !e.containsKey("filter")) {
             Object st = filter.get("status");
-            if ("window".equals(action) && !"all".equals(st))
+            if (action == ScheduleAction.WINDOW && !"all".equals(st))
                 e.put("filter", "Lịch khung giờ theo điều kiện cần trạng thái “Tất cả”: tool lọc lại lúc bật và lúc "
                         + "tắt, lọc “Đang chạy”/“Đang tắt” sẽ ra 2 danh sách khác nhau.");
-            else if ("on".equals(action) && "running".equals(st))
+            else if (action == ScheduleAction.ON && "running".equals(st))
                 c.warn("Lịch bật nhưng điều kiện chỉ lấy mục đang chạy nên không có gì để bật. Chọn trạng thái “Đang tắt” hoặc “Tất cả”.");
-            else if ("off".equals(action) && "off".equals(st))
+            else if (action == ScheduleAction.OFF && "off".equals(st))
                 c.warn("Lịch tắt nhưng điều kiện chỉ lấy mục đang tắt nên không có gì để tắt. Chọn trạng thái “Đang chạy” hoặc “Tất cả”.");
         }
         if (targetMode.equals("list") && objs != null && !e.containsKey("targets")) targetWarnings(targets, objs, turnsOn).forEach(c::warn);
@@ -250,23 +251,23 @@ public final class ScheduleValidator {
                 List<ScheduleRunner.Event[]> clash = new ArrayList<>();
                 for (ScheduleRunner.Event a : mine)
                     for (ScheduleRunner.Event b : theirs) if (b.time().equals(a.time())) clash.add(new ScheduleRunner.Event[]{a, b});
-                ScheduleRunner.Event[] opp = clash.stream().filter(p -> ("on".equals(p[0].action()) && "off".equals(p[1].action()))
-                        || ("off".equals(p[0].action()) && "on".equals(p[1].action()))).findFirst().orElse(null);
+                ScheduleRunner.Event[] opp = clash.stream().filter(p -> (p[0].action() == ScheduleAction.ON && p[1].action() == ScheduleAction.OFF)
+                        || (p[0].action() == ScheduleAction.OFF && p[1].action() == ScheduleAction.ON)).findFirst().orElse(null);
                 if (opp != null) {
                     e.put("conflict", "Xung đột với lịch “" + o.getName() + "”: cùng lúc " + opp[0].time() + " nhưng làm điều ngược lại ("
-                            + ("on".equals(opp[1].action()) ? "bật" : "tắt") + ") cho " + names + ".");
+                            + (opp[1].action() == ScheduleAction.ON ? "bật" : "tắt") + ") cho " + names + ".");
                     break;
                 }
                 boolean sameTargets = sameSet(days, o.getDays()) && sameSet(targets, o.getTargets() == null ? List.of() : o.getTargets());
                 String oMode = "set".equals(o.getMode()) || "add".equals(o.getMode()) ? o.getMode() : "percent";
-                boolean identical = Objects.equals(action, o.getAction()) && sameTargets && ("window".equals(action)
+                boolean identical = action == o.getAction() && sameTargets && (action == ScheduleAction.WINDOW
                         ? o.getWindow() != null && Objects.equals(o.windowOn(), win.get("on"))
                                 && Objects.equals(o.windowOff(), win.get("off"))
-                        : (!"budget".equals(action) || (mode.equals(oMode) && o.getValue() == value))
+                        : (action != ScheduleAction.BUDGET || (mode.equals(oMode) && o.getValue() == value))
                                 && sameSet(times, ScheduleRunner.times(o)));
                 if (identical) { e.put("conflict", "Đã có lịch giống hệt: “" + o.getName() + "”."); break; }
                 String at = String.join(", ", new LinkedHashSet<>(clash.stream().map(p -> p[0].time()).toList()));
-                if ("budget".equals(action) && "budget".equals(o.getAction()) && !clash.isEmpty())
+                if (action == ScheduleAction.BUDGET && o.getAction() == ScheduleAction.BUDGET && !clash.isEmpty())
                     c.warn("Lịch “" + o.getName() + "” cũng đổi ngân sách của " + names + " lúc " + at + ", kết quả có thể khó đoán.");
             }
         }

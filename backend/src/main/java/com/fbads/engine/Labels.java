@@ -1,6 +1,7 @@
 package com.fbads.engine;
 
 import com.fbads.common.Fmt;
+import com.fbads.entity.RuleRange;
 
 import java.util.Map;
 
@@ -11,14 +12,14 @@ public final class Labels {
             Map.entry("ctr", "CTR"), Map.entry("cpc", "CPC"), Map.entry("cpm", "CPM"), Map.entry("messages", "Tin nhắn"),
             Map.entry("costPerMessage", "Chi phí/tin nhắn"), Map.entry("leads", "Lead"), Map.entry("costPerLead", "Chi phí/lead"),
             Map.entry("frequency", "Tần suất"));
-    public static final Map<String, String> RANGE = Map.of("today", "hôm nay", "yesterday", "hôm qua", "last_3d",
-            "3 ngày gần nhất", "last_7d", "7 ngày gần nhất");
 
     private Labels() {}
 
     public static String metric(String m) { return METRIC.getOrDefault(m, String.valueOf(m)); }
 
-    public static String range(String r) { return RANGE.getOrDefault(r, String.valueOf(r)); }
+    public static String range(String r) { return RuleRange.labelOf(r); }
+
+    public static String range(RuleRange r) { return r.label(); }
 
     /** Giá trị số liệu để hiện: ∞ khi chi tiêu mà chưa có kết quả */
     public static String show(double v, String metric) {

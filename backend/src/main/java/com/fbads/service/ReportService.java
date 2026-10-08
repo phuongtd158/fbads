@@ -7,6 +7,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.engine.ScheduleRunner;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
@@ -20,6 +21,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -144,7 +146,7 @@ public class ReportService {
         ZoneId zone = clock.zone();
         for (LogEntry l : logs.since(LocalDate.parse(since).atStartOfDay(zone).toInstant())) {
             Object type = l.getAction() == null ? null : l.getAction().get("type");
-            if (!List.of("rule", "schedule", "system").contains(l.getKind()) || !Boolean.TRUE.equals(l.getOk())
+            if (!EnumSet.of(LogKind.RULE, LogKind.SCHEDULE, LogKind.SYSTEM).contains(l.getKind()) || !Boolean.TRUE.equals(l.getOk())
                     || Boolean.TRUE.equals(l.getDry())
                     || "mock".equals(l.getMode()) != mock || !(type instanceof String t) || !n.containsKey(t)) continue;
             String d = l.getTs().atZone(zone).toLocalDate().toString();

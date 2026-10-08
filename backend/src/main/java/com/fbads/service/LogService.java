@@ -2,6 +2,7 @@ package com.fbads.service;
 
 import com.fbads.common.Ids;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import com.fbads.repository.LogRepository;
@@ -63,7 +64,7 @@ public class LogService {
 
     public List<LogEntry> recent(int n) { return repo.findAllByOrderBySeqDesc(Limit.of(n)); }
 
-    public List<LogEntry> ofKind(String kind) { return repo.findByKindOrderBySeqDesc(kind); }
+    public List<LogEntry> ofKind(LogKind kind) { return repo.findByKindOrderBySeqDesc(kind); }
 
     /** Từ thời điểm ts tới nay, cũ nhất trước */
     public List<LogEntry> since(Instant ts) { return repo.findByTsGreaterThanEqualOrderBySeqAsc(ts); }

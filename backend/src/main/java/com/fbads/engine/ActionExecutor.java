@@ -2,9 +2,11 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.common.Fmt;
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
+import com.fbads.entity.LogKind;
 import com.fbads.service.EngineState;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
@@ -47,16 +49,16 @@ public class ActionExecutor {
         Map<String, Object> t = new LinkedHashMap<>();
         t.put("id", o.id);
         t.put("name", o.name);
-        t.put("level", o.level);
+        t.put("level", o.level.code());
         if (o.accountId != null) { t.put("accountId", o.accountId); t.put("accountName", o.accountName); }
         return t;
     }
 
     public static Map<String, Object> actionJson(Action a) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("type", a.type());
+        m.put("type", a.type().code());
         if (a.isBudget()) {
-            m.put("mode", a.mode());
+            m.put("mode", a.mode().code());
             m.put("value", a.value());
             if (a.max() != 0) m.put("max", a.max());
             if (a.min() != 0) m.put("min", a.min());
@@ -67,7 +69,7 @@ public class ActionExecutor {
     // ------------------------------------------------------------------ Bảo vệ ngân sách
     /** Ngân sách chỉ nằm ở 1 cấp: camp CBO giữ ngân sách (nhóm QC không có), camp ABO thì ngược lại */
     public static String noBudgetReason(AdObject o) {
-        return "adset".equals(o.level)
+        return o.level == AdLevel.ADSET
                 ? "Nhóm QC không có ngân sách riêng (chiến dịch dùng ngân sách chiến dịch - CBO), chỉnh ngân sách ở cấp chiến dịch"
                 : "Chiến dịch không có ngân sách riêng (ngân sách đặt ở từng nhóm QC - ABO), hãy dùng rule cấp nhóm QC";
     }
@@ -81,8 +83,8 @@ public class ActionExecutor {
     public Plan plan(AdObject obj, Action action, ActCtx ctx) {
         if (action.isNotify())
             return Plan.notifyIt(action.message() != null && !action.message().isEmpty() ? action.message() : "Cảnh báo");
-        if (action.type().equals("on") || action.type().equals("off")) {
-            boolean want = action.type().equals("on");
+        if (action.isOnOff()) {
+            boolean want = action.type() == ActionType.ON;
             if (obj.isActive() == want) return Plan.noop(); // đã đúng trạng thái
             Map<String, Object> after = new LinkedHashMap<>();
             after.put("status", want ? "ACTIVE" : "PAUSED");
@@ -95,9 +97,11 @@ public class ActionExecutor {
         if (isRule && s.isSkipLearning() && obj.learning && !ctx.includeLearning())
             return Plan.skip("learning", "Đang trong giai đoạn học nên tạm không đổi ngân sách (tránh làm Facebook học lại từ đầu).");
         double cur = obj.dailyBudget;
-        double next = "percent".equals(action.mode()) ? cur * (1 + action.value() / 100)
-                : "add".equals(action.mode()) ? cur + action.value()
-                : action.value();
+        double next = switch (action.mode()) {
+            case PERCENT -> cur * (1 + action.value() / 100);
+            case ADD -> cur + action.value();
+            case SET -> action.value();
+        };
         if (action.max() != 0) next = Math.min(next, action.max());
         if (action.min() != 0) next = Math.max(next, action.min());
         next = Math.round(next);
@@ -124,17 +128,17 @@ public class ActionExecutor {
     }
 
     /**
-     * Thực thi 1 hành động lên 1 đối tượng. Trả về: noop | skip | error | ok | fail.
+     * Thực thi 1 hành động lên 1 đối tượng (kết quả: xem ActResult).
      * Chạy thử (dryRun trên dữ liệu thật): không gọi Facebook, chỉ ghi nhật ký.
      */
-    public String act(AdObject obj, Action action, String source, ActCtx ctx) {
+    public ActResult act(AdObject obj, Action action, String source, ActCtx ctx) {
         AppSettings s = settings.get();
         boolean dry = s.isDry();
         boolean isNotify = action.isNotify();
         String mode = s.mode();
         Map<String, Object> before = FacebookObjects.snapshot(obj);
         Consumer<LogEntry> base = e -> {
-            e.setKind(ctx.kind() != null ? ctx.kind() : "manual");
+            e.setKind(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL);
             e.setRefId(ctx.refId());
             e.setRefName(ctx.refName());
             if (ctx.condition() != null) e.setCondition(ctx.condition());
@@ -146,15 +150,15 @@ public class ActionExecutor {
             e.setName(obj.name);
         };
         Plan p = plan(obj, action, ctx);
-        if (p.is("noop")) return "noop";
-        if (p.is("skip")) { // ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram
+        if (p.is(PlanKind.NOOP)) return ActResult.NOOP;
+        if (p.is(PlanKind.SKIP)) { // ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram
             String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id + ":" + p.code();
-            if (state.hasDaily(day, key)) return "skip";
+            if (state.hasDaily(day, key)) return ActResult.SKIP;
             state.putDaily(day, key, null);
             record(true, e -> { base.accept(e); e.setDetail("Bỏ qua: " + p.reason()); e.setOk(true); e.setDry(dry); e.setSkipped(true); });
-            return "skip";
+            return ActResult.SKIP;
         }
-        if (p.is("error")) {
+        if (p.is(PlanKind.ERROR)) {
             record(ctx.silent(), e -> {
                 base.accept(e);
                 e.setDetail(p.detail());
@@ -162,7 +166,7 @@ public class ActionExecutor {
                 e.setDry(dry);
                 e.setError(Map.of("message", p.detail()));
             });
-            return "error";
+            return ActResult.ERROR;
         }
         try {
             if (!isNotify && !dry) {
@@ -185,7 +189,7 @@ public class ActionExecutor {
                 e.setDry(!isNotify && dry);
                 e.setAfter(p.after());
             });
-            return "ok";
+            return ActResult.OK;
         } catch (RuntimeException ex) {
             record(ctx.silent(), e -> {
                 base.accept(e);
@@ -194,7 +198,7 @@ public class ActionExecutor {
                 e.setDry(dry);
                 e.setError(FbException.describe(ex));
             });
-            return "fail";
+            return ActResult.FAIL;
         }
     }
 }

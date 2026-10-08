@@ -3,7 +3,9 @@ package com.fbads.engine;
 import com.fbads.client.RateLimits;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogKind;
 import com.fbads.entity.Schedule;
+import com.fbads.entity.ScheduleAction;
 import com.fbads.repository.ScheduleRepository;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
@@ -15,6 +17,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /** Lịch bật/tắt/ngân sách: tới giờ thì chạy, mỗi mốc đúng 1 lần/ngày, trễ tối đa 10 phút vẫn chạy bù. */
@@ -22,10 +25,12 @@ import java.util.Set;
 public class ScheduleRunner {
     public static final int GRACE_MIN = 10;
     static final long WRITE_GAP_MS = 300; // giãn nhịp giữa các lần đổi của lịch theo điều kiện (đỡ chạm giới hạn số lần gọi)
-    public static final String BLOCKED = "blocked";
+
+    /** Kết quả chạy một lịch: BLOCKED = Facebook đang giới hạn và lịch CHƯA làm gì (thử lại lượt sau) */
+    public enum RunResult { DONE, BLOCKED }
 
     /** Một lần chạy trong ngày: lịch khung giờ có 1 lần bật + 1 lần tắt; giờ tắt ≤ giờ bật = tắt sau nửa đêm (thuộc ngày hôm trước) */
-    public record Event(String time, String action, boolean prevDay) {}
+    public record Event(String time, ScheduleAction action, boolean prevDay) {}
 
     private final ScheduleRepository schedules;
     private final FacebookObjects objects;
@@ -51,10 +56,10 @@ public class ScheduleRunner {
     }
 
     public static List<Event> events(Schedule s) {
-        if ("window".equals(s.getAction())) {
+        if (s.getAction() == ScheduleAction.WINDOW) {
             String on = s.windowOn(), off = s.windowOff();
             if (on == null || off == null) return List.of();
-            return List.of(new Event(on, "on", false), new Event(off, "off", off.compareTo(on) <= 0));
+            return List.of(new Event(on, ScheduleAction.ON, false), new Event(off, ScheduleAction.OFF, off.compareTo(on) <= 0));
         }
         return times(s).stream().map(t -> new Event(t, s.getAction(), false)).toList();
     }
@@ -79,11 +84,11 @@ public class ScheduleRunner {
                 if (now.minutes() < at || now.minutes() - at > GRACE_MIN || state.hasRun(key)) continue;
                 // Giữ chỗ TRƯỚC khi chạy (khoá chính trong DB): bản app khác đã giữ thì thôi
                 if (!state.claimRun(key, now.date())) continue;
-                if (BLOCKED.equals(run(sch, "window".equals(sch.getAction()) ? ev.action() : null))) {
+                if (run(sch, sch.getAction() == ScheduleAction.WINDOW ? ev.action() : null) == RunResult.BLOCKED) {
                     // Facebook đang giới hạn và lịch chưa làm gì: thử lại ở lượt sau trong thời gian chạy bù; hết thời gian thì ghi lỗi
                     if (now.minutes() - at < GRACE_MIN) state.releaseRun(key);
                     else executor.record(false, e -> {
-                        e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName());
+                        e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName());
                         e.setSource("Lịch: " + sch.getName()); e.setName("-");
                         e.setMode(settings.get().mode()); e.setOk(false);
                         e.setDetail("Không chạy được lượt " + ev.time() + ": Facebook giới hạn số lần gọi suốt " + GRACE_MIN
@@ -97,18 +102,18 @@ public class ScheduleRunner {
     }
 
     /**
-     * Chạy một lịch ngay. type: 'on' | 'off' cho lần chạy của lịch khung giờ; null (bấm Chạy ngay) thì theo khung giờ lúc này.
-     * Trả "blocked" nếu Facebook đang giới hạn và CHƯA làm gì.
+     * Chạy một lịch ngay. turn: ON | OFF cho lần chạy của lịch khung giờ; null (bấm Chạy ngay) thì theo khung giờ lúc này.
+     * Trả BLOCKED nếu Facebook đang giới hạn và CHƯA làm gì.
      */
-    public String run(Schedule sch, String type) {
+    public RunResult run(Schedule sch, ScheduleAction turn) {
         List<AdObject> objs = objects.listObjects(true);
-        if (limits.blocked()) return BLOCKED;
-        if ("window".equals(sch.getAction()) && type == null) type = windowIsOn(sch, clock.now()) ? "on" : "off";
-        Action action = new Action(type != null ? type : sch.getAction(), sch.getMode(), sch.getValue(),
-                sch.getMax() == null ? 0 : sch.getMax(), sch.getMin() == null ? 0 : sch.getMin(), null);
+        if (limits.blocked()) return RunResult.BLOCKED;
+        if (sch.getAction() == ScheduleAction.WINDOW && turn == null)
+            turn = windowIsOn(sch, clock.now()) ? ScheduleAction.ON : ScheduleAction.OFF;
+        Action action = actionOf(sch, turn != null ? turn : sch.getAction());
         String source = "Lịch: " + sch.getName();
-        ActCtx ctx = ActCtx.of("schedule", sch.getId(), sch.getName());
-        if ("filter".equals(sch.getTargetMode())) { runFilter(sch, objs, action, source, ctx); return null; }
+        ActCtx ctx = ActCtx.of(LogKind.SCHEDULE, sch.getId(), sch.getName());
+        if ("filter".equals(sch.getTargetMode())) { runFilter(sch, objs, action, source, ctx); return RunResult.DONE; }
         List<String> targets = sch.getTargets();
         for (int i = 0; i < targets.size(); i++) {
             String id = targets.get(i);
@@ -117,11 +122,11 @@ public class ScheduleRunner {
             if (obj == null) {
                 Action a = action;
                 executor.record(false, e -> {
-                    e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(id);
+                    e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(id);
                     e.setDetail("Không tìm thấy đối tượng"); e.setOk(false); e.setMode(settings.get().mode());
                     e.setTarget(Map.of("id", id));
                     Map<String, Object> aj = new LinkedHashMap<>();
-                    aj.put("type", a.type()); aj.put("mode", sch.getMode()); aj.put("value", sch.getValue());
+                    aj.put("type", a.type().code()); aj.put("mode", sch.getMode()); aj.put("value", sch.getValue());
                     e.setAction(aj);
                     e.setError(Map.of("message", "Không tìm thấy đối tượng trên tài khoản quảng cáo (có thể đã bị xoá hoặc đổi cấp)."));
                 });
@@ -129,12 +134,24 @@ public class ScheduleRunner {
             }
             executor.act(obj, action, source, ctx);
         }
-        return null;
+        return RunResult.DONE;
+    }
+
+    /** Hành động lên từng camp của lịch: lịch khung giờ thì bật hoặc tắt tuỳ lượt */
+    private static Action actionOf(Schedule sch, ScheduleAction what) {
+        return switch (what) {
+            case ON -> Action.on();
+            case OFF -> Action.off();
+            case WINDOW -> throw new IllegalArgumentException("Lịch khung giờ: cần biết lượt này bật hay tắt");
+            // mã lạ (dữ liệu cũ) xử lý như "đặt số", giống bản Node
+            case BUDGET -> Action.budget(Objects.requireNonNullElse(BudgetMode.from(sch.getMode()), BudgetMode.SET), sch.getValue(),
+                    sch.getMax() == null ? 0 : sch.getMax(), sch.getMin() == null ? 0 : sch.getMin());
+        };
     }
 
     private void stopLog(Schedule sch, String source, int left) {
         executor.record(false, e -> {
-            e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName("-");
+            e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName("-");
             e.setMode(settings.get().mode()); e.setOk(false);
             e.setDetail("Dừng giữa chừng: Facebook đang giới hạn số lần gọi, còn " + left + " mục chưa xử lý ở lượt này.");
             e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
@@ -154,11 +171,13 @@ public class ScheduleRunner {
         int ok = 0, fail = 0, same = 0, left = 0;
         for (int i = 0; i < list.size(); i++) {
             if (i > 0 && limits.blocked()) { left = list.size() - i; break; }
-            String r = executor.act(list.get(i), action, source, ctx.silenced());
-            if (r.equals("ok")) ok++;
-            else if (r.equals("fail") || r.equals("error")) fail++;
-            else same++;
-            if ((r.equals("ok") || r.equals("fail")) && i < list.size() - 1) sleep(WRITE_GAP_MS);
+            ActResult r = executor.act(list.get(i), action, source, ctx.silenced());
+            switch (r) {
+                case OK -> ok++;
+                case FAIL, ERROR -> fail++;
+                case NOOP, SKIP -> same++;
+            }
+            if ((r == ActResult.OK || r == ActResult.FAIL) && i < list.size() - 1) sleep(WRITE_GAP_MS);
         }
         AppSettings s = settings.get();
         boolean dry = s.isDry();
@@ -168,10 +187,10 @@ public class ScheduleRunner {
                 + (left > 0 ? ". Dừng vì Facebook giới hạn số lần gọi, còn " + left + " mục chưa xử lý" : "") + ".";
         int fOk = ok, fFail = fail, fLeft = left;
         Map<String, Object> aj = new LinkedHashMap<>();
-        aj.put("type", action.type());
-        if (action.isBudget()) { aj.put("mode", action.mode()); aj.put("value", action.value()); }
+        aj.put("type", action.type().code());
+        if (action.isBudget()) { aj.put("mode", action.mode().code()); aj.put("value", action.value()); }
         executor.record(fOk == 0 && fFail == 0 && fLeft == 0, e -> {
-            e.setKind("schedule"); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(desc);
+            e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(desc);
             e.setMode(s.mode()); e.setDry(dry); e.setOk(fFail == 0 && fLeft == 0); e.setAction(aj); e.setDetail(detail);
             if (fFail > 0 || fLeft > 0) e.setError(Map.of("message", fLeft > 0 ? "Facebook đang giới hạn số lần gọi (rate limit)."
                     : fFail + " mục lỗi, xem các dòng nhật ký của lịch này."));

@@ -1,5 +1,6 @@
 package com.fbads.engine;
 
+import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,10 +69,10 @@ public final class Delivery {
     /** id → khoá trạng thái phân phối cho toàn bộ danh sách */
     public static Map<String, String> map(List<AdObject> objs, long now) {
         Map<String, List<AdObject>> byCamp = new HashMap<>();
-        for (AdObject o : objs) if ("adset".equals(o.level)) byCamp.computeIfAbsent(o.campaignId, k -> new ArrayList<>()).add(o);
+        for (AdObject o : objs) if (o.level == AdLevel.ADSET) byCamp.computeIfAbsent(o.campaignId, k -> new ArrayList<>()).add(o);
         Map<String, String> out = new HashMap<>();
         for (AdObject o : objs)
-            out.put(o.id, "adset".equals(o.level) ? adset(o, now) : campaign(o, byCamp.getOrDefault(o.id, List.of()), now));
+            out.put(o.id, o.level == AdLevel.ADSET ? adset(o, now) : campaign(o, byCamp.getOrDefault(o.id, List.of()), now));
         return out;
     }
 
