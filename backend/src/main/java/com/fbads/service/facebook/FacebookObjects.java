@@ -12,8 +12,11 @@ import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.AccInfo;
 import com.fbads.service.facebook.FacebookState.Cache0;
 import com.fbads.service.facebook.FacebookState.Ws;
+import com.fbads.service.facebook.GraphData.Account;
+import com.fbads.service.facebook.GraphData.AdSet;
+import com.fbads.service.facebook.GraphData.Campaign;
+import com.fbads.service.facebook.GraphData.InsightRow;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -25,13 +28,12 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.function.Function;
 
 import static com.fbads.service.facebook.FacebookGraph.actOf;
 import static com.fbads.service.facebook.FacebookParse.INSIGHT_FIELDS;
+import static com.fbads.service.facebook.FacebookParse.budget;
 import static com.fbads.service.facebook.FacebookParse.metricsFrom;
 import static com.fbads.service.facebook.FacebookParse.ms;
-import static com.fbads.service.facebook.FacebookParse.offsetOf;
 import static com.fbads.service.facebook.FacebookState.FORCE_MIN_MS;
 import static com.fbads.service.facebook.FacebookState.MOCK_TTL_MS;
 import static com.fbads.service.facebook.FacebookState.TTL_BUSY_MS;
@@ -216,9 +218,8 @@ public class FacebookObjects {
     private AccInfo accountInfo(String id) {
         AccInfo c = state.ws().accInfo.get(id);
         if (c != null && System.currentTimeMillis() - c.at() < 3_600_000) return c;
-        JsonNode r = graph.call("GET", actOf(id), Map.of("fields", "name,currency,account_status"), null);
-        AccInfo info = new AccInfo(r.path("name").asString(""), r.path("currency").asString(""),
-                r.path("account_status").asInt(0), System.currentTimeMillis());
+        Account r = graph.get(actOf(id), Map.of("fields", "name,currency,account_status"), null, Account.class);
+        AccInfo info = new AccInfo(r.name(), r.currency(), r.status(), System.currentTimeMillis());
         state.ws().accInfo.put(id, info);
         return info;
     }
@@ -228,55 +229,54 @@ public class FacebookObjects {
         AccInfo info = accountInfo(id);
         String act = actOf(id);
         try (ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor()) {
-            Future<List<JsonNode>> fCamps = ex.submit(() -> graph.callAll(act + "/campaigns",
-                    Map.of("fields", "id,name,status,effective_status,daily_budget"), null));
+            Future<List<Campaign>> fCamps = ex.submit(() -> graph.getAll(act + "/campaigns",
+                    Map.of("fields", "id,name,status,effective_status,daily_budget"), null, Campaign.class));
             // learning_stage_info là thông tin phụ: Facebook từ chối trường này thì vẫn lấy danh sách như cũ (bị giới
             // hạn thì không thử lại)
-            Future<List<JsonNode>> fSets = ex.submit(() -> {
+            Future<List<AdSet>> fSets = ex.submit(() -> {
                 try {
-                    return graph.callAll(act + "/adsets", Map.of("fields",
+                    return graph.getAll(act + "/adsets", Map.of("fields",
                             "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time,"
-                                    + "learning_stage_info"), null);
+                                    + "learning_stage_info"), null, AdSet.class);
                 } catch (FbException e) {
                     if (e.isRateLimit()) throw e;
-                    return graph.callAll(act + "/adsets", Map.of("fields",
-                            "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time"), null);
+                    return graph.getAll(act + "/adsets", Map.of("fields",
+                            "id,name,status,effective_status,daily_budget,campaign_id,start_time,end_time"), null, AdSet.class);
                 }
             });
-            Future<List<JsonNode>> fIc = ex.submit(() -> graph.callAll(act + "/insights",
+            Future<List<InsightRow>> fIc = ex.submit(() -> graph.getAll(act + "/insights",
                     Map.of("level", "campaign", "date_preset", "today", "fields", "campaign_id," + INSIGHT_FIELDS),
-                    null));
-            Future<List<JsonNode>> fIa = ex.submit(() -> graph.callAll(act + "/insights",
-                    Map.of("level", "adset", "date_preset", "today", "fields", "adset_id," + INSIGHT_FIELDS), null));
-            List<JsonNode> camps = get(fCamps), adsets = get(fSets), ic = get(fIc), ia = get(fIa);
+                    null, InsightRow.class));
+            Future<List<InsightRow>> fIa = ex.submit(() -> graph.getAll(act + "/insights",
+                    Map.of("level", "adset", "date_preset", "today", "fields", "adset_id," + INSIGHT_FIELDS), null,
+                    InsightRow.class));
+            List<Campaign> camps = get(fCamps);
+            List<AdSet> adsets = get(fSets);
 
             Map<String, Metrics> mc = new LinkedHashMap<>(), ma = new LinkedHashMap<>();
-            for (JsonNode r : ic) mc.put(r.path("campaign_id").asString(), metricsFrom(r, resultAction));
-            for (JsonNode r : ia) ma.put(r.path("adset_id").asString(), metricsFrom(r, resultAction));
-            Function<JsonNode, Double> conv = v -> v == null || v.isNull() || v.isMissingNode()
-                    || v.asString().isEmpty() ? null : Long.parseLong(v.asString()) / offsetOf(info.currency());
-            Function<JsonNode, Boolean> isLearning =
-                    a -> "LEARNING".equals(a.path("learning_stage_info").path("status").asString(""));
+            for (InsightRow r : get(fIc)) mc.put(r.campaignId(), metricsFrom(r, resultAction));
+            for (InsightRow r : get(fIa)) ma.put(r.adsetId(), metricsFrom(r, resultAction));
+            // camp "đang học" nếu có nhóm QC nào bên trong đang học
             Set<String> learningCamps = new HashSet<>();
-            for (JsonNode a : adsets) {
-                if (isLearning.apply(a)) learningCamps.add(a.path("campaign_id").asString());
+            for (AdSet a : adsets) {
+                if (a.isLearning()) learningCamps.add(a.campaignId());
             }
 
             List<AdObject> out = new ArrayList<>();
-            for (JsonNode c : camps) {
-                AdObject o = base(c, AdLevel.CAMPAIGN, id, info);
-                o.dailyBudget = conv.apply(c.get("daily_budget"));
+            for (Campaign c : camps) {
+                AdObject o = base(c.id(), c.name(), AdLevel.CAMPAIGN, c.status(), c.effectiveStatus(), id, info);
+                o.dailyBudget = budget(c.dailyBudget(), info.currency());
                 o.learning = learningCamps.contains(o.id);
                 o.metrics = mc.getOrDefault(o.id, Metrics.EMPTY);
                 out.add(o);
             }
-            for (JsonNode a : adsets) {
-                AdObject o = base(a, AdLevel.ADSET, id, info);
-                o.campaignId = a.path("campaign_id").asString();
-                o.dailyBudget = conv.apply(a.get("daily_budget"));
-                o.learning = isLearning.apply(a);
-                o.startTime = ms(a.get("start_time"));
-                o.endTime = ms(a.get("end_time"));
+            for (AdSet a : adsets) {
+                AdObject o = base(a.id(), a.name(), AdLevel.ADSET, a.status(), a.effectiveStatus(), id, info);
+                o.campaignId = a.campaignId();
+                o.dailyBudget = budget(a.dailyBudget(), info.currency());
+                o.learning = a.isLearning();
+                o.startTime = ms(a.startTime());
+                o.endTime = ms(a.endTime());
                 o.metrics = ma.getOrDefault(o.id, Metrics.EMPTY);
                 out.add(o);
             }
@@ -284,13 +284,14 @@ public class FacebookObjects {
         }
     }
 
-    private static AdObject base(JsonNode n, AdLevel level, String accountId, AccInfo info) {
+    private static AdObject base(String id, String name, AdLevel level, String status, String effective, String accountId,
+            AccInfo info) {
         AdObject o = new AdObject();
-        o.id = n.path("id").asString();
-        o.name = n.path("name").asString("");
+        o.id = id;
+        o.name = name;
         o.level = level;
-        o.status = n.path("status").asString("");
-        o.effective = n.path("effective_status").asString("");
+        o.status = status;
+        o.effective = effective;
         o.accountId = accountId;
         o.accountName = info.name();
         o.currency = info.currency();

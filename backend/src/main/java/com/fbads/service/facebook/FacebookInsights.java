@@ -10,8 +10,8 @@ import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.RangeEntry;
 import com.fbads.service.facebook.FacebookState.TrendEntry;
 import com.fbads.service.facebook.FacebookState.Ws;
+import com.fbads.service.facebook.GraphData.InsightRow;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 
 import java.lang.reflect.RecordComponent;
 import java.time.LocalDate;
@@ -130,11 +130,11 @@ public class FacebookInsights {
                 Map<String, String> pa = new LinkedHashMap<>(Map.of("level", "adset", "fields",
                         "adset_id," + INSIGHT_FIELDS));
                 pa.putAll(fbParams);
-                for (JsonNode r : graph.callAll(actOf(id) + "/insights", pc, null)) {
-                    data.put(r.path("campaign_id").asString(), metricsFrom(r, rs));
+                for (InsightRow r : graph.getAll(actOf(id) + "/insights", pc, null, InsightRow.class)) {
+                    data.put(r.campaignId(), metricsFrom(r, rs));
                 }
-                for (JsonNode r : graph.callAll(actOf(id) + "/insights", pa, null)) {
-                    data.put(r.path("adset_id").asString(), metricsFrom(r, rs));
+                for (InsightRow r : graph.getAll(actOf(id) + "/insights", pa, null, InsightRow.class)) {
+                    data.put(r.adsetId(), metricsFrom(r, rs));
                 }
             } catch (FbException e) {
                 if (e.isRateLimit()) throw e; // tài khoản lỗi khác: bỏ qua (đã báo ở danh sách camp)
@@ -173,11 +173,11 @@ public class FacebookInsights {
                 }
                 throw graph.rateLimitError();
             }
-            List<JsonNode> rows;
+            List<InsightRow> rows;
             try {
-                rows = graph.callAll(id + "/insights", Map.of("time_range",
+                rows = graph.getAll(id + "/insights", Map.of("time_range",
                         "{\"since\":\"" + since + "\",\"until\":\"" + until + "\"}", "time_increment", "1",
-                        "fields", INSIGHT_FIELDS), null);
+                        "fields", INSIGHT_FIELDS), null, InsightRow.class);
             } catch (FbException e) {
                 if (c != null && e.isRateLimit()) {
                     c.stale = true;
@@ -187,7 +187,7 @@ public class FacebookInsights {
             }
             String rs = settings.get().getResultAction();
             Map<String, Metrics> byDate = new LinkedHashMap<>();
-            for (JsonNode r : rows) byDate.put(r.path("date_start").asString(""), metricsFrom(r, rs));
+            for (InsightRow r : rows) byDate.put(r.dateStart(), metricsFrom(r, rs));
             for (String d : dates) days.add(dayRow(d, byDate.getOrDefault(d, Metrics.EMPTY)));
         }
         TrendEntry e = new TrendEntry(System.currentTimeMillis(), days);
@@ -217,9 +217,9 @@ public class FacebookInsights {
         Map<String, String> p = Map.of("level", "account", "date_preset", preset, "fields", "spend", "breakdowns",
                 "hourly_stats_aggregated_by_advertiser_time_zone");
         Pattern hour = Pattern.compile("^\\s*(\\d+)");
-        for (JsonNode r : graph.callAll(actOf(id) + "/insights", p, null)) {
-            Matcher m = hour.matcher(r.path("hourly_stats_aggregated_by_advertiser_time_zone").asString("0"));
-            out.add(new HourSpend(m.find() ? Integer.parseInt(m.group(1)) : 0, parseNum(r.path("spend"))));
+        for (InsightRow r : graph.getAll(actOf(id) + "/insights", p, null, InsightRow.class)) {
+            Matcher m = hour.matcher(r.hourlyStats() == null ? "0" : r.hourlyStats());
+            out.add(new HourSpend(m.find() ? Integer.parseInt(m.group(1)) : 0, parseNum(r.spend())));
         }
         return out;
     }

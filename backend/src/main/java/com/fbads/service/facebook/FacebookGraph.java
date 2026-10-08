@@ -10,6 +10,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.net.SocketTimeoutException;
 import java.net.URI;
@@ -33,13 +34,15 @@ public class FacebookGraph {
     private final GraphClient graph;
     private final RateLimits limits;
     private final FacebookState state;
+    private final JsonMapper mapper;
     private volatile String graphBase = GraphClient.BASE;
 
-    public FacebookGraph(SettingsService settings, GraphClient graph, RateLimits limits, FacebookState state) {
+    public FacebookGraph(SettingsService settings, GraphClient graph, RateLimits limits, FacebookState state, JsonMapper mapper) {
         this.settings = settings;
         this.graph = graph;
         this.limits = limits;
         this.state = state;
+        this.mapper = mapper;
     }
 
     static String actOf(String id) {
@@ -55,7 +58,19 @@ public class FacebookGraph {
         return o;
     }
 
-    /** tokenOverride = null: dùng token trong Cài đặt */
+    /** Đọc một đối tượng, Jackson chuyển thẳng vào record (xem GraphData). tokenOverride = null: dùng token trong Cài đặt */
+    <T> T get(String path, Map<String, String> params, String tokenOverride, Class<T> type) {
+        return mapper.treeToValue(call("GET", path, params, tokenOverride), type);
+    }
+
+    /** Đọc một danh sách (lấy hết các trang), mỗi phần tử thành một record */
+    <T> List<T> getAll(String path, Map<String, String> params, String tokenOverride, Class<T> type) {
+        List<T> out = new ArrayList<>();
+        for (JsonNode n : callAll(path, params, tokenOverride)) out.add(mapper.treeToValue(n, type));
+        return out;
+    }
+
+    /** Gọi Graph API, trả JSON thô (dùng cho ghi: bật/tắt, đổi ngân sách). tokenOverride = null: dùng token trong Cài đặt */
     JsonNode call(String method, String path, Map<String, String> params, String tokenOverride) {
         AppSettings s = settings.get();
         String token = tokenOverride != null ? tokenOverride : s.getAccessToken();
@@ -121,7 +136,7 @@ public class FacebookGraph {
     }
 
     /** Lấy hết các trang (500 mục/trang để ít lượt gọi) */
-    List<JsonNode> callAll(String path, Map<String, String> params, String token) {
+    private List<JsonNode> callAll(String path, Map<String, String> params, String token) {
         Map<String, String> p = new LinkedHashMap<>();
         p.put("limit", "500");
         p.putAll(params);
