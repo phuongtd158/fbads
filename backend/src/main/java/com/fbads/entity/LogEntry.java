@@ -64,6 +64,15 @@ public class LogEntry {
     @Convert(converter = JsonConverters.AnyMap.class)
     private Map<String, Object> undone;
 
+    /** Dòng nhật ký mới: nguồn (kind), chữ hiện ở cột Nguồn (source) và tên camp/việc (name). Các trường khác đặt bằng setter. */
+    public static LogEntry of(LogKind kind, String source, String name) {
+        LogEntry e = new LogEntry();
+        e.kind = kind;
+        e.source = source;
+        e.name = name;
+        return e;
+    }
+
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public Instant getTs() { return ts; }

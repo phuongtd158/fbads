@@ -111,8 +111,14 @@ class RulesSmartTest extends IntegrationBase {
 
     static Metrics m(double spend, double results) { return m(spend, results, 0, 0); }
 
+    /** maps: khoảng → số liệu (hàm cho gọn khi mọi khoảng dùng chung số liệu) */
     List<RuleEvaluator.Decision> eval(Rule r, List<AdObject> objs, Function<String, Map<String, Metrics>> maps) {
-        return evaluator.evaluate(r, objs, maps, null);
+        Map<String, Map<String, Metrics>> byRange = new HashMap<>();
+        for (RuleRange range : RuleRange.values()) {
+            Map<String, Metrics> m = maps.apply(range.code());
+            if (m != null) byRange.put(range.code(), m);
+        }
+        return evaluator.evaluate(r, objs, byRange, null);
     }
 
     // ----- So sánh hai khoảng

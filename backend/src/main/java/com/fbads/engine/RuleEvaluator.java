@@ -21,8 +21,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.function.Predicate;
 
 /**
  * Đánh giá một rule trên danh sách camp/nhóm QC (không thay đổi gì; dùng cho cả chạy thật lẫn Xem trước).
@@ -78,6 +76,12 @@ public class RuleEvaluator {
         this.clock = clock;
     }
 
+    /** Đang chạy thật: bật và (nếu có thông tin phân phối) đang phân phối. Luôn xét effective: mục vừa bị rule trước tắt
+     *  trong cùng lượt đã được cập nhật effective = PAUSED. */
+    private static boolean isRunning(AdObject o, Delivery.View running) {
+        return o.isActive() && (running == null || running.running(o));
+    }
+
     private static double costPer(double spend, double n) { return n > 0 ? spend / n : spend > 0 ? Double.POSITIVE_INFINITY : 0; }
 
     /** Giá trị của một số liệu để so với ngưỡng. Chi phí khi chưa có mẫu số mà đã chi tiêu = ∞ ("đắt vô hạn"), không phải 0. */
@@ -103,9 +107,9 @@ public class RuleEvaluator {
      * Ngưỡng của 1 điều kiện cho 1 camp: số cụ thể; mục tiêu của tài khoản × factor%; hoặc chính số liệu đó ở khoảng khác × factor%.
      * null = chưa quyết định được (tài khoản chưa đặt mục tiêu / khoảng so sánh chưa có số liệu).
      */
-    private Double thresholdOf(Condition c, AdObject obj, Function<String, Map<String, Metrics>> mapFor) {
+    private Double thresholdOf(Condition c, AdObject obj, Map<String, Map<String, Metrics>> byRange) {
         if (c.vsRange()) {
-            Map<String, Metrics> m = mapFor.apply(c.compareRange());
+            Map<String, Metrics> m = byRange.get(c.compareRange());
             Metrics bm = m == null ? null : m.get(obj.id);
             return bm != null && bm.spend() > 0 ? RuleValidator.compareThreshold(c, metricValue(bm, c.metric())) : null;
         }
@@ -161,11 +165,15 @@ public class RuleEvaluator {
         return Action.budget(BudgetMode.PERCENT, sign * rule.getPct(), rule.getMaxBudget(), rule.getMinBudget());
     }
 
-    public List<Decision> evaluate(Rule rule, List<AdObject> objs, Function<String, Map<String, Metrics>> mapFor, Delivery.View running) {
+    /**
+     * Xét rule trên danh sách camp. byRange: số liệu theo khoảng (mã khoảng → id camp → số liệu), gồm khoảng của rule và
+     * các khoảng so sánh; running: trạng thái phân phối (null = chỉ xem trạng thái bật/tắt).
+     */
+    public List<Decision> evaluate(Rule rule, List<AdObject> objs, Map<String, Map<String, Metrics>> byRange, Delivery.View running) {
         EngineClock.Now now = clock.now();
         long nowMs = clock.millis();
         RuleRange range = rule.getRange() == null ? RuleRange.TODAY : rule.getRange();
-        Map<String, Metrics> map = mapFor.apply(range.code());
+        Map<String, Metrics> map = byRange.get(range.code());
         if (map == null) map = Map.of();
         AdLevel level = rule.getLevel() == null ? AdLevel.CAMPAIGN : rule.getLevel();
         boolean hasWindow = !rule.getFrom().isEmpty() && !rule.getTo().isEmpty();
@@ -173,9 +181,8 @@ public class RuleEvaluator {
                 || now.minutes() > EngineClock.toMin(rule.getTo()));
         List<String> accs = rule.getAccountIds() == null ? List.of() : rule.getAccountIds();
         // luôn xét cả effective: mục vừa bị rule trước tắt trong cùng lượt đã được cập nhật effective = PAUSED
-        Predicate<AdObject> isRunning = o -> o.isActive() && (running == null || running.running(o));
         List<AdObject> list = rule.isAllActive()
-                ? objs.stream().filter(o -> o.level == level && isRunning.test(o)
+                ? objs.stream().filter(o -> o.level == level && isRunning(o, running)
                         && (accs.isEmpty() || accs.contains(o.accountId))).toList()
                 : objs.stream().filter(o -> rule.getTargets() != null && rule.getTargets().contains(o.id)).toList();
         List<Condition> conditions = rule.conditionList();
@@ -189,7 +196,7 @@ public class RuleEvaluator {
             d.range = range;
             d.metrics = map.getOrDefault(obj.id, Metrics.EMPTY);
             out.add(d);
-            if (!isRunning.test(obj)) {
+            if (!isRunning(obj, running)) {
                 String why = running != null ? running.label(obj) : "";
                 d.skip("inactive", ("camp".equals(obj.unit()) ? "Camp" : "Nhóm QC") + " không đang chạy"
                         + (why.isEmpty() ? "" : " (" + why + ")"));
@@ -210,7 +217,7 @@ public class RuleEvaluator {
                 // Ngưỡng nâng theo số kết quả: đếm kết quả trong cùng khoảng của rule rồi chọn bậc
                 Double tierCount = c.hasTiers() ? metricValue(d.metrics, c.tierMetric()) : null;
                 TierPick tp = tierCount != null ? spendTierOf(c, tierCount) : null;
-                Double th = tp != null ? Double.valueOf(tp.value()) : thresholdOf(c, obj, mapFor);
+                Double th = tp != null ? Double.valueOf(tp.value()) : thresholdOf(c, obj, byRange);
                 boolean unknown = th == null;
                 boolean hit = !unknown && (">".equals(c.op()) ? actual > th : actual < th);
                 conds.add(new CondEval(c.metric(), c.op(), c.vs(), c.factor(), c.compareRange(), actual, th, unknown, hit,

@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.client.FbException;
 import com.fbads.common.Hash;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
@@ -85,15 +86,11 @@ public class EngineWatch {
 
     /** Ghi nhật ký (nguồn "Hệ thống") và gửi thông báo cho workspace hiện tại */
     void alert(String name, String detail, String text, boolean ok) {
-        String mode = settings.get().mode();
-        logs.log(l -> {
-            l.setKind(LogKind.SYSTEM);
-            l.setSource("Hệ thống");
-            l.setName(name);
-            l.setDetail(detail);
-            l.setOk(ok);
-            l.setMode(mode);
-        });
+        LogEntry l = LogEntry.of(LogKind.SYSTEM, "Hệ thống", name);
+        l.setDetail(detail);
+        l.setOk(ok);
+        l.setMode(settings.get().mode());
+        logs.add(l);
         notify(text);
     }
 

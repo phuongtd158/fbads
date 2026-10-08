@@ -16,9 +16,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.function.Function;
 
 /**
  * Kiểm tra rule trước khi lưu / xem trước (bản Java của validateRule trong shared/validate.mjs).
@@ -49,6 +46,25 @@ public final class RuleValidator {
 
     private RuleValidator() {}
 
+    /** Lỗi của điều kiện thứ i: khoá "c{i}.{trường}"; điều kiện đầu còn ghi ra khoá cũ (metric/op/value) */
+    private record CondErrors(Map<String, String> e, int i) {
+        void put(String field, String msg) {
+            e.put("c" + i + "." + field, msg);
+            if (i == 0) e.put(field, msg);
+        }
+    }
+
+    /** Lỗi của bậc thứ i (rule tăng theo bậc): khoá "s{i}" và khoá chung "steps", chỉ giữ lỗi đầu tiên */
+    private record StepErrors(Map<String, String> e, int i) {
+        void put(String msg) {
+            e.putIfAbsent("s" + i, msg);
+            e.putIfAbsent("steps", msg);
+        }
+    }
+
+    /** Rule tăng chi tiêu (tăng ngân sách) hay giảm chi (tắt, giảm ngân sách): hai rule ngược chiều thì có thể mâu thuẫn */
+    private static boolean raisesSpend(RuleAction a) { return a == RuleAction.INCREASE; }
+
     static String targetKey(String metric) { return "spend".equals(metric) ? "cpa" : metric; }
 
     private static <T> List<T> uniq(List<T> a) { return new ArrayList<>(new LinkedHashSet<>(a)); }
@@ -74,25 +90,24 @@ public final class RuleValidator {
     private static boolean isInt(double n) { return Double.isFinite(n) && n == Math.rint(n); }
 
     /** Ngưỡng chi tiêu nâng theo số kết quả (chỉ cho "Chi tiêu lớn hơn" số cụ thể); không có bậc → null */
-    private static Condition withTiers(RuleRequest.ConditionRequest cn, String metric, String op, double value,
-            BiConsumer<String, String> put) {
+    private static Condition withTiers(RuleRequest.ConditionRequest cn, String metric, String op, double value, CondErrors errs) {
         if (cn.tiers() == null || cn.tiers().isEmpty()) return null;
         if (!"spend".equals(metric) || !">".equals(op)) {
-            put.accept("tiers", "Nâng ngưỡng theo kết quả chỉ dùng cho điều kiện \"Chi tiêu lớn hơn\"");
+            errs.put("tiers", "Nâng ngưỡng theo kết quả chỉ dùng cho điều kiện \"Chi tiêu lớn hơn\"");
             return null;
         }
         String tierMetric = TIER_METRICS.contains(Json.str(cn.tierMetric())) ? cn.tierMetric() : null;
-        if (tierMetric == null) put.accept("tiers", "Chọn loại kết quả để nâng ngưỡng");
-        if (cn.tiers().size() > MAX_TIERS) put.accept("tiers", "Tối đa " + MAX_TIERS + " bậc");
+        if (tierMetric == null) errs.put("tiers", "Chọn loại kết quả để nâng ngưỡng");
+        if (cn.tiers().size() > MAX_TIERS) errs.put("tiers", "Tối đa " + MAX_TIERS + " bậc");
         List<double[]> tiers = new ArrayList<>();
         for (RuleRequest.TierRequest t : cn.tiers().subList(0, Math.min(MAX_TIERS, cn.tiers().size())))
             tiers.add(new double[]{Json.num(t == null ? null : t.count()), Json.num(t == null ? null : t.value())});
         double prevCount = 0, prevValue = Double.isFinite(value) ? value : 0;
         for (double[] t : tiers) {
-            if (!isInt(t[0]) || t[0] < 1) { put.accept("tiers", "Số kết quả của mỗi bậc là số nguyên từ 1 trở lên"); break; }
-            if (!Double.isFinite(t[1]) || t[1] <= 0) { put.accept("tiers", "Nhập ngưỡng chi tiêu cho mỗi bậc"); break; }
-            if (t[0] <= prevCount) { put.accept("tiers", "Số kết quả của bậc sau phải lớn hơn bậc trước"); break; }
-            if (t[1] <= prevValue) { put.accept("tiers", "Ngưỡng của bậc sau phải lớn hơn ngưỡng trước đó"); break; }
+            if (!isInt(t[0]) || t[0] < 1) { errs.put("tiers", "Số kết quả của mỗi bậc là số nguyên từ 1 trở lên"); break; }
+            if (!Double.isFinite(t[1]) || t[1] <= 0) { errs.put("tiers", "Nhập ngưỡng chi tiêu cho mỗi bậc"); break; }
+            if (t[0] <= prevCount) { errs.put("tiers", "Số kết quả của bậc sau phải lớn hơn bậc trước"); break; }
+            if (t[1] <= prevValue) { errs.put("tiers", "Ngưỡng của bậc sau phải lớn hơn ngưỡng trước đó"); break; }
             prevCount = t[0];
             prevValue = t[1];
         }
@@ -113,18 +128,17 @@ public final class RuleValidator {
             String mode = "amount".equals(t.mode()) ? "amount" : "percent";
             boolean last = i == all.size() - 1;
             double every = last && t.everyHours() != null && t.everyHours() != 0 ? t.everyHours() : 0;
-            int idx = i;
-            Consumer<String> put = msg -> { e.putIfAbsent("s" + idx, msg); e.putIfAbsent("steps", msg); };
-            if (!isInt(count) || count < 1) put.accept("Bậc " + (i + 1) + ": số kết quả là số nguyên từ 1 trở lên");
+            StepErrors errs = new StepErrors(e, i);
+            if (!isInt(count) || count < 1) errs.put("Bậc " + (i + 1) + ": số kết quả là số nguyên từ 1 trở lên");
             else if (i > 0 && all.get(i - 1) != null && count <= Json.num(all.get(i - 1).count()))
-                put.accept("Bậc " + (i + 1) + ": số kết quả phải lớn hơn bậc trước");
-            if (!Double.isFinite(value) || value <= 0) put.accept("Bậc " + (i + 1) + ": nhập mức tăng lớn hơn 0");
+                errs.put("Bậc " + (i + 1) + ": số kết quả phải lớn hơn bậc trước");
+            if (!Double.isFinite(value) || value <= 0) errs.put("Bậc " + (i + 1) + ": nhập mức tăng lớn hơn 0");
             else if (mode.equals("percent") && value > Checks.RULE_PCT_INCREASE_MAX)
-                put.accept("Bậc " + (i + 1) + ": tăng tối đa " + Checks.RULE_PCT_INCREASE_MAX + "% mỗi lần");
+                errs.put("Bậc " + (i + 1) + ": tăng tối đa " + Checks.RULE_PCT_INCREASE_MAX + "% mỗi lần");
             else if (mode.equals("amount") && value > Checks.BUDGET_MAX)
-                put.accept("Bậc " + (i + 1) + ": số tiền quá lớn, hãy kiểm tra lại số 0");
+                errs.put("Bậc " + (i + 1) + ": số tiền quá lớn, hãy kiểm tra lại số 0");
             if (!Double.isFinite(every) || every < 0 || (every > 0 && (every < 1 || every > 24)))
-                put.accept("Bậc " + (i + 1) + ": lặp lại mỗi 1 đến 24 giờ");
+                errs.put("Bậc " + (i + 1) + ": lặp lại mỗi 1 đến 24 giờ");
             steps.add(new Rule.Step(Double.isFinite(count) ? count : 0, mode,
                     Double.isFinite(value) ? (mode.equals("amount") ? Math.round(value) : value) : 0,
                     every > 0 && Double.isFinite(every) ? every : null));
@@ -150,45 +164,41 @@ public final class RuleValidator {
         List<Condition> conds = new ArrayList<>();
         for (int i = 0; i < Math.min(MAX_CONDITIONS, rawConds.size()); i++) {
             RuleRequest.ConditionRequest cn = rawConds.get(i) == null ? RuleRequest.ConditionRequest.EMPTY : rawConds.get(i);
-            int idx = i;
-            BiConsumer<String, String> put = (field, msg) -> {
-                e.put("c" + idx + "." + field, msg);
-                if (idx == 0) e.put(field, msg);
-            };
+            CondErrors errs = new CondErrors(e, i);
             String metric = cn.metric();
-            if (!METRICS.contains(Json.str(metric))) put.accept("metric", "Số liệu không hợp lệ");
+            if (!METRICS.contains(Json.str(metric))) errs.put("metric", "Số liệu không hợp lệ");
             String opRaw = Json.str(cn.op());
             String op = "<".equals(opRaw) ? "<" : ">".equals(opRaw) ? ">" : null;
-            if (op == null) put.accept("op", "Phép so sánh không hợp lệ");
+            if (op == null) errs.put("op", "Phép so sánh không hợp lệ");
             if ("target".equals(cn.vs())) { // so với mục tiêu của từng tài khoản: ngưỡng = mục tiêu × factor%
-                if (!TARGET_METRICS.contains(Json.str(metric))) put.accept("metric", "Chỉ CPA, ROAS và Chi tiêu so được với mục tiêu");
+                if (!TARGET_METRICS.contains(Json.str(metric))) errs.put("metric", "Chỉ CPA, ROAS và Chi tiêu so được với mục tiêu");
                 double factor = cn.factor() == null ? 100 : cn.factor();
                 if (!Double.isFinite(factor) || factor <= 0 || factor > 1000)
-                    put.accept("value", "Phần trăm so với mục tiêu phải từ 1 đến 1000");
+                    errs.put("value", "Phần trăm so với mục tiêu phải từ 1 đến 1000");
                 conds.add(new Condition(metric, op, "target", Double.isFinite(factor) ? factor : 100, 0.0));
                 continue;
             }
             if ("range".equals(cn.vs())) { // so với chính số liệu đó ở khoảng khác: ngưỡng = giá trị ở khoảng so sánh × factor%
                 String compareRange = RuleRange.from(cn.compareRange()) != null ? cn.compareRange() : null;
-                if (compareRange == null) put.accept("value", "Chọn khoảng thời gian để so sánh");
+                if (compareRange == null) errs.put("value", "Chọn khoảng thời gian để so sánh");
                 else if (compareRange.equals(Json.truthy(input.range()) ? input.range() : "today"))
-                    put.accept("value", "Khoảng so sánh phải khác khoảng tính số liệu của rule");
+                    errs.put("value", "Khoảng so sánh phải khác khoảng tính số liệu của rule");
                 double factor = cn.factor() == null ? 100 : cn.factor();
                 if (!Double.isFinite(factor) || factor <= 0 || factor > 1000)
-                    put.accept("value", "Phần trăm so với khoảng khác phải từ 1 đến 1000");
+                    errs.put("value", "Phần trăm so với khoảng khác phải từ 1 đến 1000");
                 conds.add(new Condition(metric, op, "range", compareRange != null ? compareRange : "last_7d",
                         Double.isFinite(factor) ? factor : 100, 0.0, null, null));
                 continue;
             }
             double value = Json.num(cn.value());
-            if (!Double.isFinite(value)) put.accept("value", "Nhập ngưỡng so sánh");
-            else if (value < 0) put.accept("value", "Ngưỡng không được âm");
+            if (!Double.isFinite(value)) errs.put("value", "Nhập ngưỡng so sánh");
+            else if (value < 0) errs.put("value", "Ngưỡng không được âm");
             else if (COST_METRICS.contains(Json.str(metric)) && ">".equals(op) && value <= 0)
-                put.accept("value", "Ngưỡng " + METRIC_LABEL.get(metric) + " phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.");
-            else if ("roas".equals(metric) && value > 100) put.accept("value", "ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại");
-            else if ("ctr".equals(metric) && value > 100) put.accept("value", "CTR là phần trăm, tối đa 100");
-            else if ("frequency".equals(metric) && value > 50) put.accept("value", "Tần suất lớn hơn 50 là bất thường, hãy kiểm tra lại");
-            Condition tiered = withTiers(cn, metric, op, value, put);
+                errs.put("value", "Ngưỡng " + METRIC_LABEL.get(metric) + " phải lớn hơn 0, nếu không rule sẽ khớp với mọi camp.");
+            else if ("roas".equals(metric) && value > 100) errs.put("value", "ROAS lớn hơn 100 là bất thường, hãy kiểm tra lại");
+            else if ("ctr".equals(metric) && value > 100) errs.put("value", "CTR là phần trăm, tối đa 100");
+            else if ("frequency".equals(metric) && value > 50) errs.put("value", "Tần suất lớn hơn 50 là bất thường, hãy kiểm tra lại");
+            Condition tiered = withTiers(cn, metric, op, value, errs);
             conds.add(tiered != null ? tiered : new Condition(metric, op, null, null, Double.isFinite(value) ? value : 0.0));
         }
         Condition first = conds.isEmpty() ? new Condition(null, null, null, null, 0.0) : conds.getFirst();
@@ -367,8 +377,6 @@ public final class RuleValidator {
         String inputId = Json.truthy(input.id()) ? input.id() : null;
         if (enabled && !e.containsKey("metric") && !e.containsKey("op") && !e.containsKey("value") && !e.containsKey("action")
                 && conds.size() == 1 && conds.getFirst().vs() == null) {
-            // pause & decrease đều là "giảm chi"
-            Function<RuleAction, String> kind = a -> a == RuleAction.INCREASE ? "up" : "down";
             for (Rule o : rules) {
                 if (o.getId() != null && o.getId().equals(inputId)) continue;
                 boolean simple = o.conditionList().size() == 1 && o.conditionList().getFirst().vs() == null;
@@ -379,7 +387,7 @@ public final class RuleValidator {
                 boolean scopeOverlap = allActive || o.isAllActive()
                         || targets.stream().anyMatch(t -> o.getTargets() != null && o.getTargets().contains(t));
                 if (!scopeOverlap) continue;
-                if (!kind.apply(o.getAction()).equals(kind.apply(action)) && condOverlap(op, value, o)) {
+                if (raisesSpend(o.getAction()) != raisesSpend(action) && condOverlap(op, value, o)) {
                     c.warn("Rule “" + o.getName() + "” có thể mâu thuẫn: cùng xét " + METRIC_LABEL.get(metric) + " nhưng "
                             + (o.getAction() == RuleAction.INCREASE ? "tăng" : o.getAction() == RuleAction.PAUSE ? "tắt" : "giảm")
                                     + " ngân sách trong vùng giá trị chồng lấn.");

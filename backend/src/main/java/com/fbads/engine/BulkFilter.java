@@ -55,7 +55,7 @@ public final class BulkFilter {
         List<AdObject> out = new ArrayList<>();
         for (AdObject o : objs) {
             if (o.level != level) continue;
-            if ("ARCHIVED".equals(o.effective) || "DELETED".equals(o.effective)) continue;
+            if (o.isRemoved()) continue;
             if (!account.isEmpty() && !account.equals(o.accountId)) continue;
             if (dv != null && !dv.running(o)) continue;
             if (st.equals("off") && !"PAUSED".equals(o.status)) continue;

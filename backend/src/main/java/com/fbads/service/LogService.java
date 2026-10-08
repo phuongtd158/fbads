@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 /** Ghi nhật ký và giữ lại 1000 dòng mới nhất của mỗi workspace (như bản Node). */
 @Service
@@ -36,16 +35,14 @@ public class LogService {
         this.events = events;
     }
 
-    /** Tạo dòng nhật ký mới, không báo Telegram (thao tác tay, lỗi hệ thống…). */
-    public LogEntry log(Consumer<LogEntry> fill) { return log(fill, false); }
+    /** Lưu dòng nhật ký mới, không báo Telegram (thao tác tay, lỗi hệ thống…). */
+    public LogEntry add(LogEntry e) { return add(e, false); }
 
     /**
-     * Tạo dòng nhật ký mới: fill điền các trường. Trả về dòng đã lưu (có id, ts).
+     * Lưu dòng nhật ký mới (tự gán id, ts). Trả về dòng đã lưu.
      * Phát sự kiện log.created: giao diện, thống kê và (nếu notify) Telegram nhận.
      */
-    public LogEntry log(Consumer<LogEntry> fill, boolean notify) {
-        LogEntry e = new LogEntry();
-        fill.accept(e);
+    public LogEntry add(LogEntry e, boolean notify) {
         e.setId(Ids.uid());
         e.setTs(Instant.now().truncatedTo(ChronoUnit.MILLIS));
         LogEntry saved = repo.save(e);

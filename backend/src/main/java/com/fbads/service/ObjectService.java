@@ -24,7 +24,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 /** Camp / nhóm QC: danh sách, số liệu theo khoảng ngày, bật/tắt và đặt ngân sách bằng tay (có ghi nhật ký). */
@@ -129,18 +128,23 @@ public class ObjectService {
             target.put("level", cur.level.code());
             if (cur.accountId != null) { target.put("accountId", cur.accountId); target.put("accountName", cur.accountName); }
         }
-        Map<String, Object> before = FacebookObjects.snapshot(cur);
-        String mode = settings.get().mode();
-        Consumer<LogEntry> base = e -> {
-            e.setKind(LogKind.MANUAL); e.setSource("Thủ công"); e.setName(label); e.setTarget(target); e.setAction(action);
-            e.setBefore(before); e.setMode(mode);
-        };
+        LogEntry e = LogEntry.of(LogKind.MANUAL, "Thủ công", label);
+        e.setTarget(target);
+        e.setAction(action);
+        e.setBefore(FacebookObjects.snapshot(cur));
+        e.setMode(settings.get().mode());
         try {
             fn.run();
-            logs.log(e -> { base.accept(e); e.setDetail(okDetail); e.setOk(true); e.setAfter(after); });
         } catch (RuntimeException ex) {
-            logs.log(e -> { base.accept(e); e.setDetail(ex.getMessage()); e.setOk(false); e.setError(FbException.describe(ex)); });
+            e.setDetail(ex.getMessage());
+            e.setOk(false);
+            e.setError(FbException.describe(ex));
+            logs.add(e);
             throw ex;
         }
+        e.setDetail(okDetail);
+        e.setOk(true);
+        e.setAfter(after);
+        logs.add(e);
     }
 }

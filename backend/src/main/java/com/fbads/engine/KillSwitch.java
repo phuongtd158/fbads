@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
@@ -62,14 +63,15 @@ public class KillSwitch {
                 List<AdObject> active = list.stream().filter(AdObject::isActive).toList();
                 String cur = list.getFirst().currency != null ? " " + list.getFirst().currency : "";
                 String accName = list.getFirst().accountName != null ? list.getFirst().accountName : id;
-                executor.record(false, e -> {
-                    e.setKind(LogKind.SYSTEM); e.setSource("Dừng khẩn"); e.setName("Tài khoản " + accName); e.setOk(true);
-                    e.setDry(dry); e.setMode(s.mode());
-                    e.setDetail("Chi tiêu " + Fmt.money(spend) + cur + " đã vượt mức " + Fmt.money(limit) + cur + " của tài khoản này — "
-                            + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " " + active.size()
-                                    + " camp đang chạy (các tài khoản khác không bị ảnh hưởng).");
-                    e.setCondition(condition(limit, spend));
-                });
+                LogEntry e = LogEntry.of(LogKind.SYSTEM, "Dừng khẩn", "Tài khoản " + accName);
+                e.setOk(true);
+                e.setDry(dry);
+                e.setMode(s.mode());
+                e.setDetail("Chi tiêu " + Fmt.money(spend) + cur + " đã vượt mức " + Fmt.money(limit) + cur + " của tài khoản này — "
+                        + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " " + active.size()
+                                + " camp đang chạy (các tài khoản khác không bị ảnh hưởng).");
+                e.setCondition(condition(limit, spend));
+                executor.record(e, false);
                 for (AdObject o : active) executor.act(o, Action.off(), "Dừng khẩn", ActCtx.system());
                 fired = true;
             }
@@ -81,14 +83,14 @@ public class KillSwitch {
         if (spend < globalLimit) return false;
         state.putDaily(today, "kill:total", null);
         List<AdObject> active = camps.stream().filter(AdObject::isActive).toList();
-        executor.record(false, e -> {
-            e.setKind(LogKind.SYSTEM); e.setSource("Dừng khẩn"); e.setName("Tổng chi tiêu hôm nay"); e.setOk(true);
-            e.setDry(dry); e.setMode(s.mode());
-            e.setDetail("Chi tiêu " + Fmt.money(spend) + " đã vượt mức " + Fmt.money(globalLimit) + " — "
-                    + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " "
-                    + active.size() + " camp đang chạy.");
-            e.setCondition(condition(globalLimit, spend));
-        });
+        LogEntry e = LogEntry.of(LogKind.SYSTEM, "Dừng khẩn", "Tổng chi tiêu hôm nay");
+        e.setOk(true);
+        e.setDry(dry);
+        e.setMode(s.mode());
+        e.setDetail("Chi tiêu " + Fmt.money(spend) + " đã vượt mức " + Fmt.money(globalLimit) + " — "
+                + (dry ? "(chạy thử) sẽ tắt" : "tắt") + " " + active.size() + " camp đang chạy.");
+        e.setCondition(condition(globalLimit, spend));
+        executor.record(e, false);
         for (AdObject o : active) executor.act(o, Action.off(), "Dừng khẩn", ActCtx.system());
         return true;
     }

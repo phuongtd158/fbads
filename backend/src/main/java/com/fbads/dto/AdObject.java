@@ -42,6 +42,10 @@ public class AdObject {
     @JsonIgnore
     public boolean isActive() { return "ACTIVE".equals(effective); }
 
+    /** Đã lưu trữ hoặc đã xoá trên Facebook */
+    @JsonIgnore
+    public boolean isRemoved() { return "ARCHIVED".equals(effective) || "DELETED".equals(effective); }
+
     /** "camp" hoặc "nhóm QC" để ghép câu */
     @JsonIgnore
     public String unit() { return level == AdLevel.ADSET ? "nhóm QC" : "camp"; }

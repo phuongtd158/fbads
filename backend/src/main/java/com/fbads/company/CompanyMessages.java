@@ -3,6 +3,7 @@ package com.fbads.company;
 import com.fbads.common.Fmt;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
@@ -13,7 +14,6 @@ import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -54,23 +54,23 @@ class CompanyMessages {
     }
 
     void log(String name, String source, String detail, boolean ok, String error, boolean skipped) {
-        String mode = settings.get().mode();
-        logs.log(l -> {
-            l.setKind(LogKind.COMPANY);
-            l.setSource(source);
-            l.setName(name);
-            l.setDetail(detail);
-            l.setOk(ok);
-            l.setMode(mode);
-            if (error != null) l.setError(Map.of("message", error));
-            if (skipped) l.setSkipped(true);
-        });
+        LogEntry l = LogEntry.of(LogKind.COMPANY, source, name);
+        l.setDetail(detail);
+        l.setOk(ok);
+        l.setMode(settings.get().mode());
+        if (error != null) l.setError(Map.of("message", error));
+        if (skipped) l.setSkipped(true);
+        logs.add(l);
+    }
+
+    /** Một số liệu của báo cáo để hiện trong tin: in đậm, hoặc "chưa nhập" */
+    private static String metric(CompanyReport r, String key) {
+        Long v = r.getMetrics().get(key);
+        return v == null ? "<i>chưa nhập</i>" : "<b>" + Fmt.money(v) + "</b>";
     }
 
     /** Tin Telegram của một bản báo cáo */
     String summary(CompanyReport r, String head) {
-        Function<String, String> val = k -> r.getMetrics().get(k) == null ? "<i>chưa nhập</i>"
-                : "<b>" + Fmt.money(r.getMetrics().get(k)) + "</b>";
         List<String> lines = new ArrayList<>();
         lines.add(head + " <b>Báo cáo công ty · " + r.getSlot() + "h ngày " + CompanyRules.dm(r.getDate()) + "</b>"
                 + (CompanyRules.updatesExisting(r.getSlot())
@@ -79,10 +79,10 @@ class CompanyMessages {
                         : ""));
         lines.add("<b>" + esc(teamLabel(r)) + "</b> (" + (r.getCampaigns() == null ? 0 : r.getCampaigns().size())
                 + " chiến dịch)");
-        lines.add("Chi tiêu Ads: " + val.apply("spend"));
-        lines.add("Tin nhắn: " + val.apply("messages") + " · SĐT: " + val.apply("phones"));
-        lines.add("Hiển thị: " + val.apply("impressions") + " · Nhấp: " + val.apply("clicks"));
-        lines.add("Đơn hàng: " + val.apply("orders") + " · DSO sau VAT: " + val.apply("dso_after"));
+        lines.add("Chi tiêu Ads: " + metric(r, "spend"));
+        lines.add("Tin nhắn: " + metric(r, "messages") + " · SĐT: " + metric(r, "phones"));
+        lines.add("Hiển thị: " + metric(r, "impressions") + " · Nhấp: " + metric(r, "clicks"));
+        lines.add("Đơn hàng: " + metric(r, "orders") + " · DSO sau VAT: " + metric(r, "dso_after"));
         if (!r.getNotes().isEmpty()) lines.add("Ghi chú: " + esc(r.getNotes()));
         return String.join("\n", lines);
     }

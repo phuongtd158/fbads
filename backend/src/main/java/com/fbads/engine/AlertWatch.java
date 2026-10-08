@@ -4,6 +4,7 @@ import com.fbads.client.FbException;
 import com.fbads.client.RateLimits;
 import com.fbads.common.Fmt;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
 import com.fbads.notify.Notice;
@@ -80,15 +81,11 @@ public class AlertWatch {
     static String esc(String t) { return t == null ? "" : t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
 
     private void alert(String name, String detail, String text, boolean ok) {
-        String mode = settings.get().mode();
-        logs.log(l -> {
-            l.setKind(LogKind.SYSTEM);
-            l.setSource("Cảnh báo");
-            l.setName(name);
-            l.setDetail(detail);
-            l.setOk(ok);
-            l.setMode(mode);
-        });
+        LogEntry l = LogEntry.of(LogKind.SYSTEM, "Cảnh báo", name);
+        l.setDetail(detail);
+        l.setOk(ok);
+        l.setMode(settings.get().mode());
+        logs.add(l);
         events.notify("alerts", new Notice(Notice.Topic.ALERT, text));
     }
 

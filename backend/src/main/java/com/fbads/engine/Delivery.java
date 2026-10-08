@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
 
 /**
  * Cột "Phân phối" giống Ads Manager (bản Java của shared/delivery.mjs): không chỉ bật/tắt của chính mục đó mà còn xét
@@ -53,6 +52,9 @@ public final class Delivery {
         return a.isActive() ? "active" : "off";
     }
 
+    /** Nhóm QC đã kết thúc hoặc không còn (không tính khi xét camp có đang chạy không) */
+    private static boolean gone(String k) { return k.equals("completed") || k.equals("archived") || k.equals("deleted"); }
+
     private static String campaign(AdObject c, List<AdObject> adsets, long now) {
         String k = own(c);
         if (!k.isEmpty()) return k;
@@ -60,9 +62,8 @@ public final class Delivery {
         List<String> ks = adsets.stream().map(a -> adset(a, now)).toList();
         if (ks.contains("active") || ks.contains("learning")) return "active";
         for (String x : List.of("review", "issues", "scheduled")) if (ks.contains(x)) return x;
-        Predicate<String> gone = x -> x.equals("completed") || x.equals("archived") || x.equals("deleted");
-        if (ks.contains("completed") && ks.stream().allMatch(gone)) return "completed";
-        if (ks.contains("rejected") && ks.stream().allMatch(x -> x.equals("rejected") || gone.test(x))) return "rejected";
+        if (ks.contains("completed") && ks.stream().allMatch(Delivery::gone)) return "completed";
+        if (ks.contains("rejected") && ks.stream().allMatch(x -> x.equals("rejected") || gone(x))) return "rejected";
         return "adsetsOff";
     }
 

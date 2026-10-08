@@ -99,7 +99,7 @@ public class RuleRunner {
         Map<String, Map<String, Metrics>> maps = loadMaps(active, true);
         Delivery.View running = new Delivery.View(objs);
         for (Rule rule : active) {
-            for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, running)) {
+            for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps, running)) {
                 if (!d.eligible) continue;
                 // Chỉ bắt đầu "thời gian nghỉ" khi thật sự có hành động/lỗi; bỏ qua (đang học, chạm giới hạn ngày) thì xét lại lần sau
                 if (d.plan.is(PlanKind.DO) || d.plan.is(PlanKind.ERROR)) state.setLastRun(rule.getId(), d.obj.id, clock.millis());
@@ -192,7 +192,7 @@ public class RuleRunner {
         List<AdObject> objs = objects.listObjects(false);
         Map<String, Map<String, Metrics>> maps = loadMaps(List.of(rule), false);
         List<Map<String, Object>> items = new ArrayList<>();
-        for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps::get, new Delivery.View(objs))) {
+        for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps, new Delivery.View(objs))) {
             Map<String, Object> i = new LinkedHashMap<>();
             i.put("id", d.obj.id); i.put("name", d.obj.name); i.put("level", d.obj.level.code()); i.put("effective", d.obj.effective);
             i.put("learning", d.obj.learning); i.put("budget", d.obj.dailyBudget);

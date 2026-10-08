@@ -61,6 +61,17 @@ public class UndoService {
 
     private static double num(Object o) { return o instanceof Number n ? n.doubleValue() : 0; }
 
+    /** Dòng nhật ký "Hoàn tác" cho dòng l (chưa có kết quả) */
+    private static LogEntry undoEntry(LogEntry l, String mode, Map<String, Object> snapshot, Map<String, Object> actionJson) {
+        LogEntry e = LogEntry.of(LogKind.UNDO, "Hoàn tác", l.getName());
+        e.setRefLogId(l.getId());
+        e.setTarget(l.getTarget());
+        e.setMode(mode);
+        e.setBefore(snapshot);
+        e.setAction(actionJson);
+        return e;
+    }
+
     public LogEntry undo(String id, boolean force) {
         LogEntry l = logs.find(id).orElseThrow(() -> new ApiException(404, "Không tìm thấy dòng nhật ký này."));
         String why = blocker(l, System.currentTimeMillis(), UNDO_MAX_DAYS);
@@ -105,20 +116,18 @@ public class UndoService {
                 detail = "Hoàn tác: ngân sách " + Fmt.money(cur.dailyBudget == null ? 0 : cur.dailyBudget) + " → " + Fmt.money(b);
             }
         } catch (RuntimeException ex) {
-            executor.record(false, e -> {
-                e.setKind(LogKind.UNDO); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
-                e.setTarget(l.getTarget()); e.setMode(mode);
-                e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(ex.getMessage()); e.setOk(false);
-                e.setError(FbException.describe(ex));
-            });
+            LogEntry e = undoEntry(l, mode, snapshot, actionJson);
+            e.setDetail(ex.getMessage());
+            e.setOk(false);
+            e.setError(FbException.describe(ex));
+            executor.record(e, false);
             throw ex;
         }
-        String fDetail = detail;
-        LogEntry entry = executor.record(false, e -> {
-            e.setKind(LogKind.UNDO); e.setSource("Hoàn tác"); e.setName(l.getName()); e.setRefLogId(l.getId());
-            e.setTarget(l.getTarget()); e.setMode(mode);
-            e.setBefore(snapshot); e.setAction(actionJson); e.setDetail(fDetail); e.setOk(true); e.setAfter(newAfter);
-        });
+        LogEntry e = undoEntry(l, mode, snapshot, actionJson);
+        e.setDetail(detail);
+        e.setOk(true);
+        e.setAfter(newAfter);
+        LogEntry entry = executor.record(e, false);
         l.setUndone(Map.of("at", entry.getTs().toString(), "logId", entry.getId()));
         logs.save(l);
         // Việc gốc do rule làm: tạm hoãn rule đó với camp này để nó không làm lại ngay ở lần kiểm tra sau

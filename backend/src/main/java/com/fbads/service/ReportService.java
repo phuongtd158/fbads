@@ -25,8 +25,6 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.function.ToDoubleFunction;
 
 /**
  * Báo cáo Telegram hằng ngày (và nút Gửi báo cáo). Nhiều tài khoản → mỗi tài khoản một phần (loại tiền có thể khác nhau).
@@ -128,14 +126,23 @@ public class ReportService {
                 .filter(r -> r.m().results() > 0)
                 .sorted(Comparator.comparingDouble(r -> cpaOf(r.m())))
                 .limit(3).toList();
-        ToDoubleFunction<Row> cost = r -> r.m().results() > 0 ? cpaOf(r.m()) : Double.POSITIVE_INFINITY;
         List<Row> worst = spent.stream().filter(r -> !best.contains(r))
                 .sorted((a, b) -> {
-                    double ca = cost.applyAsDouble(a), cb = cost.applyAsDouble(b);
+                    double ca = costOf(a), cb = costOf(b);
                     return ca == cb ? Double.compare(b.m().spend(), a.m().spend()) : Double.compare(cb, ca);
                 }).limit(3).toList();
         return new Ranked(best, worst);
     }
+
+    /** Một dòng camp trong báo cáo tuần: tên và CPA (hoặc chi tiêu nếu chưa có kết quả) */
+    private static String line(Row x) {
+        return "• " + esc(x.o().name) + ": "
+                + (x.m().results() > 0 ? "CPA " + Fmt.money(cpaOf(x.m())) + ", " + Fmt.num(x.m().results()) + " KQ"
+                        : "chi " + Fmt.money(x.m().spend()) + ", chưa có KQ");
+    }
+
+    /** Chi phí mỗi kết quả để xếp hạng: chưa có kết quả = đắt vô hạn */
+    private static double costOf(Row r) { return r.m().results() > 0 ? cpaOf(r.m()) : Double.POSITIVE_INFINITY; }
 
     private static double cpaOf(Metrics m) { return m.cpa() != null ? m.cpa() : m.spend() / m.results(); }
 
@@ -190,11 +197,9 @@ public class ReportService {
                 lines.add("ROAS: <b>" + Fmt.fixed2(c.revenue() / c.spend()) + "</b>"
                         + (p.revenue() > 0 && p.spend() > 0 ? " (tuần trước " + Fmt.fixed2(p.revenue() / p.spend()) + ")" : ""));
             Ranked r = rankCamps(list.stream().filter(o -> cur.containsKey(o.id)).map(o -> new Row(o, cur.get(o.id))).toList());
-            Function<Row, String> row = x -> "• " + esc(x.o().name) + ": "
-                    + (x.m().results() > 0 ? "CPA " + Fmt.money(cpaOf(x.m())) + ", " + Fmt.num(x.m().results()) + " KQ"
-                            : "chi " + Fmt.money(x.m().spend()) + ", chưa có KQ");
-            if (!r.best().isEmpty()) lines.add("👍 Tốt nhất:\n" + String.join("\n", r.best().stream().map(row).toList()));
-            if (!r.worst().isEmpty()) lines.add("👎 Cần xem lại:\n" + String.join("\n", r.worst().stream().map(row).toList()));
+            if (!r.best().isEmpty()) lines.add("👍 Tốt nhất:\n" + String.join("\n", r.best().stream().map(ReportService::line).toList()));
+            if (!r.worst().isEmpty())
+                lines.add("👎 Cần xem lại:\n" + String.join("\n", r.worst().stream().map(ReportService::line).toList()));
             AdObject f = list.getFirst();
             parts.add((multi ? "\n🏷 <b>" + esc(f.accountName != null ? f.accountName : f.accountId) + "</b>\n" : "")
                     + String.join("\n", lines));

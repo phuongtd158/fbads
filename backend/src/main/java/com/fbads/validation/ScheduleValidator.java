@@ -18,7 +18,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.function.Predicate;
 
 /**
  * Kiểm tra lịch trước khi lưu (bản Java của validateSchedule trong shared/validate.mjs).
@@ -79,13 +78,12 @@ public final class ScheduleValidator {
         Set<String> sel = new HashSet<>(targets);
         Map<String, AdObject> byId = new LinkedHashMap<>();
         for (AdObject o : objs) byId.put(o.id, o);
-        Predicate<AdObject> live = o -> !"ARCHIVED".equals(o.effective) && !"DELETED".equals(o.effective);
         if (turnsOn) {
             List<String> emptyCamps = targets.stream().filter(id -> {
                 AdObject o = byId.get(id);
                 if (o == null || !o.isCampaign()) return false;
                 List<AdObject> sets = objs.stream().filter(a -> a.level == AdLevel.ADSET && id.equals(a.campaignId)
-                        && live.test(a)).toList();
+                        && !a.isRemoved()).toList();
                 return !sets.isEmpty() && sets.stream().allMatch(a -> "PAUSED".equals(a.status) && !sel.contains(a.id));
             }).toList();
             if (!emptyCamps.isEmpty())

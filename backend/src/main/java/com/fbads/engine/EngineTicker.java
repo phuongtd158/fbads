@@ -2,6 +2,7 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.company.CompanyReportService;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.repository.WorkspaceRepository;
 import com.fbads.security.WorkspaceContext;
@@ -137,13 +138,13 @@ public class EngineTicker {
             return null;
         } catch (RuntimeException e) {
             log.error("Lỗi tick ({}): {}", name, e.getMessage(), e);
-            String mode = settings.get().mode();
             try {
-                logs.log(l -> {
-                    l.setKind(LogKind.SYSTEM); l.setSource("Hệ thống"); l.setName("-"); l.setDetail(e.getMessage());
-                    l.setOk(false); l.setMode(mode);
-                    l.setError(FbException.describe(e));
-                });
+                LogEntry l = LogEntry.of(LogKind.SYSTEM, "Hệ thống", "-");
+                l.setDetail(e.getMessage());
+                l.setOk(false);
+                l.setMode(settings.get().mode());
+                l.setError(FbException.describe(e));
+                logs.add(l);
             } catch (RuntimeException ignored) { /* DB lỗi: đã ghi log ra console */ }
             return e;
         }

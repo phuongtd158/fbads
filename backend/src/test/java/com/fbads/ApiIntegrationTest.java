@@ -488,17 +488,17 @@ class ApiIntegrationTest extends IntegrationBase {
             int before = actions(today, "schedule");
             int manualBefore = actions(today, "manual");
 
-            executor.record(false, e -> { e.setKind(LogKind.SCHEDULE); e.setSource("Lịch · Tắt đêm"); e.setName("Camp 1"); e.setDetail("Đã tắt"); });
+            executor.record(TestLogs.entry(LogKind.SCHEDULE, "Lịch · Tắt đêm", "Camp 1", "Đã tắt"), false);
             assertThat(tg.texts).containsExactly("✅ <b>Lịch · Tắt đêm</b>\nCamp 1: Đã tắt");
 
-            executor.record(true, e -> { e.setKind(LogKind.SCHEDULE); e.setSource("Lịch · Tắt đêm"); e.setName("-"); e.setDetail("Không có gì để làm"); });
-            logs.log(e -> { e.setKind(LogKind.MANUAL); e.setSource("Thủ công"); e.setName("Camp 1"); e.setDetail("Tắt"); });
+            executor.record(TestLogs.entry(LogKind.SCHEDULE, "Lịch · Tắt đêm", "-", "Không có gì để làm"), true);
+            logs.add(TestLogs.entry(LogKind.MANUAL, "Thủ công", "Camp 1", "Tắt"));
             assertThat(tg.texts).hasSize(1); // im lặng và thao tác tay: không báo
             assertThat(actions(today, "schedule")).isEqualTo(before + 2);
             assertThat(actions(today, "manual")).isEqualTo(manualBefore + 1);
 
             tg.status = 500; // Telegram lỗi: không có Kafka để thử lại, chỉ ghi log, việc ghi nhật ký vẫn xong
-            assertThat(executor.record(false, e -> { e.setKind(LogKind.RULE); e.setSource("Rule"); e.setName("Camp 2"); e.setDetail("Đã tắt"); }).getId()).isNotNull();
+            assertThat(executor.record(TestLogs.entry(LogKind.RULE, "Rule", "Camp 2", "Đã tắt"), false).getId()).isNotNull();
             assertThat(tg.texts).hasSize(2);
 
             // báo cáo hằng ngày: tới giờ thì gửi, lượt sau cùng ngày không gửi lại
@@ -519,7 +519,7 @@ class ApiIntegrationTest extends IntegrationBase {
     /** Giờ lưu trong MySQL là UTC (connectionTimeZone=UTC), đọc ra đúng thời điểm đã ghi */
     @Test
     void timesAreStoredInUtc() {
-        LogEntry saved = logs.log(e -> { e.setKind(LogKind.MANUAL); e.setSource("Thủ công"); e.setName("Giờ UTC"); e.setDetail("-"); });
+        LogEntry saved = logs.add(TestLogs.entry(LogKind.MANUAL, "Thủ công", "Giờ UTC", "-"));
         LocalDateTime raw = jdbc.queryForObject("SELECT ts FROM logs WHERE id = ?", LocalDateTime.class, saved.getId());
         assertThat(Duration.between(raw, LocalDateTime.now(ZoneOffset.UTC)).abs()).isLessThan(Duration.ofMinutes(1));
         assertThat(logs.find(saved.getId()).orElseThrow().getTs()).isEqualTo(saved.getTs());

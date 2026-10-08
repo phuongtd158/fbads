@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.client.RateLimits;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
 import com.fbads.entity.Schedule;
 import com.fbads.entity.ScheduleAction;
@@ -87,14 +88,14 @@ public class ScheduleRunner {
                 if (run(sch, sch.getAction() == ScheduleAction.WINDOW ? ev.action() : null) == RunResult.BLOCKED) {
                     // Facebook đang giới hạn và lịch chưa làm gì: thử lại ở lượt sau trong thời gian chạy bù; hết thời gian thì ghi lỗi
                     if (now.minutes() - at < GRACE_MIN) state.releaseRun(key);
-                    else executor.record(false, e -> {
-                        e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName());
-                        e.setSource("Lịch: " + sch.getName()); e.setName("-");
-                        e.setMode(settings.get().mode()); e.setOk(false);
+                    else {
+                        LogEntry e = entry(sch, "-");
+                        e.setOk(false);
                         e.setDetail("Không chạy được lượt " + ev.time() + ": Facebook giới hạn số lần gọi suốt " + GRACE_MIN
                                 + " phút sau giờ hẹn.");
                         e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
-                    });
+                        executor.record(e, false);
+                    }
                 }
             }
         }
@@ -117,19 +118,20 @@ public class ScheduleRunner {
         List<String> targets = sch.getTargets();
         for (int i = 0; i < targets.size(); i++) {
             String id = targets.get(i);
-            if (i > 0 && limits.blocked()) { stopLog(sch, source, targets.size() - i); break; }
+            if (i > 0 && limits.blocked()) { stopLog(sch, targets.size() - i); break; }
             AdObject obj = objs.stream().filter(o -> o.id.equals(id)).findFirst().orElse(null);
             if (obj == null) {
-                Action a = action;
-                executor.record(false, e -> {
-                    e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(id);
-                    e.setDetail("Không tìm thấy đối tượng"); e.setOk(false); e.setMode(settings.get().mode());
-                    e.setTarget(Map.of("id", id));
-                    Map<String, Object> aj = new LinkedHashMap<>();
-                    aj.put("type", a.type().code()); aj.put("mode", sch.getMode()); aj.put("value", sch.getValue());
-                    e.setAction(aj);
-                    e.setError(Map.of("message", "Không tìm thấy đối tượng trên tài khoản quảng cáo (có thể đã bị xoá hoặc đổi cấp)."));
-                });
+                LogEntry e = entry(sch, id);
+                e.setDetail("Không tìm thấy đối tượng");
+                e.setOk(false);
+                e.setTarget(Map.of("id", id));
+                Map<String, Object> aj = new LinkedHashMap<>();
+                aj.put("type", action.type().code());
+                aj.put("mode", sch.getMode());
+                aj.put("value", sch.getValue());
+                e.setAction(aj);
+                e.setError(Map.of("message", "Không tìm thấy đối tượng trên tài khoản quảng cáo (có thể đã bị xoá hoặc đổi cấp)."));
+                executor.record(e, false);
                 continue;
             }
             executor.act(obj, action, source, ctx);
@@ -149,13 +151,21 @@ public class ScheduleRunner {
         };
     }
 
-    private void stopLog(Schedule sch, String source, int left) {
-        executor.record(false, e -> {
-            e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName("-");
-            e.setMode(settings.get().mode()); e.setOk(false);
-            e.setDetail("Dừng giữa chừng: Facebook đang giới hạn số lần gọi, còn " + left + " mục chưa xử lý ở lượt này.");
-            e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
-        });
+    private void stopLog(Schedule sch, int left) {
+        LogEntry e = entry(sch, "-");
+        e.setOk(false);
+        e.setDetail("Dừng giữa chừng: Facebook đang giới hạn số lần gọi, còn " + left + " mục chưa xử lý ở lượt này.");
+        e.setError(Map.of("message", "Facebook đang giới hạn số lần gọi (rate limit)."));
+        executor.record(e, false);
+    }
+
+    /** Dòng nhật ký của lịch (chưa có kết quả): nguồn "Lịch: tên lịch", chế độ chạy hiện tại */
+    private LogEntry entry(Schedule sch, String name) {
+        LogEntry e = LogEntry.of(LogKind.SCHEDULE, "Lịch: " + sch.getName(), name);
+        e.setRefId(sch.getId());
+        e.setRefName(sch.getName());
+        e.setMode(settings.get().mode());
+        return e;
     }
 
     /**
@@ -185,16 +195,17 @@ public class ScheduleRunner {
                 : "Khớp " + list.size() + " mục (" + desc + "): " + (dry ? "sẽ đổi" : "đã đổi") + " " + ok
                 + (same > 0 ? ", đã đúng sẵn/bỏ qua " + same : "") + (fail > 0 ? ", lỗi " + fail : "")
                 + (left > 0 ? ". Dừng vì Facebook giới hạn số lần gọi, còn " + left + " mục chưa xử lý" : "") + ".";
-        int fOk = ok, fFail = fail, fLeft = left;
         Map<String, Object> aj = new LinkedHashMap<>();
         aj.put("type", action.type().code());
         if (action.isBudget()) { aj.put("mode", action.mode().code()); aj.put("value", action.value()); }
-        executor.record(fOk == 0 && fFail == 0 && fLeft == 0, e -> {
-            e.setKind(LogKind.SCHEDULE); e.setRefId(sch.getId()); e.setRefName(sch.getName()); e.setSource(source); e.setName(desc);
-            e.setMode(s.mode()); e.setDry(dry); e.setOk(fFail == 0 && fLeft == 0); e.setAction(aj); e.setDetail(detail);
-            if (fFail > 0 || fLeft > 0) e.setError(Map.of("message", fLeft > 0 ? "Facebook đang giới hạn số lần gọi (rate limit)."
-                    : fFail + " mục lỗi, xem các dòng nhật ký của lịch này."));
-        });
+        LogEntry e = entry(sch, desc);
+        e.setDry(dry);
+        e.setOk(fail == 0 && left == 0);
+        e.setAction(aj);
+        e.setDetail(detail);
+        if (fail > 0 || left > 0) e.setError(Map.of("message", left > 0 ? "Facebook đang giới hạn số lần gọi (rate limit)."
+                : fail + " mục lỗi, xem các dòng nhật ký của lịch này."));
+        executor.record(e, ok == 0 && fail == 0 && left == 0);
     }
 
     static void sleep(long ms) {

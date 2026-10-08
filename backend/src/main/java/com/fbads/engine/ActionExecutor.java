@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * Lập kế hoạch (plan) và thực thi (act) một hành động lên camp/nhóm QC, tôn trọng chế độ chạy thử,
@@ -41,8 +40,8 @@ public class ActionExecutor {
 
     // ------------------------------------------------------------------ Nhật ký
     /** Ghi nhật ký; không silent thì sự kiện kèm yêu cầu báo Telegram. */
-    public LogEntry record(boolean silent, Consumer<LogEntry> fill) {
-        return logs.log(fill, !silent);
+    public LogEntry record(LogEntry e, boolean silent) {
+        return logs.add(e, !silent);
     }
 
     public static Map<String, Object> target(AdObject o) {
@@ -132,44 +131,49 @@ public class ActionExecutor {
      * Chạy thử (dryRun trên dữ liệu thật): không gọi Facebook, chỉ ghi nhật ký.
      */
     public ActResult act(AdObject obj, Action action, String source, ActCtx ctx) {
-        AppSettings s = settings.get();
-        boolean dry = s.isDry();
-        boolean isNotify = action.isNotify();
-        String mode = s.mode();
+        boolean dry = settings.get().isDry();
         Map<String, Object> before = FacebookObjects.snapshot(obj);
-        Consumer<LogEntry> base = e -> {
-            e.setKind(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL);
-            e.setRefId(ctx.refId());
-            e.setRefName(ctx.refName());
-            if (ctx.condition() != null) e.setCondition(ctx.condition());
-            e.setTarget(target(obj));
-            e.setMode(mode);
-            e.setBefore(before);
-            e.setAction(actionJson(action));
-            e.setSource(source);
-            e.setName(obj.name);
-        };
         Plan p = plan(obj, action, ctx);
-        if (p.is(PlanKind.NOOP)) return ActResult.NOOP;
-        if (p.is(PlanKind.SKIP)) { // ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram
-            String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id + ":" + p.code();
-            if (state.hasDaily(day, key)) return ActResult.SKIP;
-            state.putDaily(day, key, null);
-            record(true, e -> { base.accept(e); e.setDetail("Bỏ qua: " + p.reason()); e.setOk(true); e.setDry(dry); e.setSkipped(true); });
-            return ActResult.SKIP;
-        }
-        if (p.is(PlanKind.ERROR)) {
-            record(ctx.silent(), e -> {
-                base.accept(e);
-                e.setDetail(p.detail());
-                e.setOk(false);
-                e.setDry(dry);
-                e.setError(Map.of("message", p.detail()));
-            });
-            return ActResult.ERROR;
-        }
+        return switch (p.kind()) {
+            case NOOP -> ActResult.NOOP;
+            case SKIP -> recordSkip(obj, action, source, ctx, p, before, dry);
+            case ERROR -> recordError(obj, action, source, ctx, p, before, dry);
+            case DO -> carryOut(obj, action, source, ctx, p, before, dry);
+        };
+    }
+
+    /** Ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram */
+    private ActResult recordSkip(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+            boolean dry) {
+        String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id + ":" + p.code();
+        if (state.hasDaily(day, key)) return ActResult.SKIP;
+        state.putDaily(day, key, null);
+        LogEntry e = entry(obj, action, source, ctx, before);
+        e.setDetail("Bỏ qua: " + p.reason());
+        e.setOk(true);
+        e.setDry(dry);
+        e.setSkipped(true);
+        record(e, true);
+        return ActResult.SKIP;
+    }
+
+    /** Kế hoạch không làm được (vd ngân sách mới ≤ 0): chỉ ghi lỗi, không gọi Facebook */
+    private ActResult recordError(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+            boolean dry) {
+        LogEntry e = entry(obj, action, source, ctx, before);
+        e.setDetail(p.detail());
+        e.setOk(false);
+        e.setDry(dry);
+        e.setError(Map.of("message", p.detail()));
+        record(e, ctx.silent());
+        return ActResult.ERROR;
+    }
+
+    /** Làm theo kế hoạch (gọi Facebook, trừ khi chạy thử hoặc chỉ thông báo) rồi ghi nhật ký */
+    private ActResult carryOut(AdObject obj, Action action, String source, ActCtx ctx, Plan p, Map<String, Object> before,
+            boolean dry) {
         try {
-            if (!isNotify && !dry) {
+            if (!action.isNotify() && !dry) {
                 if (p.after().containsKey("status")) {
                     actions.setStatus(obj.id, "ACTIVE".equals(p.after().get("status")));
                     obj.status = obj.effective = (String) p.after().get("status");
@@ -182,23 +186,34 @@ public class ActionExecutor {
                     obj.dailyBudget = p.next();
                 }
             }
-            record(ctx.silent(), e -> {
-                base.accept(e);
-                e.setDetail(p.detail());
-                e.setOk(true);
-                e.setDry(!isNotify && dry);
-                e.setAfter(p.after());
-            });
+            LogEntry e = entry(obj, action, source, ctx, before);
+            e.setDetail(p.detail());
+            e.setOk(true);
+            e.setDry(!action.isNotify() && dry);
+            e.setAfter(p.after());
+            record(e, ctx.silent());
             return ActResult.OK;
         } catch (RuntimeException ex) {
-            record(ctx.silent(), e -> {
-                base.accept(e);
-                e.setDetail(ex.getMessage());
-                e.setOk(false);
-                e.setDry(dry);
-                e.setError(FbException.describe(ex));
-            });
+            LogEntry e = entry(obj, action, source, ctx, before);
+            e.setDetail(ex.getMessage());
+            e.setOk(false);
+            e.setDry(dry);
+            e.setError(FbException.describe(ex));
+            record(e, ctx.silent());
             return ActResult.FAIL;
         }
+    }
+
+    /** Phần chung của mọi dòng nhật ký do act() ghi: ai làm, làm gì, lên camp nào, trạng thái trước đó */
+    private LogEntry entry(AdObject obj, Action action, String source, ActCtx ctx, Map<String, Object> before) {
+        LogEntry e = LogEntry.of(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL, source, obj.name);
+        e.setRefId(ctx.refId());
+        e.setRefName(ctx.refName());
+        if (ctx.condition() != null) e.setCondition(ctx.condition());
+        e.setTarget(target(obj));
+        e.setMode(settings.get().mode());
+        e.setBefore(before);
+        e.setAction(actionJson(action));
+        return e;
     }
 }
