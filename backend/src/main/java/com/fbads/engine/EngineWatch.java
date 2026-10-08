@@ -2,6 +2,8 @@ package com.fbads.engine;
 
 import com.fbads.client.FbException;
 import com.fbads.common.Hash;
+import com.fbads.dto.Responses.Health;
+import com.fbads.dto.Responses.TokenStatus;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
@@ -21,7 +23,6 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -109,7 +110,7 @@ public class EngineWatch {
         String today = clock.now().date();
         Run r = run();
         if (today.equals(ta.date()) || clock.millis() - r.tokenFailedAt < TOKEN_RETRY_MS) return;
-        Map<String, Object> t;
+        TokenStatus t;
         try {
             t = auth.inspectToken(s.getAccessToken());
         } catch (FbException e) {
@@ -119,14 +120,14 @@ public class EngineWatch {
         }
         ta = new TokenAlert(fp, ta.bad(), today);
         state.put("tokenAlert", ta);
-        if (!Boolean.TRUE.equals(t.get("valid"))) {
+        if (!t.valid()) {
             bad(ta, "Facebook báo token không hợp lệ (có thể đã bị thu hồi hoặc đổi mật khẩu).");
             return;
         }
-        if (!(t.get("daysLeft") instanceof Number n) || n.longValue() > TOKEN_WARN_DAYS) return;
-        long days = n.longValue();
+        if (t.daysLeft() == null || t.daysLeft() > TOKEN_WARN_DAYS) return;
+        long days = t.daysLeft();
         String when = days >= 1 ? "Còn " + days + " ngày" : "Hết hạn trong hôm nay";
-        String on = SHORT.format(Instant.ofEpochMilli(((Number) t.get("expiresAt")).longValue()).atZone(clock.zone()));
+        String on = SHORT.format(Instant.ofEpochMilli(t.expiresAt()).atZone(clock.zone()));
         alert("Token Facebook", "Token sắp hết hạn: " + when.toLowerCase() + " (" + on + ").",
                 "⏳ <b>Token Facebook sắp hết hạn</b>\n" + when + " (" + on
                         + "). Vào Cài đặt → Kết nối để tạo token mới, nếu không lịch và rule sẽ ngừng.", false);
@@ -204,7 +205,7 @@ public class EngineWatch {
     }
 
     /** Cho /api/health: ok = vòng tự động còn chạy (xong một lượt trong 5 phút gần nhất, hoặc vừa khởi động) */
-    public Map<String, Object> health() {
+    public Health health() {
         long now = clock.millis(), since = busySince;
         long lastDone = lastDoneLocal;
         try {
@@ -213,10 +214,7 @@ public class EngineWatch {
         } catch (RuntimeException ignored) { /* Redis lỗi: dùng giờ của bản này */ }
         boolean stuck = since != 0 && now - since >= STALL_MS;
         boolean fresh = lastDone != 0 ? now - lastDone < STALL_MS : now - startedAt < STALL_MS;
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("ok", !stuck && fresh);
-        m.put("lastTickAt", lastDone == 0 ? null : Instant.ofEpochMilli(lastDone).toString());
-        return m;
+        return new Health(!stuck && fresh, lastDone == 0 ? null : Instant.ofEpochMilli(lastDone).toString());
     }
 
     /** Đặt lại (dùng cho kiểm thử) */

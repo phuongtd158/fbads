@@ -3,6 +3,7 @@ package com.fbads.engine;
 import com.fbads.client.FbException;
 import com.fbads.client.RateLimits;
 import com.fbads.common.Fmt;
+import com.fbads.dto.Responses.AccountRef;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.LogKind;
@@ -128,10 +129,7 @@ public class AlertWatch {
     private void checkAccount(String id, State st, AppSettings s, String today) {
         FacebookHealth.AccountHealth h = health.accountHealth(id);
         String nm = h.name();
-        String cur = objects.accounts().stream()
-                .filter(a -> id.equals(a.get("id")))
-                .map(a -> String.valueOf(a.get("currency")))
-                .findFirst().orElse("");
+        String cur = objects.accounts().stream().filter(a -> id.equals(a.id())).map(AccountRef::currency).findFirst().orElse("");
 
         if (s.isAlertAccount()) {
             Integer prev = st.acc().get(id);

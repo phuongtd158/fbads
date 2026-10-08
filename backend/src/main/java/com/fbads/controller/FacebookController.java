@@ -2,6 +2,9 @@ package com.fbads.controller;
 
 import com.fbads.config.AppProperties;
 import com.fbads.dto.Requests;
+import com.fbads.dto.Responses.Connection;
+import com.fbads.dto.Responses.OauthInfo;
+import com.fbads.dto.Responses.TokenExtended;
 import com.fbads.entity.AppSettings;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.SettingsService;
@@ -21,7 +24,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.security.SecureRandom;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -104,14 +106,11 @@ public class FacebookController {
     }
 
     @RequestMapping(value = {"/test-connection", "/connection"}, method = {RequestMethod.GET, RequestMethod.POST})
-    Map<String, Object> testConnection() {
+    Connection testConnection() {
         try {
             return auth.testConnection();
         } catch (RuntimeException e) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("ok", false);
-            m.put("error", e.getMessage());
-            return m;
+            return Connection.failed(e.getMessage());
         }
     }
 
@@ -136,19 +135,13 @@ public class FacebookController {
         if (!em.isEmpty()) return ApiExceptionHandler.error(400, em);
         String longToken = auth.extendToken(appId, appSecret, token);
         settings.update(s -> s.setAccessToken(longToken));
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("ok", true);
-        m.put("token", auth.inspectToken(longToken));
-        return ResponseEntity.ok(m);
+        return ResponseEntity.ok(new TokenExtended(true, auth.inspectToken(longToken)));
     }
 
     /** Địa chỉ cần khai báo trong ứng dụng Meta + lỗi của lần đăng nhập Facebook gần nhất */
     @GetMapping("/fb/oauth")
-    Map<String, Object> oauth(HttpServletRequest req) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("redirectUri", redirectUri(req));
-        m.put("error", oauthErrors.getOrDefault(WorkspaceContext.require(), ""));
-        return m;
+    OauthInfo oauth(HttpServletRequest req) {
+        return new OauthInfo(redirectUri(req), oauthErrors.getOrDefault(WorkspaceContext.require(), ""));
     }
 
     /** Bắt đầu đăng nhập bằng Facebook: lưu App ID/Secret (để lần sau chỉ cần bấm 1 nút) rồi trả về địa chỉ trang đăng nhập */

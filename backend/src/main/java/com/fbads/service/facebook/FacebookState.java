@@ -5,6 +5,8 @@ import com.fbads.config.CacheConfig;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.FbSnapshots;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.AccountError;
+import com.fbads.dto.Responses.TrendDay;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.SettingsService;
 import org.springframework.cache.Cache;
@@ -52,10 +54,10 @@ public class FacebookState {
 
     static final class TrendEntry {
         final long at;
-        final List<Map<String, Object>> days;
+        final List<TrendDay> days;
         volatile boolean stale;
 
-        TrendEntry(long at, List<Map<String, Object>> days) {
+        TrendEntry(long at, List<TrendDay> days) {
             this.at = at;
             this.days = days;
         }
@@ -69,7 +71,7 @@ public class FacebookState {
         final Map<String, RangeEntry> rangeCache = new ConcurrentHashMap<>();
         final Map<String, TrendEntry> trendCache = new ConcurrentHashMap<>();
         volatile Cache0 cache = new Cache0(0, null, false);
-        volatile List<Map<String, Object>> accErrors = List.of();
+        volatile List<AccountError> accErrors = List.of();
         volatile String currency = "VND";
         volatile TokenError tokenError;
     }

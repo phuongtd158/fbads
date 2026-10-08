@@ -6,6 +6,7 @@ import com.fbads.common.ApiException;
 import com.fbads.common.Ids;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.TrendDay;
 import com.fbads.engine.ActionType;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.LogAction;
@@ -95,7 +96,6 @@ class TrendWeeklyTest extends IntegrationBase {
         ws.close();
     }
 
-    static List<Object> col(List<Map<String, Object>> days, String k) { return days.stream().map(d -> d.get(k)).toList(); }
 
     @Test
     void liveTrendFillsGapsAndCaches() {
@@ -103,10 +103,10 @@ class TrendWeeklyTest extends IntegrationBase {
         fbStub.handler = r -> GraphStub.Res.ok("{\"data\":[{\"date_start\":\"2026-09-01\",\"spend\":\"100000\",\"impressions\":\"1000\",\"clicks\":\"10\",\"actions\":[{\"action_type\":\"purchase\",\"value\":\"2\"}]},"
                 + "{\"date_start\":\"2026-09-03\",\"spend\":\"50000\",\"impressions\":\"500\",\"clicks\":\"5\"}]}");
         FacebookInsights.TrendResult r = insights.dailyTrend("555", "2026-09-01", "2026-09-04", false);
-        assertThat(col(r.days(), "date")).containsExactly("2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04");
-        assertThat(col(r.days(), "spend")).containsExactly(100000.0, 0.0, 50000.0, 0.0);
-        assertThat(col(r.days(), "results")).containsExactly(2.0, 0.0, 0.0, 0.0);
-        assertThat(r.days().getFirst().get("cpa")).isEqualTo(50000.0);
+        assertThat(r.days()).map(TrendDay::date).containsExactly("2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04");
+        assertThat(r.days()).map(d -> d.metrics().spend()).containsExactly(100000.0, 0.0, 50000.0, 0.0);
+        assertThat(r.days()).map(d -> d.metrics().results()).containsExactly(2.0, 0.0, 0.0, 0.0);
+        assertThat(r.days().getFirst().metrics().cpa()).isEqualTo(50000.0);
         GraphStub.Req q = fbStub.calls.getFirst();
         assertThat(q.path()).isEqualTo("555/insights");
         assertThat(q.params()).containsEntry("time_increment", "1").containsEntry("time_range", "{\"since\":\"2026-09-01\",\"until\":\"2026-09-04\"}");

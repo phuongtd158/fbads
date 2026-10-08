@@ -2,6 +2,7 @@ package com.fbads.controller;
 
 import com.fbads.common.ApiException;
 import com.fbads.dto.Requests;
+import com.fbads.dto.Responses.Ok;
 import com.fbads.entity.Role;
 import com.fbads.entity.Workspace;
 import com.fbads.security.WorkspaceContext;
@@ -17,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Workspace và thành viên. Quyền do WorkspaceFilter kiểm tra trước:
@@ -27,7 +27,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class WorkspaceController {
-    private static final Map<String, Object> OK = Map.of("ok", true);
 
     private final AuthService auth;
 
@@ -41,12 +40,12 @@ public class WorkspaceController {
 
     /** Chọn workspace làm việc (lưu trong phiên đăng nhập) */
     @PostMapping("/workspaces/switch")
-    Map<String, Object> switchTo(@RequestBody(required = false) Requests.WorkspaceSwitch b, HttpServletRequest req) {
+    Ok switchTo(@RequestBody(required = false) Requests.WorkspaceSwitch b, HttpServletRequest req) {
         long uid = signedInUser(req);
         long id = (b == null ? Requests.WorkspaceSwitch.EMPTY : b).id();
         if (auth.role(id, uid) == null) throw new ApiException(403, "Bạn không thuộc workspace này");
         req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, id);
-        return OK;
+        return Ok.OK;
     }
 
     /** Tạo workspace mới (vd. cho một khách hàng khác): người tạo là chủ, chuyển sang workspace đó luôn */
@@ -60,9 +59,9 @@ public class WorkspaceController {
 
     /** Đổi tên workspace đang chọn */
     @PostMapping("/workspace")
-    Map<String, Object> rename(@RequestBody(required = false) Requests.WorkspaceName b) {
+    Ok rename(@RequestBody(required = false) Requests.WorkspaceName b) {
         auth.renameWorkspace(WorkspaceContext.require(), (b == null ? Requests.WorkspaceName.EMPTY : b).name());
-        return OK;
+        return Ok.OK;
     }
 
     @GetMapping("/members")
@@ -77,14 +76,14 @@ public class WorkspaceController {
     }
 
     @PostMapping("/members/{userId}/role")
-    Map<String, Object> role(@PathVariable long userId, @RequestBody(required = false) Requests.RoleChange b) {
+    Ok role(@PathVariable long userId, @RequestBody(required = false) Requests.RoleChange b) {
         auth.setRole(WorkspaceContext.require(), userId, Role.parse((b == null ? Requests.RoleChange.EMPTY : b).role()));
-        return OK;
+        return Ok.OK;
     }
 
     @DeleteMapping("/members/{userId}")
-    Map<String, Object> remove(@PathVariable long userId) {
+    Ok remove(@PathVariable long userId) {
         auth.removeMember(WorkspaceContext.require(), userId);
-        return OK;
+        return Ok.OK;
     }
 }

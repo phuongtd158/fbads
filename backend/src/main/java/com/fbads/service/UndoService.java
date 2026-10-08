@@ -92,7 +92,7 @@ public class UndoService {
             drift.add("ngân sách hiện tại là " + Fmt.money(cur.dailyBudget));
         if (!drift.isEmpty() && !force)
             throw new ApiException(409, "Camp đã thay đổi kể từ lúc đó (" + String.join(", ", drift)
-                    + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").with("drift", true);
+                    + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").withDrift();
 
         LogSnapshot snapshot = LogSnapshot.of(cur);
         String mode = s.mode();

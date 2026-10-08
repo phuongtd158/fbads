@@ -1,6 +1,7 @@
 package com.fbads.config;
 
 import com.fbads.dto.FbSnapshots;
+import com.fbads.dto.Responses.FbAccounts;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -11,7 +12,6 @@ import org.springframework.data.redis.serializer.RedisSerializationContext.Seria
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
-import java.util.Map;
 
 /**
  * Spring Cache trên Redis. Mỗi cache lưu JSON của một kiểu cố định (dễ đọc bằng redis-cli, không cần lưu tên class):
@@ -39,6 +39,6 @@ public class CacheConfig {
         return b -> b
                 .withCacheConfiguration(OBJECTS, json(mapper, FbSnapshots.Objects.class, Duration.ofDays(1)))
                 .withCacheConfiguration(RANGES, json(mapper, FbSnapshots.Range.class, Duration.ofDays(1)))
-                .withCacheConfiguration(ACCOUNTS, json(mapper, Map.class, Duration.ofMinutes(5)));
+                .withCacheConfiguration(ACCOUNTS, json(mapper, FbAccounts.class, Duration.ofMinutes(5)));
     }
 }

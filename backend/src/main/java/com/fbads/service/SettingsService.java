@@ -1,5 +1,6 @@
 package com.fbads.service;
 
+import com.fbads.dto.Responses.PublicSettings;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.NotifyTarget;
 import com.fbads.repository.NotifyTargetRepository;
@@ -7,9 +8,7 @@ import com.fbads.repository.SettingsRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ObjectNode;
 
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -21,9 +20,6 @@ import java.util.function.Consumer;
  */
 @Service
 public class SettingsService {
-    /** Bí mật: không bao giờ gửi về giao diện, chỉ cho biết đã có hay chưa (has_…) */
-    public static final List<String> SECRETS = List.of("accessToken", "fbAppSecret");
-
     private final SettingsRepository repo;
     private final NotifyTargetRepository notifyTargets;
     private final JsonMapper mapper;
@@ -77,14 +73,7 @@ public class SettingsService {
     public void reload() { current.clear(); }
 
     /** Cài đặt gửi về giao diện: bí mật để trống + cờ has_…, has_notify = có kênh thông báo nào đang bật */
-    public ObjectNode publicSettings() {
-        ObjectNode out = mapper.valueToTree(get());
-        for (String k : SECRETS) {
-            String v = out.path(k).asString("");
-            out.put("has_" + k, !v.isEmpty());
-            out.put(k, "");
-        }
-        out.put("has_notify", notifyTargets.findAll().stream().anyMatch(NotifyTarget::isEnabled));
-        return out;
+    public PublicSettings publicSettings() {
+        return PublicSettings.of(get(), notifyTargets.findAll().stream().anyMatch(NotifyTarget::isEnabled));
     }
 }

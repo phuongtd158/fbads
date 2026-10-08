@@ -6,6 +6,7 @@ import com.fbads.common.ApiException;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.FbSnapshots;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.TrendDay;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.RangeEntry;
 import com.fbads.service.facebook.FacebookState.TrendEntry;
@@ -13,7 +14,6 @@ import com.fbads.service.facebook.FacebookState.Ws;
 import com.fbads.service.facebook.GraphData.InsightRow;
 import org.springframework.stereotype.Service;
 
-import java.lang.reflect.RecordComponent;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,7 +41,7 @@ public class FacebookInsights {
 
     public record RangeResult(Map<String, Metrics> data, Long at, boolean stale) {}
 
-    public record TrendResult(List<Map<String, Object>> days, long at, boolean stale) {}
+    public record TrendResult(List<TrendDay> days, long at, boolean stale) {}
 
     public record HourSpend(int hour, double spend) {}
 
@@ -160,11 +160,11 @@ public class FacebookInsights {
         List<String> dates = new ArrayList<>();
         LocalDate end = LocalDate.parse(until);
         for (LocalDate d = LocalDate.parse(since); !d.isAfter(end); d = d.plusDays(1)) dates.add(d.toString());
-        List<Map<String, Object>> days = new ArrayList<>();
+        List<TrendDay> days = new ArrayList<>();
         if (mock) {
             List<Map.Entry<String, Metrics>> rows = w.mock.trend(id, dates);
             if (rows == null) throw new ApiException(404, "Không tìm thấy camp hoặc nhóm quảng cáo này.");
-            for (Map.Entry<String, Metrics> r : rows) days.add(dayRow(r.getKey(), r.getValue()));
+            for (Map.Entry<String, Metrics> r : rows) days.add(new TrendDay(r.getKey(), r.getValue()));
         } else {
             if (limits.blocked()) {
                 if (c != null) {
@@ -188,25 +188,11 @@ public class FacebookInsights {
             String rs = settings.get().getResultAction();
             Map<String, Metrics> byDate = new LinkedHashMap<>();
             for (InsightRow r : rows) byDate.put(r.dateStart(), metricsFrom(r, rs));
-            for (String d : dates) days.add(dayRow(d, byDate.getOrDefault(d, Metrics.EMPTY)));
+            for (String d : dates) days.add(new TrendDay(d, byDate.getOrDefault(d, Metrics.EMPTY)));
         }
         TrendEntry e = new TrendEntry(System.currentTimeMillis(), days);
         w.trendCache.put(key, e);
         return new TrendResult(days, e.at, false);
-    }
-
-    /** { date, spend, impressions, … } như bản Node ({ date, ...metrics }) */
-    private static Map<String, Object> dayRow(String date, Metrics m) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("date", date);
-        try {
-            for (RecordComponent rc : Metrics.class.getRecordComponents()) {
-                row.put(rc.getName(), rc.getAccessor().invoke(m));
-            }
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(e);
-        }
-        return row;
     }
 
     // ------------------------------------------------------------------ Chi tiêu theo giờ (cảnh báo bất thường)

@@ -113,7 +113,7 @@ class WatchIntegrationTest extends IntegrationBase {
     void readsAreRetriedWritesAreNot() {
         tokenExpiresIn(null);
         fbStub.script("hang", "500");
-        assertThat(auth.inspectToken("EAAtesttoken1234567890").get("valid")).as("lần thứ 3 thành công").isEqualTo(true);
+        assertThat(auth.inspectToken("EAAtesttoken1234567890").valid()).as("lần thứ 3 thành công").isEqualTo(true);
         assertThat(fbStub.calls).hasSize(3);
 
         fbStub.calls.clear();

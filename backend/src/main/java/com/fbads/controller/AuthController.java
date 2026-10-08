@@ -2,6 +2,10 @@ package com.fbads.controller;
 
 import com.fbads.common.ApiException;
 import com.fbads.dto.Requests;
+import com.fbads.dto.Responses.ApiError;
+import com.fbads.dto.Responses.AuthStatus;
+import com.fbads.dto.Responses.Ok;
+import com.fbads.dto.Responses.UserInfo;
 import com.fbads.entity.Role;
 import com.fbads.entity.User;
 import com.fbads.security.PasswordAuthProvider;
@@ -28,7 +32,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,7 +40,6 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api")
 public class AuthController {
-    private static final Map<String, Object> OK = Map.of("ok", true);
 
     private final AuthService auth;
     private final LoginAttempts attempts;
@@ -60,16 +62,9 @@ public class AuthController {
      *  signup = được tự đăng ký; user; workspace đang chọn (kèm role); workspaces = mọi workspace của người này.
      */
     @GetMapping("/auth")
-    Map<String, Object> status(Authentication a, HttpServletRequest req) {
+    AuthStatus status(Authentication a, HttpServletRequest req) {
         boolean open = auth.openMode();
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("required", !open);
-        m.put("authed", auth.allowed(a));
-        m.put("setup", open);
-        m.put("signup", auth.signupAllowed());
         Optional<User> user = open || !AuthService.isAuthenticated(a) ? Optional.empty() : auth.user(a.getName());
-        m.put("envManaged", user.map(auth::isEnvAdmin).orElse(false));
-        m.put("user", user.map(AuthService::userJson).orElse(null));
         List<AuthService.Membership> list = open
                 ? List.of(new AuthService.Membership(1, auth.workspace(1).map(w -> w.getName()).orElse("Workspace chính"), Role.OWNER))
                 : user.map(u -> auth.memberships(u.getId())).orElse(List.of());
@@ -78,9 +73,8 @@ public class AuthController {
         AuthService.Membership cur = list.stream()
                 .filter(x -> chosen != null && x.id() == chosen)
                 .findFirst().orElse(list.isEmpty() ? null : list.getFirst());
-        m.put("workspace", cur);
-        m.put("workspaces", list);
-        return m;
+        return new AuthStatus(!open, auth.allowed(a), open, auth.signupAllowed(), user.map(auth::isEnvAdmin).orElse(false),
+                user.map(UserInfo::of).orElse(null), cur, list);
     }
 
     /** Đăng nhập thành công: lưu SecurityContext vào phiên (Spring Session ghi vào Redis) và đổi mã phiên (chống session fixation) */
@@ -100,14 +94,14 @@ public class AuthController {
         Requests.Login b = body == null ? Requests.Login.EMPTY : body;
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) return ApiExceptionHandler.error(429, "Nhập sai quá nhiều lần. Thử lại sau " + wait + " phút.");
-        if (auth.openMode()) return ResponseEntity.ok(OK);
+        if (auth.openMode()) return ResponseEntity.ok(Ok.OK);
         String username = b.username().isBlank() ? AuthService.ADMIN : b.username();
         try {
             Authentication a = authManager.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(AuthService.normalize(username), b.password()));
             attempts.clear(req);
             signIn(a, req, res);
-            return ResponseEntity.ok(OK);
+            return ResponseEntity.ok(Ok.OK);
         } catch (AuthenticationException e) {
             attempts.recordFail(req);
             Thread.sleep(600); // làm chậm dò mật khẩu
@@ -116,31 +110,31 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    Map<String, Object> logout(HttpServletRequest req) {
+    Ok logout(HttpServletRequest req) {
         HttpSession s = req.getSession(false);
         if (s != null) s.invalidate();
         SecurityContextHolder.clearContext();
-        return OK;
+        return Ok.OK;
     }
 
     /** Tạo tài khoản đầu tiên (chỉ khi chưa có tài khoản nào): chủ workspace 1, đăng nhập luôn */
     @PostMapping("/setup")
-    Map<String, Object> setup(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
+    Ok setup(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
         Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
         User u = auth.setup(b.username(), b.name(), b.password());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
-        return OK;
+        return Ok.OK;
     }
 
     /** Tự đăng ký (ALLOW_SIGNUP=true): tài khoản + workspace riêng, đăng nhập luôn */
     @PostMapping("/register")
-    Map<String, Object> register(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
+    Ok register(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) throw new ApiException(429, "Thử quá nhiều lần. Thử lại sau " + wait + " phút.");
         Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
         User u = auth.register(b.username(), b.name(), b.password(), b.workspaceName());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
-        return OK;
+        return Ok.OK;
     }
 
     /** Đổi mật khẩu của chính mình, rồi đăng xuất mọi thiết bị khác của người này */
@@ -150,10 +144,8 @@ public class AuthController {
         if (uid == null) return ApiExceptionHandler.error(400, "Chưa có tài khoản nào. Hãy tạo tài khoản trước.");
         String cur = b.currentPassword() == null ? "" : b.currentPassword();
         if (!cur.isEmpty() && cur.equals(b.newPassword())) {
-            Map<String, Object> body = new LinkedHashMap<>();
-            body.put("error", "Mật khẩu mới phải khác mật khẩu hiện tại");
-            body.put("errors", Map.of("newPassword", "Mật khẩu mới phải khác mật khẩu hiện tại"));
-            return ResponseEntity.badRequest().body(body);
+            String same = "Mật khẩu mới phải khác mật khẩu hiện tại";
+            return ResponseEntity.badRequest().body(ApiError.withErrors(same, Map.of("newPassword", same)));
         }
         auth.changePassword(uid, cur, b.newPassword());
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -164,6 +156,6 @@ public class AuthController {
         Long ws = mine == null ? null : (Long) mine.getAttribute(WorkspaceFilter.SESSION_WS);
         signIn(PasswordAuthProvider.signedIn(username), req, res);
         if (ws != null) req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, ws);
-        return ResponseEntity.ok(OK);
+        return ResponseEntity.ok(Ok.OK);
     }
 }

@@ -6,6 +6,8 @@ import com.fbads.client.RateLimits;
 import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.AccountError;
+import com.fbads.dto.Responses.AccountRef;
 import com.fbads.dto.Responses.ObjectsMeta;
 import com.fbads.dto.Responses.Usage;
 import com.fbads.service.SettingsService;
@@ -143,22 +145,14 @@ public class FacebookObjects {
                 state.isMock() ? List.of() : w.accErrors);
     }
 
-    /** Tài khoản quảng cáo đang quản lý: { id, name, currency } */
-    public List<Map<String, Object>> accounts() {
-        List<Map<String, Object>> out = new ArrayList<>();
-        if (state.isMock()) {
-            for (MockAds.Account a : MockAds.ACCOUNTS) {
-                out.add(new LinkedHashMap<>(Map.of("id", a.accountId(), "name", a.accountName(), "currency",
-                        a.currency())));
-            }
-        } else {
-            for (String id : settings.get().accountIds()) {
-                AccInfo ai = state.ws().accInfo.get(id);
-                out.add(new LinkedHashMap<>(Map.of("id", id, "name", ai != null ? ai.name() : id, "currency",
-                        ai != null ? ai.currency() : "")));
-            }
-        }
-        return out;
+    /** Tài khoản quảng cáo đang quản lý */
+    public List<AccountRef> accounts() {
+        if (state.isMock())
+            return MockAds.ACCOUNTS.stream().map(a -> new AccountRef(a.accountId(), a.accountName(), a.currency())).toList();
+        return settings.get().accountIds().stream().map(id -> {
+            AccInfo ai = state.ws().accInfo.get(id);
+            return new AccountRef(id, ai != null ? ai.name() : id, ai != null ? ai.currency() : "");
+        }).toList();
     }
 
     // ------------------------------------------------------------------ Tải từ Facebook
@@ -170,7 +164,7 @@ public class FacebookObjects {
         String rs = settings.get().getResultAction();
         if (ids.isEmpty()) throw new FbException("Chưa chọn tài khoản quảng cáo.", null);
         List<AdObject> out = new ArrayList<>();
-        List<Map<String, Object>> errors = new ArrayList<>();
+        List<AccountError> errors = new ArrayList<>();
         RuntimeException first = null;
         for (String id : ids) {
             try {
@@ -179,11 +173,7 @@ public class FacebookObjects {
                 if (FbException.isRateLimited(e)) throw e;
                 if (first == null) first = e;
                 AccInfo ai = w.accInfo.get(id);
-                Map<String, Object> er = new LinkedHashMap<>();
-                er.put("id", id);
-                er.put("name", ai != null ? ai.name() : id);
-                er.put("error", e.getMessage());
-                errors.add(er);
+                errors.add(new AccountError(id, ai != null ? ai.name() : id, e.getMessage()));
             }
         }
         if (errors.size() == ids.size()) throw first;

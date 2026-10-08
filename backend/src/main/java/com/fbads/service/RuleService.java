@@ -2,6 +2,8 @@ package com.fbads.service;
 
 import com.fbads.common.Ids;
 import com.fbads.common.ValidationException;
+import com.fbads.dto.Responses.RuleActivity;
+import com.fbads.dto.Responses.RulePreview;
 import com.fbads.dto.RuleRequest;
 import com.fbads.dto.Saved;
 import com.fbads.engine.EngineLock;
@@ -13,7 +15,6 @@ import com.fbads.validation.Result;
 import com.fbads.validation.RuleValidator;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -38,7 +39,7 @@ public class RuleService {
 
     private Result<Rule> validate(RuleRequest input, List<Rule> existing) {
         List<RuleValidator.Account> accounts = objects.accounts().stream()
-                .map(a -> new RuleValidator.Account((String) a.get("id"), (String) a.get("name"))).toList();
+                .map(a -> new RuleValidator.Account(a.id(), a.name())).toList();
         Result<Rule> r = RuleValidator.validate(input, objects.objectsForValidation(), existing,
                 settings.get().getAccountTargets(), accounts);
         if (!r.ok()) throw new ValidationException(r);
@@ -63,12 +64,10 @@ public class RuleService {
     public void runNow() { lock.run(() -> { runner.runRules(); return null; }); }
 
     /** Xem trước: rule (chưa lưu) đang khớp camp nào ngay bây giờ — không thay đổi gì */
-    public Map<String, Object> preview(RuleRequest input) {
+    public RulePreview preview(RuleRequest input) {
         Result<Rule> r = validate((input == null ? RuleRequest.EMPTY : input).enabledCopy(), List.of());
-        Map<String, Object> out = new LinkedHashMap<>(runner.preview(r.value()));
-        out.put("warnings", r.warnings());
-        return out;
+        return runner.preview(r.value()).withWarnings(r.warnings());
     }
 
-    public Map<String, Object> activity() { return runner.activity(); }
+    public Map<String, RuleActivity> activity() { return runner.activity(); }
 }

@@ -21,9 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -145,7 +143,7 @@ public class AuthService {
 
     /** Lỗi của một trường: giao diện hiện ngay dưới ô nhập */
     static ApiException field(String name, String message) {
-        return new ApiException(400, message).with("errors", Map.of(name, message));
+        return new ApiException(400, message).withFieldError(name, message);
     }
 
     private User newUser(String username, String name, String password) {
@@ -296,11 +294,4 @@ public class AuthService {
     }
 
     /** Dữ liệu cho giao diện về người đang đăng nhập */
-    public static Map<String, Object> userJson(User u) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", u.getId());
-        m.put("username", u.getUsername());
-        m.put("name", u.getName());
-        return m;
-    }
 }

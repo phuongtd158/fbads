@@ -5,6 +5,13 @@ import com.fbads.common.Fmt;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Condition;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.Counts;
+import com.fbads.dto.Responses.LastRun;
+import com.fbads.dto.Responses.PreviewCond;
+import com.fbads.dto.Responses.PreviewItem;
+import com.fbads.dto.Responses.PreviewResult;
+import com.fbads.dto.Responses.RuleActivity;
+import com.fbads.dto.Responses.RulePreview;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogCondition;
 import com.fbads.entity.LogEntry;
@@ -30,7 +37,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Function;
 
 /** Chạy rule theo chu kỳ, bật lại camp theo hẹn, xem trước rule và thống kê hoạt động của rule. */
 @Service
@@ -79,16 +85,6 @@ public class RuleRunner {
         Map<String, Map<String, Metrics>> maps = new LinkedHashMap<>();
         for (String range : ranges) maps.put(range, insights.rangeMetrics(range, force));
         return maps;
-    }
-
-    /** Các trường thêm của 1 điều kiện (xem trước rule): khoảng so sánh, bậc ngưỡng theo kết quả, bậc của rule tăng theo bậc */
-    private static void extras(Map<String, Object> m, RuleEvaluator.CondEval c) {
-        if (c.compareRange() != null) m.put("compareRange", c.compareRange());
-        if (c.tierMetric() != null) {
-            m.put("tierMetric", c.tierMetric()); m.put("tierCount", c.tierCount());
-            m.put("tierAt", c.tier() != null ? c.tier().count() : null);
-        }
-        if (c.ladderNeed() != null && c.ladderNeed() != 0) { m.put("ladderStep", c.ladderStep()); m.put("ladderNeed", c.ladderNeed()); }
     }
 
     public void runRules() {
@@ -181,70 +177,60 @@ public class RuleRunner {
     }
 
     /** Xem trước: rule này đang khớp camp nào NGAY BÂY GIỜ (không thay đổi gì, không cập nhật thời gian nghỉ) */
-    public Map<String, Object> preview(Rule rule) {
+    public RulePreview preview(Rule rule) {
         List<AdObject> objs = objects.listObjects(false);
         Map<String, Map<String, Metrics>> maps = loadMaps(List.of(rule), false);
-        List<Map<String, Object>> items = new ArrayList<>();
-        for (RuleEvaluator.Decision d : evaluator.evaluate(rule, objs, maps, new Delivery.View(objs))) {
-            Map<String, Object> i = new LinkedHashMap<>();
-            i.put("id", d.obj.id); i.put("name", d.obj.name); i.put("level", d.obj.level.code()); i.put("effective", d.obj.effective);
-            i.put("learning", d.obj.learning); i.put("budget", d.obj.dailyBudget);
-            i.put("status", d.status.code()); i.put("code", d.code); i.put("reason", d.reason); i.put("hit", d.hit);
-            i.put("value", d.value == null ? null : finite(d.value)); i.put("inf", d.value != null && d.value == Double.POSITIVE_INFINITY);
-            i.put("spend", d.metrics.spend()); i.put("results", d.metrics.results());
-            List<Map<String, Object>> conds = new ArrayList<>();
-            for (RuleEvaluator.CondEval c : d.conds) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("metric", c.metric()); m.put("op", c.op()); m.put("vs", c.vs()); m.put("factor", c.factor());
-                m.put("threshold", c.threshold());
-                m.put("actual", finite(c.actual())); m.put("inf", c.actual() == Double.POSITIVE_INFINITY);
-                m.put("hit", c.hit()); m.put("unknown", c.unknown());
-                extras(m, c);
-                conds.add(m);
-            }
-            i.put("conds", conds);
-            i.put("result", d.plan != null && d.plan.is(PlanKind.DO) ? Map.of("detail", d.plan.detail(), "notify", d.plan.notifyOnly()) : null);
-            items.add(i);
-        }
+        List<PreviewItem> items = evaluator.evaluate(rule, objs, maps, new Delivery.View(objs)).stream()
+                .map(RuleRunner::previewItem).toList();
         AppSettings s = settings.get();
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("range", rangeOf(rule).code());
-        out.put("mode", s.mode());
-        out.put("willChange", !s.isDry());
-        out.put("items", items);
-        out.put("counts", Map.of("match", items.stream().filter(i -> "match".equals(i.get("status"))).count(), "total", items.size()));
-        return out;
+        long matched = items.stream().filter(i -> i.status() == DecisionStatus.MATCH).count();
+        return new RulePreview(rangeOf(rule).code(), s.mode(), !s.isDry(), items, new Counts(matched, items.size()), null);
+    }
+
+    private static PreviewItem previewItem(RuleEvaluator.Decision d) {
+        AdObject o = d.obj;
+        PreviewResult result = d.plan != null && d.plan.is(PlanKind.DO) ? new PreviewResult(d.plan.detail(), d.plan.notifyOnly()) : null;
+        return new PreviewItem(o.id, o.name, o.level, o.effective, o.learning, o.dailyBudget, d.status, d.code, d.reason, d.hit,
+                d.value == null ? null : finite(d.value), d.value != null && isInf(d.value), d.metrics.spend(), d.metrics.results(),
+                d.conds.stream().map(RuleRunner::previewCond).toList(), result);
+    }
+
+    /** Một điều kiện trong xem trước; bậc theo kết quả (tier…) và bậc của rule tăng theo bậc (ladder…) chỉ có khi dùng */
+    private static PreviewCond previewCond(RuleEvaluator.CondEval c) {
+        boolean tiered = c.tierMetric() != null, laddered = c.ladderNeed() != null && c.ladderNeed() != 0;
+        return new PreviewCond(c.metric(), c.op(), c.vs(), c.factor(), c.threshold(), finite(c.actual()), isInf(c.actual()),
+                c.hit(), c.unknown(), c.compareRange(), c.tierMetric(), tiered ? c.tierCount() : null,
+                tiered && c.tier() != null ? c.tier().count() : null, laddered ? c.ladderStep() : null,
+                laddered ? c.ladderNeed() : null);
+    }
+
+    /** Số đếm hoạt động của một rule trong lúc duyệt nhật ký */
+    private static final class Tally {
+        int acts, errors, resumePending;
+        LastRun last;
+
+        RuleActivity done() { return new RuleActivity(acts, errors, last, resumePending); }
     }
 
     /**
      * Hoạt động gần đây của mỗi rule: số lần tác động / lỗi trong 7 ngày, lần gần nhất, số mục đang chờ bật lại. Không
      * tính dòng "Bỏ qua".
      */
-    public Map<String, Object> activity() {
+    public Map<String, RuleActivity> activity() {
         long since = System.currentTimeMillis() - 7 * 86_400_000L;
-        Map<String, Map<String, Object>> out = new LinkedHashMap<>();
-        Function<String, Map<String, Object>> get = id -> out.computeIfAbsent(id, k -> {
-            Map<String, Object> a = new LinkedHashMap<>();
-            a.put("acts", 0); a.put("errors", 0); a.put("last", null); a.put("resumePending", 0);
-            return a;
-        });
+        Map<String, Tally> byRule = new LinkedHashMap<>();
         for (LogEntry l : logs.ofKind(LogKind.RULE)) { // mới nhất trước
             if (l.getRefId() == null || Boolean.TRUE.equals(l.getSkipped())) continue;
-            Map<String, Object> a = get.apply(l.getRefId());
-            if (a.get("last") == null) {
-                Map<String, Object> last = new LinkedHashMap<>();
-                last.put("ts", l.getTs().toString()); last.put("name", l.getName()); last.put("detail", l.getDetail());
-                last.put("ok", l.succeeded()); last.put("dry", Boolean.TRUE.equals(l.getDry()));
-                a.put("last", last);
-            }
+            Tally t = byRule.computeIfAbsent(l.getRefId(), k -> new Tally());
+            if (t.last == null)
+                t.last = new LastRun(l.getTs().toString(), l.getName(), l.getDetail(), l.succeeded(), Boolean.TRUE.equals(l.getDry()));
             if (l.getTs().toEpochMilli() < since) continue;
-            if (!l.succeeded()) a.put("errors", (int) a.get("errors") + 1);
-            else a.put("acts", (int) a.get("acts") + 1);
+            if (l.succeeded()) t.acts++;
+            else t.errors++;
         }
-        for (RuleResume p : state.resumes()) {
-            Map<String, Object> a = get.apply(p.getKey().ruleId());
-            a.put("resumePending", (int) a.get("resumePending") + 1);
-        }
-        return new LinkedHashMap<>(out);
+        for (RuleResume p : state.resumes()) byRule.computeIfAbsent(p.getKey().ruleId(), k -> new Tally()).resumePending++;
+        Map<String, RuleActivity> out = new LinkedHashMap<>();
+        byRule.forEach((id, t) -> out.put(id, t.done()));
+        return out;
     }
 }

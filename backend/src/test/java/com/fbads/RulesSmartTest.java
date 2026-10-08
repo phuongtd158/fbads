@@ -4,6 +4,8 @@ import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.dto.Condition;
 import com.fbads.dto.Metrics;
+import com.fbads.dto.Responses.PreviewCond;
+import com.fbads.dto.Responses.RulePreview;
 import com.fbads.dto.RuleRequest;
 import com.fbads.engine.DecisionStatus;
 import com.fbads.engine.EngineClock;
@@ -190,15 +192,13 @@ class RulesSmartTest extends IntegrationBase {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     void comparePreviewLoadsCompareRange() {
-        Map<String, Object> pv = ruleService.preview(mapper.convertValue(with(cmpBase, "range", "yesterday", "minSpend", 1,
+        RulePreview pv = ruleService.preview(mapper.convertValue(with(cmpBase, "range", "yesterday", "minSpend", 1,
                 "conditions", List.of(cmp("metric", "spend", "factor", 50))), RuleRequest.class));
-        List<Map<String, Object>> items = (List<Map<String, Object>>) pv.get("items");
-        assertThat(items).isNotEmpty();
-        List<Map<String, Object>> c0 = items.stream().map(i -> ((List<Map<String, Object>>) i.get("conds")).getFirst()).toList();
-        assertThat(c0).as("có ngưỡng tính từ số liệu 7 ngày").anyMatch(c -> c.get("threshold") != null);
-        assertThat(c0.getFirst().get("compareRange")).isEqualTo("last_7d");
+        assertThat(pv.items()).isNotEmpty();
+        List<PreviewCond> c0 = pv.items().stream().map(i -> i.conds().getFirst()).toList();
+        assertThat(c0).as("có ngưỡng tính từ số liệu 7 ngày").anyMatch(c -> c.threshold() != null);
+        assertThat(c0.getFirst().compareRange()).isEqualTo("last_7d");
     }
 
     // ----- Ngưỡng chi tiêu theo số kết quả

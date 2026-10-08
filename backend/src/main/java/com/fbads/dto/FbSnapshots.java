@@ -8,7 +8,7 @@ public final class FbSnapshots {
     private FbSnapshots() {}
 
     /** Danh sách camp/nhóm QC lúc `at` (mili giây) */
-    public record Objects(long at, List<AdObject> items, List<Map<String, Object>> accountErrors, String currency) {}
+    public record Objects(long at, List<AdObject> items, List<Responses.AccountError> accountErrors, String currency) {}
 
     /** Số liệu theo khoảng ngày: { [id]: metrics } lúc `at` */
     public record Range(long at, Map<String, Metrics> data, boolean mock) {}

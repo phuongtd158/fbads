@@ -1,12 +1,12 @@
 package com.fbads.controller;
 
+import com.fbads.dto.Responses.Health;
 import com.fbads.engine.EngineWatch;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
 
 /**
  * /api/health cho UptimeRobot / Render: 503 khi vòng lịch/rule không chạy xong lượt nào trong 5 phút
@@ -20,8 +20,8 @@ public class HealthController {
     public HealthController(EngineWatch watch) { this.watch = watch; }
 
     @GetMapping("/health")
-    ResponseEntity<Map<String, Object>> health() {
-        Map<String, Object> h = watch.health();
-        return ResponseEntity.status(Boolean.TRUE.equals(h.get("ok")) ? 200 : 503).body(h);
+    ResponseEntity<Health> health() {
+        Health h = watch.health();
+        return ResponseEntity.status(h.ok() ? 200 : 503).body(h);
     }
 }
