@@ -1,8 +1,9 @@
 package com.fbads.event;
 
+import com.fbads.notify.Notifier;
+import com.fbads.notify.NotifyFailure;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.LiveEvents;
-import com.fbads.service.TelegramNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,7 +17,7 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 
 /**
  * KAFKA_ENABLED khác "true" (mặc định false, và trên Render): sự kiện đi bằng Spring events trong cùng ứng dụng.
- * Các consumer chạy ngay trên luồng vừa phát, lần lượt: WebSocket → thống kê → Telegram.
+ * Các consumer chạy ngay trên luồng vừa phát, lần lượt: WebSocket → thống kê → thông báo.
  * Mỗi consumer tự bắt lỗi của mình, để một consumer lỗi không chặn các consumer sau (và không làm hỏng việc đang phát).
  */
 @Configuration
@@ -26,13 +27,13 @@ public class LocalEvents {
 
     private final LiveEvents live;
     private final EventStatsService stats;
-    private final TelegramNotifier telegram;
+    private final Notifier notifier;
 
-    public LocalEvents(LiveEvents live, EventStatsService stats, TelegramNotifier telegram,
+    public LocalEvents(LiveEvents live, EventStatsService stats, Notifier notifier,
                        @Qualifier("redisListeners") RedisMessageListenerContainer redisListeners) {
         this.live = live;
         this.stats = stats;
-        this.telegram = telegram;
+        this.notifier = notifier;
         live.listenRedis(redisListeners); // WebSocket: nhiều bản tool thì sự kiện đi qua Redis pub/sub
     }
 
@@ -58,13 +59,13 @@ public class LocalEvents {
     /** Không Kafka thì không có hàng đợi để thử lại: gửi lỗi chỉ ghi log (như trước khi có Kafka) */
     @EventListener
     @Order(3)
-    public void telegram(AppEvent e) {
+    public void notify(AppEvent e) {
         try {
-            e.runInWorkspace(() -> telegram.handle(e));
-        } catch (TelegramNotifier.RetryableFailure | TelegramNotifier.PermanentFailure ex) {
-            // TelegramService đã ghi log lý do
+            e.runInWorkspace(() -> notifier.handle(e));
+        } catch (NotifyFailure ex) {
+            // từng kênh đã ghi log lý do
         } catch (RuntimeException ex) {
-            log.warn("Không gửi được Telegram cho sự kiện {}: {}", e.id(), ex.getMessage());
+            log.warn("Không gửi được thông báo cho sự kiện {}: {}", e.id(), ex.getMessage());
         }
     }
 }

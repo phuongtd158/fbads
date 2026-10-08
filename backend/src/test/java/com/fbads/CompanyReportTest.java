@@ -19,7 +19,7 @@ import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;
 import com.fbads.service.facebook.FacebookState;
@@ -65,7 +65,7 @@ class CompanyReportTest extends IntegrationBase {
     @Autowired CompanyConfigRepository configs;
     @Autowired CompanyReportRepository reports;
     @Autowired SettingsService settings;
-    @Autowired TelegramService telegram;
+    @Autowired TelegramChannel telegram;
     @Autowired EngineClock clock;
     @Autowired EngineState state;
     @Autowired LogService logs;

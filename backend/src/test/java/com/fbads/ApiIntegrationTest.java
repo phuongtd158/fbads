@@ -15,7 +15,7 @@ import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.channel.TelegramChannel;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -74,7 +74,7 @@ class ApiIntegrationTest extends IntegrationBase {
     @Autowired
     LogService logs;
     @Autowired
-    TelegramService telegram;
+    TelegramChannel telegram;
     @Autowired
     EventStatsService stats;
     @Autowired

@@ -7,7 +7,9 @@ import com.fbads.engine.EngineWatch;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.Notice;
+import com.fbads.notify.SendResult;
+import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.WsState;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookAuth;
@@ -46,7 +48,7 @@ class WatchIntegrationTest extends IntegrationBase {
     @Autowired
     GraphClient graph;
     @Autowired
-    TelegramService telegram;
+    TelegramChannel telegram;
     @Autowired
     EngineWatch watch;
     @Autowired
@@ -88,7 +90,7 @@ class WatchIntegrationTest extends IntegrationBase {
         fbGraph.setGraphBase(GraphClient.BASE);
         graph.setTimeout(GraphClient.TIMEOUT);
         telegram.setApiBase("https://api.telegram.org");
-        telegram.setTimeout(TelegramService.TIMEOUT);
+        telegram.setTimeout(TelegramChannel.TIMEOUT);
         clock.setClock(Clock.systemUTC());
         watch.reset();
         state.clearAll();
@@ -140,9 +142,9 @@ class WatchIntegrationTest extends IntegrationBase {
         telegram.setApiBase(fbStub.base());
         telegram.setTimeout(Duration.ofMillis(300));
         fbStub.script("hang");
-        TelegramService.SendResult r = telegram.send("xin chào");
-        assertThat(r.results().getFirst().ok()).isFalse();
-        assertThat(r.results().getFirst().error()).contains("không trả lời");
+        SendResult r = telegram.send(new Notice(Notice.Topic.ALERT, "xin chào"), Api.JSON.readTree("{\"token\":\"123:abc\",\"chatId\":\"42\"}"));
+        assertThat(r.recipients().getFirst().ok()).isFalse();
+        assertThat(r.recipients().getFirst().error()).contains("không trả lời");
     }
 
     @Test

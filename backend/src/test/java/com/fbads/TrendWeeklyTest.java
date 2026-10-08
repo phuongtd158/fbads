@@ -13,7 +13,7 @@ import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.facebook.FacebookGraph;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookState;
@@ -44,7 +44,7 @@ class TrendWeeklyTest extends IntegrationBase {
     @Autowired FacebookInsights insights;
     @Autowired FacebookGraph fbGraph;
     @Autowired FacebookState fbState;
-    @Autowired TelegramService telegram;
+    @Autowired TelegramChannel telegram;
     @Autowired ReportService report;
     @Autowired EngineClock clock;
     @Autowired EngineState state;

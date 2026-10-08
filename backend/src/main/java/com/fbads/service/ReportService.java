@@ -9,6 +9,9 @@ import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogEntry;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.notify.Notice;
+import com.fbads.notify.Notifier;
+import com.fbads.notify.SendResult;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;
@@ -31,27 +34,27 @@ import java.util.function.ToDoubleFunction;
 public class ReportService {
     private final FacebookObjects objects;
     private final FacebookInsights insights;
-    private final TelegramService telegram;
+    private final Notifier notifier;
     private final SettingsService settings;
     private final EngineState state;
     private final EngineClock clock;
     private final EventBus events;
     private final LogService logs;
 
-    public ReportService(FacebookObjects objects, FacebookInsights insights, TelegramService telegram,
+    public ReportService(FacebookObjects objects, FacebookInsights insights, Notifier notifier,
                          SettingsService settings, EngineState state, EngineClock clock, EventBus events, LogService logs) {
         this.events = events;
         this.logs = logs;
         this.objects = objects;
         this.insights = insights;
-        this.telegram = telegram;
+        this.notifier = notifier;
         this.settings = settings;
         this.state = state;
         this.clock = clock;
     }
 
     /** Nút "Gửi báo cáo": gửi ngay, trả kết quả cho giao diện */
-    public TelegramService.SendResult send() { return telegram.send(text()); }
+    public SendResult send() { return notifier.sendNow(new Notice(Notice.Topic.REPORT, text())); }
 
     String text() {
         List<AdObject> camps = objects.listObjects(true).stream().filter(AdObject::isCampaign).toList();
@@ -204,5 +207,5 @@ public class ReportService {
     }
 
     /** Nút "Gửi báo cáo tuần": gửi ngay, trả kết quả cho giao diện */
-    public TelegramService.SendResult sendWeekly() { return telegram.send(weeklyText(clock.now())); }
+    public SendResult sendWeekly() { return notifier.sendNow(new Notice(Notice.Topic.REPORT, weeklyText(clock.now()))); }
 }

@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 
 /**
  * Lập kế hoạch (plan) và thực thi (act) một hành động lên camp/nhóm QC, tôn trọng chế độ chạy thử,
- * ghi nhật ký (Telegram do consumer của sự kiện log.created gửi, xem service/TelegramNotifier). Bản Java của
+ * ghi nhật ký (thông báo do consumer của sự kiện log.created gửi, xem notify/Notifier). Bản Java của
  * plan()/act()/record() trong lib/engine.js.
  */
 @Service

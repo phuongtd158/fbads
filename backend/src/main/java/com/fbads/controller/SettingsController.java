@@ -3,10 +3,12 @@ package com.fbads.controller;
 import com.fbads.dto.Responses.State;
 import com.fbads.dto.Responses.Storage;
 import com.fbads.dto.SettingsPatch;
+import com.fbads.notify.Notice;
+import com.fbads.notify.Notifier;
+import com.fbads.notify.SendResult;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
 import com.fbads.service.facebook.FacebookObjects;
 import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Result;
@@ -33,16 +35,16 @@ public class SettingsController {
     private final RuleService rules;
     private final FacebookObjects objects;
     private final FacebookState fbState;
-    private final TelegramService telegram;
+    private final Notifier notifier;
 
     public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules,
-            FacebookObjects objects, FacebookState fbState, TelegramService telegram) {
+            FacebookObjects objects, FacebookState fbState, Notifier notifier) {
         this.settings = settings;
         this.schedules = schedules;
         this.rules = rules;
         this.objects = objects;
         this.fbState = fbState;
-        this.telegram = telegram;
+        this.notifier = notifier;
     }
 
     @GetMapping("/state")
@@ -69,7 +71,8 @@ public class SettingsController {
 
     @PostMapping("/telegram/test")
     ResponseEntity<?> telegramTest() {
-        TelegramService.Reply out = TelegramService.reply(telegram.send("✅ Kết nối Telegram thành công — Facebook Ads Auto Tool"));
+        SendResult.Reply out = notifier.sendNow(new Notice(Notice.Topic.ALERT, "✅ Kết nối Telegram thành công — Facebook Ads Auto Tool"))
+                .reply("Cần nhập Bot Token và Chat ID trước.");
         return ResponseEntity.status(out.status()).body(out.body());
     }
 }

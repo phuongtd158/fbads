@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Máy chủ giả thay api.telegram.org trong test (TelegramService.setApiBase): ghi lại mọi tin nhận được,
+ * Máy chủ giả thay api.telegram.org trong test (TelegramChannel.setApiBase): ghi lại mọi tin nhận được,
  * trả mã HTTP tuỳ chỉnh (200 = gửi được, 500 = Telegram lỗi tạm thời, 400 = chat id sai).
  */
 final class TelegramStub implements AutoCloseable {

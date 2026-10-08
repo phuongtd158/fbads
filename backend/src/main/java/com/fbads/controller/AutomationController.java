@@ -6,7 +6,7 @@ import com.fbads.dto.ScheduleRequest;
 import com.fbads.service.ReportService;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.SendResult;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -84,15 +84,17 @@ public class AutomationController {
     }
 
     // ----- Báo cáo -----
+    private static final String NO_CHANNEL = "Cần nhập Bot Token và Chat ID trước.";
+
     @PostMapping("/report")
     ResponseEntity<?> sendReport() {
-        TelegramService.Reply out = TelegramService.reply(report.send());
+        SendResult.Reply out = report.send().reply(NO_CHANNEL);
         return ResponseEntity.status(out.status()).body(out.body());
     }
 
     @PostMapping("/report/weekly")
     ResponseEntity<?> sendWeeklyReport() {
-        TelegramService.Reply out = TelegramService.reply(report.sendWeekly());
+        SendResult.Reply out = report.sendWeekly().reply(NO_CHANNEL);
         return ResponseEntity.status(out.status()).body(out.body());
     }
 }

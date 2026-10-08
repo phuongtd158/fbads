@@ -8,7 +8,7 @@ import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.channel.TelegramChannel;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -93,7 +93,7 @@ class KafkaEventsTest {
     @Autowired
     ActionExecutor executor;
     @Autowired
-    TelegramService telegram;
+    TelegramChannel telegram;
     @Autowired
     SettingsService settings;
     @Autowired
@@ -256,7 +256,7 @@ class KafkaEventsTest {
 
         ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().contains(logId));
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã bật")).isEqualTo(3);
-        assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("RetryableFailure");
+        assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Retryable");
         assertThat(header(dead, "kafka_exception-message")).contains("Internal Server Error");
     }
 
@@ -268,7 +268,7 @@ class KafkaEventsTest {
         String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã tắt"); }).getId();
 
         ConsumerRecord<String, String> dead = find(EventTopics.TELEGRAM_DLT, r -> r.value().contains(logId));
-        assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("PermanentFailure");
+        assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Permanent");
         Thread.sleep(1500); // nếu có thử lại (300 ms) thì đã kịp gọi thêm
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã tắt")).isEqualTo(1);
     }

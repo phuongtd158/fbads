@@ -6,7 +6,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
-import com.fbads.service.TelegramService;
+import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.WsState;
 import com.fbads.service.facebook.FacebookGraph;
 import com.fbads.service.facebook.FacebookInsights;
@@ -31,7 +31,7 @@ class AlertsIntegrationTest extends IntegrationBase {
     @Autowired SettingsService settings;
     @Autowired FacebookGraph fbGraph;
     @Autowired FacebookState fbState;
-    @Autowired TelegramService telegram;
+    @Autowired TelegramChannel telegram;
     @Autowired AlertWatch alerts;
     @Autowired EngineClock clock;
     @Autowired WsState state;
