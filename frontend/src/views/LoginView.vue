@@ -35,7 +35,7 @@ function toggle() { mode.value = mode.value === 'login' ? 'register' : 'login'; 
 const features = [
   { i: CalendarClock, t: 'Hẹn giờ bật/tắt camp', d: 'Không cần dậy sớm nữa — tool chạy đúng giờ thay bạn.' },
   { i: Zap, t: 'Rule theo hiệu quả', d: 'Tự tắt camp CPA cao, tăng ngân sách camp ROAS tốt.' },
-  { i: BellRing, t: 'Báo cáo qua Telegram', d: 'Nhận thông báo mỗi khi tool thay đổi camp.' },
+  { i: BellRing, t: 'Thông báo qua Telegram, Gmail', d: 'Nhận tin mỗi khi tool thay đổi camp.' },
 ]
 </script>
 

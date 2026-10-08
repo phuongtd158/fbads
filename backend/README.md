@@ -1,7 +1,7 @@
 # Backend (Spring Boot)
 
 Bản chuyển backend Node (`server.js`, `lib/`) sang **Java 21 + Spring Boot 4**, dữ liệu lưu ở **MySQL 8**, cache/phiên đăng nhập/khoá/sự kiện realtime ở **Redis**,
-sự kiện (Telegram, thống kê, cập nhật giao diện) đi qua **Kafka** khi bật.
+sự kiện (thông báo, thống kê, cập nhật giao diện) đi qua **Kafka** khi bật.
 Giao diện Vue (`../frontend`) gọi đúng các API cũ: cùng đường dẫn, cùng dạng JSON.
 
 Mục đích chính là **học**. Bản Node (nhánh `dev`) vẫn là bản đang chạy thật; nhánh này đã bỏ hẳn code Node.
@@ -56,20 +56,21 @@ Mỗi thay đổi là một sự kiện (`event/AppEvent`), phát một lần qu
 
 | Consumer | Làm gì |
 |---|---|
-| Telegram (`TelegramNotifier`) | Gửi tin cho lịch, rule, dừng khẩn, hoàn tác, báo cáo hằng ngày. Thao tác tay không báo |
+| Thông báo (`notify/Notifier`) | Gửi tin cho lịch, rule, dừng khẩn, hoàn tác, cảnh báo, báo cáo tới các kênh của workspace (Telegram, Gmail…). Thao tác tay không báo |
 | Thống kê (`EventStatsService`) | Đếm số thao tác theo ngày và nguồn (`schedule`, `rule`, `manual`…) vào bảng `event_stats` |
 | Giao diện (`LiveEvents`) | Đẩy nhật ký, camp vừa đổi, lượt tự động xuống trình duyệt qua WebSocket |
 
-Loại sự kiện: `log.created`, `log.updated`, `objects.changed`, `engine.tick`, `report.daily`.
+Loại sự kiện: `log.created`, `log.updated`, `objects.changed`, `engine.tick`, `report.daily`, `notice` (thông báo soạn sẵn).
 
 **`KAFKA_ENABLED=false`** (mặc định, và trên Render): sự kiện đi bằng Spring events trong cùng ứng dụng, giao diện nhận qua Redis pub/sub. Không cần Kafka.
 
 **`KAFKA_ENABLED=true`**:
 - Mọi sự kiện lên topic `fbads.events` (3 partition, nội dung JSON). Sự kiện nhật ký dùng chung khoá `logs` nên đến đúng thứ tự.
 - Mỗi consumer một group: `fbads-telegram`, `fbads-stats`, và `fbads-live-<ngẫu nhiên>` (mỗi bản tool một group, không lưu vị trí đã đọc).
-- Telegram lỗi tạm thời (mất mạng, 429, 5xx): thử lại qua topic `fbads.events-telegram-retry-0`, `-1`, `-2` (chờ 5 giây, 15 giây, 45 giây),
-  hết lượt thì vào `fbads.events-telegram-dlt`. Lỗi cố định (token, chat id sai) vào thẳng DLT.
-- Kafka có thể giao một sự kiện 2 lần: thống kê ghi mã sự kiện đã đếm (`event_stats_seen`), Telegram đánh dấu tin đã gửi trong Redis (`fbads:tg:<id>`, giữ 2 ngày). Nhận lại thì bỏ qua.
+- Group `fbads-telegram` là consumer thông báo (giữ tên cũ: đổi tên thì Kafka đọc lại từ đầu topic và gửi lại tin cũ).
+- Một kênh lỗi tạm thời (mất mạng, 429, 5xx): thử lại cả sự kiện qua topic `fbads.events-notify-retry-0`, `-1`, `-2` (chờ 5 giây, 15 giây, 45 giây),
+  hết lượt thì vào `fbads.events-notify-dlt`. Lỗi cố định (token, người nhận sai) vào thẳng DLT.
+- Kafka có thể giao một sự kiện 2 lần: thống kê ghi mã sự kiện đã đếm (`event_stats_seen`), thông báo đánh dấu đã gửi trong Redis theo từng kênh (`fbads:notify:<sự kiện>:<kênh>`, giữ 2 ngày). Nhận lại, hoặc thử lại vì kênh khác lỗi, thì kênh đã gửi được bỏ qua.
 - Kafka chưa chạy lúc khởi động: tool dừng và in thông báo tiếng Việt (mục "APPLICATION FAILED TO START") nói cách tắt Kafka hoặc bật Kafka (`event/KafkaStartupFailure`). Kafka tắt giữa chừng: tool vẫn chạy bình thường, chỉ mất thông báo và cập nhật tức thì trong lúc đó (dữ liệu vẫn ở DB).
   Gửi lên Kafka chạy ở luồng riêng nên thao tác trên giao diện không bị chậm.
 
@@ -86,7 +87,7 @@ Xem sự kiện đang chạy qua topic, và thống kê:
 
 ```bash
 docker exec -it fbads-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fbads.events --from-beginning
-docker exec -it fbads-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fbads.events-telegram-dlt --from-beginning
+docker exec -it fbads-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fbads.events-notify-dlt --from-beginning
 ```
 
 ```sql
@@ -94,6 +95,27 @@ SELECT * FROM event_stats ORDER BY day DESC, source;
 ```
 
 Chạy bằng `docker compose` thì Kafka đã bật sẵn, và nghe thêm ở `localhost:9094` để xem topic từ ngoài Docker. Tắt Kafka: `KAFKA_ENABLED=false docker compose up`.
+
+## Kênh thông báo (Telegram, Gmail…)
+
+Hình dung như phòng thư của văn phòng: nơi phát (lịch, rule, cảnh báo, báo cáo công ty) chỉ **viết thư** (`Notice`: loại tin + nội dung),
+**phòng thư** (`Notifier`) xem workspace đã cài những kênh nào nhận loại tin đó rồi giao cho từng **hãng chuyển phát** (`NotifyChannel`).
+
+```
+nơi phát ── events.notify("alerts", new Notice(ALERT, "⚠️ <b>…</b>")) ──▶ sự kiện "notice" (Kafka hoặc Spring events)
+                                                                              │
+Notifier.handleOnce(sự kiện) ── kênh nào của workspace nhận ALERT? (bảng notify_targets)
+     ├─▶ TelegramChannel.send(notice, cấu hình nhóm A)
+     └─▶ EmailChannel.send(notice, cấu hình email sếp)
+```
+
+- `Notice.html` viết bằng HTML rút gọn như Telegram (`<b> <i> <a>`); dòng đầu là tiêu đề. Telegram gửi nguyên văn, Gmail dùng dòng đầu làm tiêu đề thư.
+- Loại tin (`Notice.Topic`): `LOG` nhật ký tự động, `ALERT` cảnh báo, `REPORT` báo cáo hằng ngày/tuần, `COMPANY` báo cáo công ty. Mỗi kênh chọn loại tin muốn nhận.
+- Kênh đã cài nằm ở bảng `notify_targets` (cấu hình JSON, mã hoá cả chuỗi bằng `SECRET_KEY`). Giao diện: Cài đặt → Thông báo.
+
+**Thêm một loại kênh mới** (vd Zalo): viết một class `@Component` cài `NotifyChannel` trong `notify/channel/`, gồm
+`type()`, `label()`, `fields()` (các ô cấu hình, ô bí mật đánh `secret`), `validate()` và `send()`. Không phải sửa file nào khác:
+Spring tự gom class vào `Notifier`, và form "Thêm kênh" trên giao diện tự vẽ theo `fields()`. Xem `EmailChannel` làm mẫu.
 
 ## Xem log chi tiết
 
@@ -113,7 +135,7 @@ fbads.calls.service    :   ← ObjectService.setBudget 18 ms
 | Cờ | Tầng | Ghi gì |
 |---|---|---|
 | `LOG_CONTROLLER` | `controller/` | Request vào API nào, tham số |
-| `LOG_SERVICE` | `service/` | Nghiệp vụ, Telegram, Facebook, sự kiện |
+| `LOG_SERVICE` | `service/` | Nghiệp vụ, Facebook, sự kiện |
 | `LOG_ENGINE` | `engine/` | Vòng tự động mỗi 30 giây (bỏ qua `EngineClock` vì chỉ đọc giờ) |
 | `LOG_REPOSITORY` | `repository/` | Method repository được gọi (kể cả `save`, `findById`) và thời gian |
 | `LOG_SQL` | Hibernate | Câu SQL (xuống dòng cho dễ đọc) và giá trị từng tham số `?` |
@@ -123,7 +145,7 @@ fbads.calls.service    :   ← ObjectService.setBudget 18 ms
 - Mỗi lần gọi ghi 2 dòng: `→` lúc vào, `←` lúc ra (kèm số ms và kết quả), `✗` nếu lỗi. Lời gọi lồng nhau thụt lề vào trong.
 - Tham số có tên chứa password, token, secret (và `pw`, `code`) in ra `***`. Giá trị dài quá 300 ký tự bị cắt, danh sách chỉ in 5 phần tử đầu.
 - Câu SQL chạy lâu hơn 100 ms có thêm dòng `Slow query took … milliseconds` (chỉ trong profile `dev`).
-- **Lưu ý**: log SQL in nguyên giá trị tham số, kể cả token Facebook/Telegram khi lưu Cài đặt. Chỉ bật trên máy mình, đừng bật trên Render hay VPS.
+- **Lưu ý**: log SQL in nguyên giá trị tham số, kể cả token Facebook / kênh thông báo khi lưu. Chỉ bật trên máy mình, đừng bật trên Render hay VPS.
 - Mã nằm ở `logging/` (`CallLogging` là các aspect, `CallLogger` định dạng dòng log). Tầng nào tắt thì aspect của tầng đó không được tạo.
 
 ## Test
@@ -145,14 +167,16 @@ mvn test        # cần Docker: Testcontainers tự bật MySQL 8.0, Redis và K
   - vòng tự động và nút "Chạy ngay" dùng chung khoá ShedLock;
   - phiên đăng nhập ở Redis, nhập sai 5 lần thì bị khoá 15 phút;
   - client STOMP nhận nhật ký và sự kiện camp ngay khi đổi ngân sách; chưa đăng nhập thì bị từ chối;
-  - sự kiện khi tắt Kafka: Telegram, thống kê, báo cáo hằng ngày;
+  - sự kiện khi tắt Kafka: thông báo, thống kê, báo cáo hằng ngày;
   - giờ lưu trong MySQL là UTC.
 - **KafkaEventsTest** bật Kafka thật:
-  - một sự kiện tới đủ Telegram, thống kê và WebSocket;
-  - Telegram lỗi tạm thời được thử lại rồi vào DLT, lỗi cố định vào thẳng DLT;
-  - sự kiện nhận 2 lần chỉ đếm và gửi Telegram 1 lần; bản ghi hỏng bị bỏ qua ngay;
+  - một sự kiện tới đủ thông báo, thống kê và WebSocket;
+  - kênh lỗi tạm thời được thử lại rồi vào DLT, lỗi cố định vào thẳng DLT; 2 kênh mà 1 kênh lỗi thì chỉ kênh lỗi được gửi lại;
+  - sự kiện nhận 2 lần chỉ đếm và gửi thông báo 1 lần; bản ghi hỏng bị bỏ qua ngay;
   - báo cáo hằng ngày và thao tác đổi ngân sách đi qua Kafka.
 - **KafkaEventSenderTest**: Kafka không chạy thì nơi phát sự kiện không phải chờ.
+- **EmailChannelTest**: kênh Gmail gửi tới máy chủ SMTP giả (GreenMail): mỗi người một thư, sai mật khẩu ứng dụng là lỗi cố định, mất mạng là lỗi tạm thời.
+- **NotifyApiTest**: thêm/sửa/xoá/gửi thử kênh thông báo, ô bí mật không trả về giao diện, kênh chỉ nhận loại tin đã chọn, chuyển Telegram kiểu cũ sang bảng mới.
 - **SecretConverterTest**: mã hoá/giải mã token, sai khoá thì báo lỗi rõ ràng.
 - **CallLoggingTest**, **CallLoggerTest**: log chi tiết đủ các tầng và SQL, tầng tắt thì im lặng, không lộ mật khẩu/token.
 - **ImportIntegrationTest** khởi động với `data.json` mẫu, rồi kiểm tra dữ liệu đã vào DB.
@@ -164,7 +188,8 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 | Thư mục | Chứa gì |
 |---|---|
 | `controller/` | Nhận/trả HTTP, không có logic; `ApiExceptionHandler` đổi lỗi thành JSON |
-| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `TelegramService`, `UndoService`, `ReportService`, `DataImporter`. Gói con `service/facebook/`: `FacebookObjects`, `FacebookInsights`, `FacebookActions`, `FacebookAuth`, `FacebookHealth` (+ `FacebookGraph`, `FacebookState`, `FacebookParse` dùng chung) |
+| `service/` | Nghiệp vụ: `ScheduleService`, `RuleService`, `ObjectService`, `SettingsService`, `LogService`, `AuthService`, `UndoService`, `ReportService`, `DataImporter`. Gói con `service/facebook/`: `FacebookObjects`, `FacebookInsights`, `FacebookActions`, `FacebookAuth`, `FacebookHealth` (+ `FacebookGraph`, `FacebookState`, `FacebookParse` dùng chung) |
+| `notify/` | Gửi thông báo, không phụ thuộc kênh: `Notice` (nội dung), `NotifyChannel` (hợp đồng chung của mọi kênh), `Notifier` (chọn kênh của workspace rồi giao), `NotifyTargetService` (kênh đã cài). Mỗi loại kênh một class trong `notify/channel/` (`TelegramChannel`, `EmailChannel`) |
 | `repository/` | Spring Data JPA, mỗi bảng 1 interface |
 | `entity/` | Class ánh xạ bảng (`@Entity`) |
 | `dto/` | Dữ liệu vào/ra không phải bảng: body của request (`Requests`, `ScheduleRequest`, `RuleRequest`, `SettingsPatch`), `AdObject`, `Metrics`, `Condition`, `Saved` |
@@ -222,6 +247,6 @@ Luồng một request: `controller` → `service` → `repository` → DB.
 
 - Bảng `users`, `workspaces`, `workspace_members` (migration `V5__workspaces.sql`). Mọi bảng dữ liệu có cột `workspace_id`; dữ liệu cũ vào workspace 1.
 - Entity đánh dấu `@TenantId` (Hibernate): mọi truy vấn tự thêm `workspace_id = ?`, lấy từ `WorkspaceContext` qua `TenantConfig`. Không cần sửa từng repository.
-- `WorkspaceFilter` đặt workspace cho mỗi request (lưu trong phiên, đổi bằng `POST /api/workspaces/switch`) và chặn theo vai trò: Chỉ xem không gọi được lệnh ghi, chỉ Chủ vào được cài đặt/Facebook/Telegram/thành viên.
+- `WorkspaceFilter` đặt workspace cho mỗi request (lưu trong phiên, đổi bằng `POST /api/workspaces/switch`) và chặn theo vai trò: Chỉ xem không gọi được lệnh ghi, chỉ Chủ vào được cài đặt/Facebook/kênh thông báo/thành viên.
 - `EngineTicker` chạy từng workspace một, mỗi workspace một khoá ShedLock `fbads-engine-ws-{id}`. Sự kiện Kafka mang theo workspace; WebSocket gửi tới `/topic/ws.{id}.logs|objects|engine` và chỉ thành viên được nghe.
 - API mới: `POST /api/setup` (tài khoản đầu tiên), `POST /api/register` (khi `ALLOW_SIGNUP`), `GET/POST /api/workspaces`, `POST /api/workspace` (đổi tên), `GET/POST /api/members`, `POST /api/members/{id}/role`, `DELETE /api/members/{id}`. `POST /api/login` nhận `{username, password}` (bỏ trống username = `admin`).

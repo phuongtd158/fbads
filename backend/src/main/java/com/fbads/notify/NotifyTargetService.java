@@ -69,7 +69,8 @@ public class NotifyTargetService {
 
     public NotifyOverview overview() {
         List<NotifyType> types = channels.values().stream()
-                .map(c -> new NotifyType(c.type(), c.label(), c.fields(), c.help())).toList();
+                .map(c -> new NotifyType(c.type(), c.label(), c.fields(), c.help(),
+                        c.defaultTopics().stream().map(Enum::name).toList())).toList();
         List<NotifyTopic> topics = Arrays.stream(Notice.Topic.values()).map(t -> new NotifyTopic(t.name(), t.label)).toList();
         return new NotifyOverview(types, topics, all().stream().map(this::view).toList());
     }
@@ -108,7 +109,8 @@ public class NotifyTargetService {
         String name = b.name() == null ? (t != null ? t.getName() : "") : b.name().trim();
         if (name.length() > 100) e.err("name", "Tên tối đa 100 ký tự");
 
-        List<String> topics = b.topics() == null ? (t != null ? t.getTopics() : ALL_TOPICS) : b.topics();
+        List<String> topics = b.topics() != null ? b.topics()
+                : t != null ? t.getTopics() : channel.defaultTopics().stream().map(Enum::name).toList();
         if (!ALL_TOPICS.containsAll(topics)) e.err("topics", "Loại tin không hợp lệ");
         else if (topics.isEmpty()) e.err("topics", "Chọn ít nhất một loại tin để kênh nhận");
 

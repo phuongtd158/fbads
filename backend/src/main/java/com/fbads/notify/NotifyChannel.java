@@ -27,6 +27,9 @@ public interface NotifyChannel {
     /** Hướng dẫn lấy cấu hình (HTML ngắn, hiện dưới form), "" = không có */
     default String help() { return ""; }
 
+    /** Loại tin kênh mới nhận nếu người dùng không chọn lại. Mặc định: mọi loại tin */
+    default List<Notice.Topic> defaultTopics() { return List.of(Notice.Topic.values()); }
+
     /**
      * Kiểm tra cấu hình người dùng nhập trước khi lưu, và chuẩn hoá ngay trong {@code config} (bỏ khoảng trắng, bỏ trùng…).
      * Ô bí mật để trống khi sửa đã được điền lại giá trị cũ trước khi gọi.

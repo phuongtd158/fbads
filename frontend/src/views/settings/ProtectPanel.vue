@@ -20,7 +20,7 @@ const f = reactive({
   killSwitchEnabled: !!s.killSwitchEnabled,
   dailySpendLimit: s.dailySpendLimit || '',
   killScope: s.killScope === 'account' ? 'account' : 'total', // tổng mọi tài khoản (như trước) hay từng tài khoản
-  // Cảnh báo bất thường (gửi Telegram + ghi Nhật ký, 30 phút kiểm tra một lần)
+  // Cảnh báo bất thường (gửi thông báo + ghi Nhật ký, 30 phút kiểm tra một lần)
   alertAccount: s.alertAccount !== false,
   alertDisapproved: s.alertDisapproved !== false,
   alertSpike: s.alertSpike !== false,
@@ -89,7 +89,7 @@ async function save() {
       <span class="ic danger"><ShieldAlert :size="20" /></span>
       <div class="rb">
         <h4>Dừng khẩn khi chi tiêu vượt mức <InfoTip tip="killSwitch" /></h4>
-        <p class="muted">Khi chi tiêu hôm nay đạt mức này, tool tự tắt các camp đang chạy (mỗi ngày tối đa một lần) và báo qua Telegram. Kiểm tra theo chu kỳ rule ở Cài đặt → Chung.</p>
+        <p class="muted">Khi chi tiêu hôm nay đạt mức này, tool tự tắt các camp đang chạy (mỗi ngày tối đa một lần) và gửi thông báo. Kiểm tra theo chu kỳ rule ở Cài đặt → Chung.</p>
         <div v-if="multiAcc" class="scope">
           <Segmented v-model="f.killScope" :options="scopes" size="sm" />
           <p class="muted">
@@ -124,7 +124,7 @@ async function save() {
       <span class="ic"><BellRing :size="20" /></span>
       <div class="rb">
         <h4>Cảnh báo bất thường</h4>
-        <p class="muted">30 phút kiểm tra một lần, gửi Telegram và ghi Nhật ký. Mỗi sự việc chỉ báo một lần. Chỉ chạy khi đã kết nối Facebook thật.</p>
+        <p class="muted">30 phút kiểm tra một lần, gửi thông báo và ghi Nhật ký. Mỗi sự việc chỉ báo một lần. Chỉ chạy khi đã kết nối Facebook thật.</p>
         <div class="alts">
           <div class="alt"><Switch v-model="f.alertAccount" label="Tài khoản quảng cáo có vấn đề (bị vô hiệu hoá, nợ thanh toán…)" /><span>Tài khoản quảng cáo có vấn đề (bị vô hiệu hoá, nợ thanh toán…)</span></div>
           <div class="alt"><Switch v-model="f.alertDisapproved" label="Quảng cáo bị từ chối" /><span>Quảng cáo bị từ chối</span></div>
@@ -140,7 +140,7 @@ async function save() {
         </div>
       </div>
     </div>
-    <Callout v-if="(f.alertAccount || f.alertDisapproved || f.alertSpike) && !s.has_telegramToken" tone="info">Chưa cài Telegram: cảnh báo chỉ được ghi vào Nhật ký. Cài ở Cài đặt → Telegram.</Callout>
+    <Callout v-if="(f.alertAccount || f.alertDisapproved || f.alertSpike) && !s.has_notify" tone="info">Chưa có kênh thông báo: cảnh báo chỉ được ghi vào Nhật ký. Thêm ở Cài đặt → Thông báo.</Callout>
 
     <Btn variant="primary" :icon="Save" :action="save">Lưu</Btn>
   </section>

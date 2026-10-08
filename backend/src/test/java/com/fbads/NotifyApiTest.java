@@ -64,6 +64,10 @@ class NotifyApiTest extends IntegrationBase {
         assertThat(overview.get("types").get(0).get("fields").get(0).get("secret").asBoolean()).isTrue();
         assertThat(overview.get("topics").values()).extracting(t -> t.get("key").asString())
                 .containsExactly("LOG", "ALERT", "REPORT", "COMPANY");
+        // Gmail: mặc định không nhận Nhật ký tự động (giới hạn khoảng 500 thư/ngày)
+        assertThat(overview.get("types").get(1).get("type").asString()).isEqualTo("email");
+        assertThat(overview.get("types").get(1).get("defaultTopics").values()).extracting(JsonNode::asString)
+                .containsExactly("ALERT", "REPORT", "COMPANY");
 
         // sai: từng ô báo lỗi riêng
         Api.Res bad = api.post("/api/notify/channels", body("Nhóm A", List.of(), "abc", "x"));

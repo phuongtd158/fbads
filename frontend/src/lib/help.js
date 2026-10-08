@@ -77,7 +77,7 @@ export const TOPICS = [
         ['% mục tiêu', 'Với CPA, ROAS và Chi tiêu, thay vì số cụ thể bạn chọn **% mục tiêu** (ví dụ CPA lớn hơn 120% mục tiêu, hoặc Chi tiêu lớn hơn 200% **CPA mục tiêu** để cắt lỗ camp đã chi gấp đôi mà chưa ra đơn). Mục tiêu đặt riêng cho từng tài khoản ở **Cài đặt → Mục tiêu**, nên một rule dùng chung được cho nhiều tài khoản có mức hoà vốn khác nhau. Tài khoản chưa đặt mục tiêu sẽ bị rule bỏ qua (Nhật ký ghi rõ).'],
         ['Ô nhập tiền', 'Chỉ cần gõ chữ số, ô tự thêm dấu chấm hàng nghìn (gõ 1500000 hiện **1.500.000**). Ô cộng/trừ số tiền gõ dấu **-** ở đầu để trừ.'],
         ['Chi tiêu tối thiểu', 'Chỉ xét camp đã tiêu ít nhất số tiền này. **Rất quan trọng** để không tắt nhầm camp mới chạy, chưa đủ dữ liệu.'],
-        ['Thì', 'Tắt camp, Tăng/Giảm ngân sách theo %, hoặc **Chỉ thông báo** (không đổi camp, chỉ ghi Nhật ký và gửi Telegram).'],
+        ['Thì', 'Tắt camp, Tăng/Giảm ngân sách theo %, hoặc **Chỉ thông báo** (không đổi camp, chỉ ghi Nhật ký và gửi thông báo).'],
         ['Tự bật lại ngày hôm sau', 'Chỉ có ở rule **Tắt**. Tool bật lại camp đã bị rule tắt vào giờ bạn chọn của ngày hôm sau (mặc định 06:00), để cắt lỗ theo ngày mà không phải bật tay. Camp bạn đã tự bật lại hoặc đã hoàn tác thì tool để yên. Nên dùng số liệu **hôm nay**, vì số liệu nhiều ngày vẫn chứa ngày xấu nên camp dễ bị tắt lại ngay.'],
         ['Theo % / Theo số tiền', 'Rule tăng/giảm ngân sách có thể đổi theo **%** hoặc **số tiền cố định** mỗi lần (vd cộng 200.000). Giới hạn thay đổi mỗi ngày ở Cài đặt vẫn áp dụng.'],
         ['Trần / Sàn ngân sách', 'Giới hạn để ngân sách không tăng quá cao hoặc giảm quá thấp sau nhiều lần áp dụng.'],
@@ -146,7 +146,7 @@ export const TOPICS = [
       { t: 'table', head: ['Tính năng', 'Làm gì', 'Áp dụng cho'], rows: [
         ['Bỏ qua camp đang học', 'Không để **rule** tăng/giảm ngân sách camp đang trong giai đoạn học, vì Facebook sẽ học lại từ đầu.', 'Rule đổi ngân sách'],
         ['Giới hạn thay đổi mỗi ngày', 'Tổng % ngân sách một camp được đổi trong ngày, tính trên ngân sách đầu ngày. Ví dụ 30%: gốc 500.000 thì tối đa lên 650.000 hoặc xuống 350.000 dù rule chạy nhiều lần.', 'Rule đổi ngân sách (lịch do bạn đặt không bị giới hạn)'],
-        ['Dừng khẩn', 'Khi chi tiêu hôm nay đạt mức bạn đặt, tự **tắt camp đang chạy** và báo Telegram. Mỗi ngày tối đa một lần. Có hai cách: **Tổng mọi tài khoản** (cộng chi tiêu rồi tắt tất cả) hoặc **Từng tài khoản** (mỗi tài khoản một mức, vượt mức nào chỉ tắt camp của tài khoản đó; mức riêng đặt ở Cài đặt → Mục tiêu, chưa đặt thì dùng mức chung).', 'Toàn bộ hoặc từng tài khoản'],
+        ['Dừng khẩn', 'Khi chi tiêu hôm nay đạt mức bạn đặt, tự **tắt camp đang chạy** và gửi thông báo. Mỗi ngày tối đa một lần. Có hai cách: **Tổng mọi tài khoản** (cộng chi tiêu rồi tắt tất cả) hoặc **Từng tài khoản** (mỗi tài khoản một mức, vượt mức nào chỉ tắt camp của tài khoản đó; mức riêng đặt ở Cài đặt → Mục tiêu, chưa đặt thì dùng mức chung).', 'Toàn bộ hoặc từng tài khoản'],
       ] },
       { t: 'tips', items: [
         'Camp đang học có nhãn **Đang học** ở trang Tổng quan.',
@@ -188,23 +188,22 @@ export const TOPICS = [
     ],
   },
   {
-    id: 'telegram', icon: 'Send', title: 'Thông báo Telegram', summary: 'Nhận tin mỗi khi tool thay đổi camp',
+    id: 'telegram', icon: 'Send', title: 'Thông báo (Telegram…)', summary: 'Nhận tin mỗi khi tool thay đổi camp',
     blocks: [
-      { t: 'p', text: 'Khi bật, tool gửi cho bạn tin nhắn Telegram mỗi lần lịch/rule thay đổi camp (kể cả lỗi), cộng thêm **báo cáo tổng hợp mỗi sáng**. Tính năng này không bắt buộc.' },
-      { t: 'steps', title: 'Thiết lập', items: [
-        'Trên Telegram, chat với **@BotFather**, gõ `/newbot` và làm theo để nhận **Bot Token**.',
-        'Nhắn một tin bất kỳ cho bot vừa tạo.',
-        'Mở `https://api.telegram.org/bot<TOKEN>/getUpdates` (thay `<TOKEN>` bằng token của bạn) và lấy số `chat.id` — đó là **Chat ID**.',
-        'Dán cả hai vào Cài đặt → Telegram, chọn giờ nhận báo cáo, bấm **Lưu** rồi **Gửi tin thử**.',
+      { t: 'p', text: 'Tool gửi tin mỗi lần lịch/rule thay đổi camp (kể cả lỗi), khi có cảnh báo, và gửi **báo cáo tổng hợp mỗi sáng**. Tin đi tới các **kênh thông báo** bạn thêm ở Cài đặt → Thông báo. Tính năng này không bắt buộc.' },
+      { t: 'steps', title: 'Thêm kênh', items: [
+        'Vào Cài đặt → Thông báo, bấm **Thêm kênh** và chọn loại kênh.',
+        'Điền thông tin của kênh (mở mục **Cách lấy thông tin** ngay dưới form nếu chưa biết lấy ở đâu).',
+        'Chọn **loại tin** kênh này nhận: Nhật ký tự động, Cảnh báo, Báo cáo, Báo cáo công ty. Ví dụ nhóm cả team chỉ nhận Báo cáo, còn bạn nhận hết.',
+        'Bấm **Thêm kênh** rồi **Gửi thử** để xem kết quả **từng người nhận**: ai nhận được, ai lỗi và lý do.',
       ] },
-      { t: 'steps', title: 'Gửi cho nhiều người', items: [
-        'Nhập nhiều **Chat ID** vào cùng một ô, cách nhau bằng dấu phẩy, ví dụ `123456789, 987654321, -100555666777` (tối đa 10). Ngay bên dưới, tool hiện từng người nhận thành một nhãn; ID sai được tô đỏ.',
-        '**Mỗi người phải nhắn cho bot ít nhất một tin trước**, nếu không Telegram từ chối gửi cho họ. Lấy `chat.id` của từng người ở `getUpdates` như trên.',
-        'Cách gọn hơn: tạo một **nhóm** Telegram, thêm bot và mọi người vào, gửi một tin trong nhóm rồi lấy `chat.id` của nhóm (số âm, dạng `-100…`). Người mới vào nhóm là tự nhận được tin.',
-        'Bấm **Gửi tin thử** hoặc **Gửi báo cáo ngay** để xem kết quả **từng người**: ai nhận được, ai lỗi và lý do (đã chặn bot, chưa nhắn cho bot, bot chưa ở trong nhóm…). Một người lỗi không làm những người còn lại mất tin.',
+      { t: 'steps', title: 'Telegram', items: [
+        'Trên Telegram, chat với **@BotFather**, gõ `/newbot` và làm theo để nhận **Bot Token**. Nhắn một tin bất kỳ cho bot vừa tạo.',
+        'Mở `https://api.telegram.org/bot<TOKEN>/getUpdates` (thay `<TOKEN>` bằng token của bạn) và lấy số `chat.id`, đó là **Chat ID**.',
+        'Gửi cho nhiều người: nhập nhiều Chat ID cách nhau bằng dấu phẩy (tối đa 10). **Mỗi người phải nhắn cho bot ít nhất một tin trước.** Cách gọn hơn: tạo một **nhóm**, thêm bot và mọi người vào, rồi dùng `chat.id` của nhóm (số âm, dạng `-100…`).',
       ] },
       { t: 'note', tone: 'warning', text: 'Tin gửi đi có chi tiêu và tên chiến dịch, nên chỉ thêm những người bạn muốn họ thấy số liệu.' },
-      { t: 'p', text: '**Báo cáo tuần** (bật sẵn, tắt ở Cài đặt → Telegram): sáng thứ Hai, cùng giờ với báo cáo hằng ngày, tool gửi chi tiêu, kết quả, CPA của tuần trước (thứ Hai → Chủ nhật) so với tuần liền trước, 3 camp tốt nhất (CPA thấp), 3 camp cần xem lại (chi mà không có kết quả, hoặc CPA cao) và số lần tool đã tự bật/tắt/đổi ngân sách. Bấm **Gửi báo cáo tuần** để xem thử bất cứ lúc nào.' },
+      { t: 'p', text: '**Báo cáo tuần** (bật sẵn, tắt ở Cài đặt → Thông báo): sáng thứ Hai, cùng giờ với báo cáo hằng ngày, tool gửi chi tiêu, kết quả, CPA của tuần trước (thứ Hai → Chủ nhật) so với tuần liền trước, 3 camp tốt nhất (CPA thấp), 3 camp cần xem lại (chi mà không có kết quả, hoặc CPA cao) và số lần tool đã tự bật/tắt/đổi ngân sách. Bấm **Gửi báo cáo tuần** để xem thử bất cứ lúc nào.' },
     ],
   },
   {
@@ -306,7 +305,7 @@ export const TIPS = {
   token: { text: 'Access Token là chìa khoá Facebook cấp để tool điều khiển quảng cáo. Đừng chia sẻ cho ai.', topic: 'connect' },
   resultAction: { text: 'Loại “kết quả” dùng để tính CPA/ROAS. Chọn đúng mục tiêu bạn chạy quảng cáo.', topic: 'glossary' },
   range: { text: 'Chọn số liệu của khoảng nào để so với ngưỡng. Chuyển đổi thường về trễ nên khi tắt/giảm camp nên dùng “3 ngày”, tránh chỉ dựa vào hôm nay.', topic: 'rules' },
-  notify: { text: 'Rule chỉ thông báo không đổi camp, chỉ ghi Nhật ký và gửi Telegram. Rất hợp để thử rule vài ngày trước khi cho nó tự hành động.', topic: 'rules' },
+  notify: { text: 'Rule chỉ thông báo không đổi camp, chỉ ghi Nhật ký và gửi thông báo. Rất hợp để thử rule vài ngày trước khi cho nó tự hành động.', topic: 'rules' },
   skipLearning: { text: 'Camp mới hoặc vừa đổi lớn sẽ vào giai đoạn học. Đổi ngân sách lúc này khiến Facebook học lại từ đầu, nên rule sẽ bỏ qua các camp đó.', topic: 'protect' },
   dailyCap: { text: 'Tổng % ngân sách một camp được phép thay đổi trong một ngày do rule, tính trên ngân sách đầu ngày. Chống việc tăng/giảm dồn dập nhiều lần.', topic: 'protect' },
   killSwitch: { text: 'Khi chi tiêu hôm nay vượt mức bạn đặt (tổng mọi tài khoản, hoặc từng tài khoản), tool tự tắt các camp đang chạy (mỗi ngày tối đa một lần).', topic: 'protect' },

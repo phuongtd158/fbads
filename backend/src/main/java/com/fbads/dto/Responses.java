@@ -89,8 +89,8 @@ public final class Responses {
 
     // ------------------------------------------------------------------ Kênh thông báo (NotifyController)
 
-    /** Một loại kênh có trong code: giao diện vẽ form từ fields */
-    public record NotifyType(String type, String label, List<ConfigField> fields, String help) {}
+    /** Một loại kênh có trong code: giao diện vẽ form từ fields; defaultTopics = loại tin chọn sẵn khi thêm kênh */
+    public record NotifyType(String type, String label, List<ConfigField> fields, String help, List<String> defaultTopics) {}
 
     /** Một loại tin (Notice.Topic) */
     public record NotifyTopic(String key, String label) {}

@@ -74,15 +74,15 @@ async function test() {
   if (!f.teams.length && r.teams.length === 1) { addTeam(); pickTeam(f.teams[0], r.teams[0].id) }
 }
 const MODE_TEXT = {
-  preview: 'Chỉ tạo bản báo cáo và nhắn Telegram để bạn so số. Tool không gửi gì lên hệ thống công ty.',
+  preview: 'Chỉ tạo bản báo cáo và gửi thông báo để bạn so số. Tool không gửi gì lên hệ thống công ty.',
   approve: 'Tool chỉ gửi khi bạn bấm Gửi ở trang Báo cáo công ty.',
-  auto: 'Đến mốc tool gửi luôn rồi nhắn Telegram. Số trông bất thường (có đơn mà doanh thu bằng 0, Team không khớp chiến dịch, không lấy được số Facebook) thì dừng lại để bạn xem và gửi tay. Hệ thống công ty lỗi thì tự thử lại tối đa 3 lần.',
+  auto: 'Đến mốc tool gửi luôn rồi gửi thông báo. Số trông bất thường (có đơn mà doanh thu bằng 0, Team không khớp chiến dịch, không lấy được số Facebook) thì dừng lại để bạn xem và gửi tay. Hệ thống công ty lỗi thì tự thử lại tối đa 3 lần.',
 }
 const leadHint = computed(() => {
   const n = Number(f.leadMin) || 0
   if (!n) return 'Để 0 thì tool làm báo cáo đúng giờ mốc.'
   const at = (f.slots.length ? f.slots : SLOTS).map((s) => { const m = s * 60 - n; return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}` })
-  return `Tool lấy số và ${f.mode === 'auto' ? 'gửi' : 'nhắn Telegram'} lúc ${at.join(', ')}. Báo cáo vẫn ghi đúng mốc.`
+  return `Tool lấy số và ${f.mode === 'auto' ? 'gửi' : 'gửi thông báo'} lúc ${at.join(', ')}. Báo cáo vẫn ghi đúng mốc.`
 })
 const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label }))
 </script>
@@ -93,7 +93,7 @@ const modes = Object.entries(MODE_LABEL).map(([value, label]) => ({ value, label
       <div class="top">
         <div>
           <h3>Báo cáo lên hệ thống công ty</h3>
-          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO sau VAT = doanh thu, hiển thị, nhấp) thành bản báo cáo. Đơn và DSO tính theo <b>Loại kết quả</b> ở <RouterLink to="/settings/general">Cài đặt → Chung</RouterLink>. Tool nhắn Telegram khi có bản báo cáo mới; xem, sửa và gửi ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
+          <p class="muted sub">Đến mỗi mốc, tool cộng số Facebook của từng Team (chi tiêu, tin nhắn, SĐT = khách hàng tiềm năng, Đơn = kết quả, DSO sau VAT = doanh thu, hiển thị, nhấp) thành bản báo cáo. Đơn và DSO tính theo <b>Loại kết quả</b> ở <RouterLink to="/settings/general">Cài đặt → Chung</RouterLink>. Tool gửi thông báo (loại tin Báo cáo công ty) khi có bản báo cáo mới; xem, sửa và gửi ở trang <RouterLink to="/company">Báo cáo công ty</RouterLink>.</p>
         </div>
         <Switch v-model="f.enabled" label="Bật báo cáo theo mốc" />
       </div>

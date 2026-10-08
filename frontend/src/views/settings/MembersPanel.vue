@@ -9,7 +9,7 @@ import Field from '../../components/Field.vue'
 
 // Thành viên của workspace đang chọn. Chỉ chủ (OWNER) được đổi tên workspace, thêm/sửa/xoá thành viên; người khác chỉ xem.
 const ROLES = [
-  ['OWNER', 'Chủ', 'Toàn quyền: cài đặt, token Facebook, Telegram, thành viên'],
+  ['OWNER', 'Chủ', 'Toàn quyền: cài đặt, token Facebook, kênh thông báo, thành viên'],
   ['EDITOR', 'Biên tập', 'Sửa lịch, rule, bật/tắt camp, đổi ngân sách, hoàn tác'],
   ['VIEWER', 'Chỉ xem', 'Xem số liệu, lịch, rule, nhật ký; không sửa được gì'],
 ]

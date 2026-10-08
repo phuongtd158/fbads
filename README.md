@@ -1,6 +1,6 @@
 # FB Ads Auto (bản Java)
 
-Tool tự động bật/tắt camp, chỉnh ngân sách Facebook Ads theo lịch và theo hiệu quả, báo cáo qua Telegram.
+Tool tự động bật/tắt camp, chỉnh ngân sách Facebook Ads theo lịch và theo hiệu quả, báo cáo qua Telegram (thêm được kênh khác như Gmail).
 
 Nhánh này là bản học **Spring Boot**. Bản Node.js đang chạy thật nằm ở nhánh `dev`.
 
@@ -53,10 +53,10 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy cả hai phần dưới cho m
 - Rule nâng cao: chọn khoảng thời gian (hôm nay/hôm qua/3 ngày/7 ngày), hành động **Chỉ thông báo**, nút **Xem trước** (rule đang khớp camp nào ngay bây giờ) trước khi cho chạy.
 - Bảo vệ ngân sách: bỏ qua camp đang học, giới hạn thay đổi ngân sách mỗi ngày, dừng khẩn khi tổng chi tiêu vượt mức.
 - Hoàn tác: đưa camp về trạng thái/ngân sách trước đó ngay từ Nhật ký (trong 3 ngày).
-- Telegram: thông báo mỗi thay đổi + báo cáo hằng ngày.
+- Kênh thông báo (Telegram, Gmail…), mỗi kênh chọn loại tin nhận: thông báo mỗi thay đổi, cảnh báo, báo cáo hằng ngày.
 - Rule theo kết quả: so với khoảng trước (vd CPA hôm nay so với 7 ngày trước), ngưỡng chi tiêu theo số kết quả (bậc), tăng ngân sách theo thang bậc kết quả.
-- Cảnh báo bất thường qua Telegram: tài khoản quảng cáo bị khoá/nợ, quảng cáo bị từ chối, chi tiêu tăng vọt theo giờ.
-- Xu hướng theo ngày của từng camp và báo cáo tuần gửi Telegram sáng thứ Hai.
+- Cảnh báo bất thường: tài khoản quảng cáo bị khoá/nợ, quảng cáo bị từ chối, chi tiêu tăng vọt theo giờ.
+- Xu hướng theo ngày của từng camp và báo cáo tuần gửi sáng thứ Hai.
 - Báo cáo công ty: tạo báo cáo theo mốc 9h/12h/17h/22h cho từng Team từ số Facebook, sửa số tay rồi gửi lên hệ thống báo cáo của công ty
   (chế độ Chỉ xem / Duyệt rồi gửi / Tự động gửi). Mốc 9h cập nhật số cả ngày hôm trước vào bản ghi 9h của hôm trước. Cài ở Cài đặt → Báo cáo công ty; mật khẩu công ty mã hoá bằng `SECRET_KEY`.
 - Nhật ký chi tiết: bấm một dòng để xem nguyên nhân lỗi, cách khắc phục, mã lỗi Facebook, yêu cầu đã gửi, trước/sau, điều kiện rule; có nút sao chép và chạy lại. Token không bao giờ được ghi vào nhật ký.
@@ -65,11 +65,11 @@ GitHub Actions (`.github/workflows/ci.yml`) chạy cả hai phần dưới cho m
 - Nhiều người dùng: mỗi người một tài khoản, dữ liệu chia theo **workspace** (xem dưới).
 
 ## Nhiều người dùng và workspace
-Mỗi workspace có cài đặt, token Facebook, Telegram, lịch, rule, nhật ký và vòng tự động riêng. Một người có thể ở nhiều workspace và đổi qua lại ở ô chọn trên thanh bên.
+Mỗi workspace có cài đặt, token Facebook, kênh thông báo, lịch, rule, nhật ký và vòng tự động riêng. Một người có thể ở nhiều workspace và đổi qua lại ở ô chọn trên thanh bên.
 
 - **Chưa có tài khoản nào**: tool mở, không cần đăng nhập. Tạo tài khoản đầu tiên ở Cài đặt → Bảo mật, hoặc đặt `APP_PASSWORD` (tạo/đồng bộ tài khoản `admin`). Người tạo đầu tiên là chủ workspace có sẵn (dữ liệu cũ nằm ở đây).
 - **Vai trò** (Cài đặt → Thành viên):
-  - Chủ: toàn quyền, kể cả token Facebook, Telegram, thành viên.
+  - Chủ: toàn quyền, kể cả token Facebook, kênh thông báo, thành viên.
   - Biên tập: sửa lịch, rule, bật/tắt camp, đổi ngân sách, hoàn tác.
   - Chỉ xem: xem số liệu, lịch, rule, nhật ký.
 - Chủ thêm thành viên bằng tên đăng nhập; người chưa có tài khoản thì đặt kèm mật khẩu ban đầu. Muốn cho người lạ tự đăng ký thì đặt `ALLOW_SIGNUP=true` (người tự đăng ký tạo workspace riêng của họ).
@@ -86,6 +86,6 @@ Dùng **Facebook Login for Business** thì tạo một cấu hình có 2 quyền
 ## An toàn
 - Mặc định ở chế độ dùng thử (dữ liệu giả). Khi kết nối thật, mặc định "Chạy thử" (chỉ ghi log). Tắt sau vài ngày khi thấy log đúng ý.
 - Server mặc định chỉ nghe 127.0.0.1. Mở ra mạng (`HOST=0.0.0.0`, như trong Docker) thì bắt buộc có `APP_PASSWORD`.
-- Đặt `SECRET_KEY` (chuỗi dài ngẫu nhiên): token Facebook, App Secret và token Telegram được mã hoá AES-256-GCM trước khi ghi vào DB. Giữ nguyên `SECRET_KEY` mãi về sau; mất hoặc đổi khoá thì phải kết nối lại Facebook/Telegram. Mật khẩu người dùng nằm ở bảng `users` (đã băm bcrypt).
+- Đặt `SECRET_KEY` (chuỗi dài ngẫu nhiên): token Facebook, App Secret và cấu hình kênh thông báo được mã hoá AES-256-GCM trước khi ghi vào DB. Giữ nguyên `SECRET_KEY` mãi về sau; mất hoặc đổi khoá thì phải kết nối lại Facebook và cài lại kênh thông báo. Mật khẩu người dùng nằm ở bảng `users` (đã băm bcrypt).
 - Quên mật khẩu: tài khoản `admin` thì đổi `APP_PASSWORD` rồi khởi động lại. Tài khoản khác chưa có nút đặt lại; tạm thời `admin` tạo tài khoản mới cho người đó rồi thêm vào workspace.
 - Nếu camp dùng CBO (ngân sách ở cấp camp), chỉnh ngân sách ở cấp camp; nhóm QC sẽ không có ngân sách riêng.

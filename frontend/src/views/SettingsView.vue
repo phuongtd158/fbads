@@ -1,12 +1,12 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { KeyRound, ShieldCheck, ShieldAlert, Send, SlidersHorizontal, Palette, Lock, Target, Users, Building2 } from 'lucide-vue-next'
+import { KeyRound, ShieldCheck, ShieldAlert, Bell, SlidersHorizontal, Palette, Lock, Target, Users, Building2 } from 'lucide-vue-next'
 import ConnectionPanel from './settings/ConnectionPanel.vue'
 import ModePanel from './settings/ModePanel.vue'
 import ProtectPanel from './settings/ProtectPanel.vue'
 import TargetsPanel from './settings/TargetsPanel.vue'
-import TelegramPanel from './settings/TelegramPanel.vue'
+import NotifyPanel from './settings/NotifyPanel.vue'
 import CompanyPanel from './settings/CompanyPanel.vue'
 import GeneralPanel from './settings/GeneralPanel.vue'
 import AppearancePanel from './settings/AppearancePanel.vue'
@@ -20,14 +20,15 @@ const tabs = [
   { v: 'mode', label: 'Chế độ hoạt động', icon: ShieldCheck, comp: ModePanel },
   { v: 'protect', label: 'Bảo vệ ngân sách', icon: ShieldAlert, comp: ProtectPanel },
   { v: 'targets', label: 'Mục tiêu', icon: Target, comp: TargetsPanel },
-  { v: 'telegram', label: 'Telegram', icon: Send, comp: TelegramPanel },
+  { v: 'notify', label: 'Thông báo', icon: Bell, comp: NotifyPanel },
   { v: 'company', label: 'Báo cáo công ty', icon: Building2, comp: CompanyPanel },
   { v: 'general', label: 'Chung', icon: SlidersHorizontal, comp: GeneralPanel },
   { v: 'appearance', label: 'Giao diện', icon: Palette, comp: AppearancePanel },
   { v: 'members', label: 'Thành viên', icon: Users, comp: MembersPanel },
   { v: 'security', label: 'Bảo mật', icon: Lock, comp: SecurityPanel },
 ]
-const tab = computed(() => tabs.find((t) => t.v === route.params.tab) || tabs[0])
+const OLD = { telegram: 'notify' } // đường dẫn cũ vẫn mở đúng tab
+const tab = computed(() => tabs.find((t) => t.v === (OLD[route.params.tab] || route.params.tab)) || tabs[0])
 const go = (v) => router.replace('/settings/' + v)
 </script>
 

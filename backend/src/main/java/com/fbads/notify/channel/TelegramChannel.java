@@ -8,6 +8,7 @@ import com.fbads.notify.SendResult;
 import com.fbads.validation.Checks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,7 @@ import java.util.regex.Pattern;
  * Cấu hình: {@code {"token": "123:AA…", "chatId": "111, -100222, @kenh"}}.
  */
 @Component
+@Order(1) // thứ tự trên form Thêm kênh: Telegram trước
 public class TelegramChannel implements NotifyChannel {
     public static final String TYPE = "telegram";
     /** Telegram treo thì báo lỗi sau chừng này, không giữ chân vòng tự động */
