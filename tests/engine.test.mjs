@@ -59,6 +59,35 @@ test('plan: rule bị giới hạn thay đổi mỗi ngày', () => {
   assert.equal(engine.plan(o, { type: 'budget', mode: 'percent', value: 50 }, { kind: 'schedule' }).next, 150000)
 })
 
+test('plan: rule giảm không bao giờ làm tăng ngân sách (và ngược lại)', () => {
+  S().settings.dailyChangeCapPct = 95
+  const o = { id: 'g', dailyBudget: 29999, effective: 'ACTIVE' }
+  const dec = { type: 'budget', mode: 'percent', value: -50 }
+  // gốc hôm nay 700.000 → mức thấp nhất được phép 35.000 > ngân sách hiện tại: bỏ qua, không kéo lên 35.000
+  S().state.budgetDay = { date: engine.localNow().date, base: { g: 700000 }, skipLogged: {} }
+  let p = engine.plan(o, dec, { kind: 'rule' })
+  assert.equal(p.kind, 'skip'); assert.equal(p.code, 'cap')
+  // gốc 300.000 → mức thấp nhất 15.000: giảm đến đó và báo chạm giới hạn
+  S().state.budgetDay.base.g = 300000
+  p = engine.plan(o, { ...dec, value: -60 }, { kind: 'rule' })
+  assert.equal(p.next, 15000); assert.equal(p.capped, true)
+  // ngân sách đã dưới hoặc bằng sàn: bỏ qua, không kéo lên bằng sàn
+  S().state.budgetDay = null
+  p = engine.plan(o, { ...dec, min: 50000 }, { kind: 'rule' })
+  assert.equal(p.kind, 'skip'); assert.equal(p.code, 'min')
+  assert.equal(engine.plan(o, { ...dec, min: 29999 }, { kind: 'schedule' }).code, 'min')
+  assert.equal(engine.plan(o, { ...dec, min: 20000 }, { kind: 'rule' }).next, 20000)
+  // rule tăng khi đã trên trần: bỏ qua, không kéo xuống
+  const big = { id: 'h', dailyBudget: 500000, effective: 'ACTIVE' }
+  p = engine.plan(big, { type: 'budget', mode: 'add', value: 50000, max: 400000 }, { kind: 'rule', noCap: true })
+  assert.equal(p.kind, 'skip'); assert.equal(p.code, 'max')
+  // tăng khi gốc thấp hơn ngân sách hiện tại quá nhiều: không bị giới hạn ngày kéo xuống
+  S().state.budgetDay = { date: engine.localNow().date, base: { h: 200000 }, skipLogged: {} }
+  assert.equal(engine.plan(big, { type: 'budget', mode: 'percent', value: 10 }, { kind: 'rule' }).code, 'cap')
+  // lịch đặt mức cố định vẫn đặt đúng giá trị
+  assert.equal(engine.plan(big, { type: 'budget', mode: 'set', value: 300000 }, { kind: 'schedule' }).next, 300000)
+})
+
 test('plan: rule chỉ thông báo', () => {
   const p = engine.plan({ id: 'a', effective: 'ACTIVE' }, { type: 'notify', message: 'CPA cao' }, { kind: 'rule' })
   assert.equal(p.kind, 'do'); assert.equal(p.notify, true)
