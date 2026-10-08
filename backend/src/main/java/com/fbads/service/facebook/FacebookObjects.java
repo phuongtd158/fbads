@@ -10,7 +10,6 @@ import com.fbads.ads.ObjectsMeta;
 import com.fbads.client.FbException;
 import com.fbads.client.MockAds;
 import com.fbads.client.RateLimits;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.AccInfo;
 import com.fbads.service.facebook.FacebookState.Cache0;
 import com.fbads.service.facebook.FacebookState.Ws;
@@ -18,6 +17,7 @@ import com.fbads.service.facebook.GraphData.Account;
 import com.fbads.service.facebook.GraphData.AdSet;
 import com.fbads.service.facebook.GraphData.Campaign;
 import com.fbads.service.facebook.GraphData.InsightRow;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

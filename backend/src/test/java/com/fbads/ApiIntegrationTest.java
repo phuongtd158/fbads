@@ -1,5 +1,8 @@
 package com.fbads;
 
+import com.fbads.account.AuthService;
+import com.fbads.account.UserRepository;
+import com.fbads.account.WorkspaceRepository;
 import com.fbads.config.CacheConfig;
 import com.fbads.dto.FbSnapshots;
 import com.fbads.engine.ActionExecutor;
@@ -11,13 +14,10 @@ import com.fbads.log.LogService;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.report.ReportService;
 import com.fbads.repository.NotifyTargetRepository;
-import com.fbads.repository.UserRepository;
-import com.fbads.repository.WorkspaceRepository;
 import com.fbads.schedule.ScheduleRepository;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.AuthService;
 import com.fbads.service.EventStatsService;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.AfterEach;

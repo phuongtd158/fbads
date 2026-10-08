@@ -1,10 +1,7 @@
-package com.fbads.service;
+package com.fbads.settings;
 
-import com.fbads.dto.Responses.PublicSettings;
-import com.fbads.entity.AppSettings;
 import com.fbads.entity.NotifyTarget;
 import com.fbads.repository.NotifyTargetRepository;
-import com.fbads.repository.SettingsRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;

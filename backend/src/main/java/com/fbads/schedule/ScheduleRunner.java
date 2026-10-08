@@ -8,15 +8,15 @@ import com.fbads.engine.Action;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.BudgetMode;
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.AppSettings;
 import com.fbads.log.LogAction;
 import com.fbads.log.LogEntry;
 import com.fbads.log.LogError;
 import com.fbads.log.LogKind;
 import com.fbads.log.LogTarget;
 import com.fbads.service.EngineState;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.settings.AppSettings;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

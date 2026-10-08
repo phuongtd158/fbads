@@ -14,7 +14,7 @@ import com.fbads.engine.Labels;
 import com.fbads.engine.Plan;
 import com.fbads.log.LogKind;
 import com.fbads.service.EngineState;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

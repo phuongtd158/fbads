@@ -1,4 +1,4 @@
-package com.fbads.entity;
+package com.fbads.account;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

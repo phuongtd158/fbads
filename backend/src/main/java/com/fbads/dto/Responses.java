@@ -1,16 +1,9 @@
 package com.fbads.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.fbads.company.CompanyApi;
-import com.fbads.entity.AppSettings;
 import com.fbads.entity.CompanyReport;
-import com.fbads.entity.User;
 import com.fbads.notify.ConfigField;
-import com.fbads.rule.Rule;
-import com.fbads.schedule.Schedule;
-import com.fbads.service.AuthService;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
@@ -40,16 +33,6 @@ public final class Responses {
     public record Ok(boolean ok) {
         public static final Ok OK = new Ok(true);
     }
-
-    // ------------------------------------------------------------------ Cài đặt (SettingsController)
-
-    /** Nơi lưu dữ liệu (Cài đặt → Chung). Bản Java luôn lưu MySQL nên các trường còn lại cố định. */
-    public record Storage(String mode, String provider, Long lastSavedAt, String lastError, boolean pending) {
-        public static final Storage MYSQL = new Storage("db", "MySQL", null, "", false);
-    }
-
-    /** GET /api/state: mọi thứ giao diện cần lúc mở */
-    public record State(PublicSettings settings, List<Schedule> schedules, List<Rule> rules, Storage storage) {}
 
     // ------------------------------------------------------------------ Báo cáo công ty (CompanyController)
 
@@ -85,35 +68,7 @@ public final class Responses {
     /** GET /api/notify: các loại kênh, các loại tin, và kênh đã cài của workspace */
     public record NotifyOverview(List<NotifyType> types, List<NotifyTopic> topics, List<NotifyTargetView> channels) {}
 
-    // ------------------------------------------------------------------ Đăng nhập (AuthController)
-
-    /**
-     * GET /api/auth: required = cần đăng nhập, authed = đã đăng nhập, setup = chưa có tài khoản nào, signup = được tự đăng
-     * ký, envManaged = tài khoản quản trị đặt bằng biến môi trường, workspace đang chọn và mọi workspace của người này
-     */
-    public record AuthStatus(boolean required, boolean authed, boolean setup, boolean signup, boolean envManaged, UserInfo user,
-            AuthService.Membership workspace, List<AuthService.Membership> workspaces) {}
-
-    public record UserInfo(long id, String username, String name) {
-        public static UserInfo of(User u) { return new UserInfo(u.getId(), u.getUsername(), u.getName()); }
-    }
-
     // ------------------------------------------------------------------ Cài đặt, sức khoẻ
-
-    /**
-     * Cài đặt gửi về giao diện: mọi trường của AppSettings, riêng bí mật (token, App Secret) luôn để trống và thay bằng
-     * cờ has_… (đã nhập chưa); has_notify = có kênh thông báo nào đang bật.
-     */
-    public record PublicSettings(@JsonUnwrapped AppSettings settings, String accessToken, String fbAppSecret,
-            @JsonProperty("has_accessToken") boolean hasAccessToken, @JsonProperty("has_fbAppSecret") boolean hasFbAppSecret,
-            @JsonProperty("has_notify") boolean hasNotify) {
-        public static PublicSettings of(AppSettings s, boolean hasNotify) {
-            return new PublicSettings(s, "", "", !s.getAccessToken().isEmpty(), !nullToEmpty(s.getFbAppSecret()).isEmpty(),
-                    hasNotify);
-        }
-
-        private static String nullToEmpty(String v) { return v == null ? "" : v; }
-    }
 
     /** GET /api/health: ok = vòng tự động còn chạy; lastTickAt = lúc xong lượt gần nhất (ISO) */
     public record Health(boolean ok, String lastTickAt) {}

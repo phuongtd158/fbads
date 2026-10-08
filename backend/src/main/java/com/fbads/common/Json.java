@@ -45,6 +45,9 @@ public final class Json {
     /** String(v ?? '') */
     public static String str(String s) { return s == null ? "" : s; }
 
+    /** Chuỗi đã bỏ khoảng trắng hai đầu; null = "" */
+    public static String trimmed(String s) { return s == null ? "" : s.trim(); }
+
     public static boolean truthy(String s) { return s != null && !s.isEmpty(); }
 
     /** Danh sách chuỗi, phần tử null → ""; không gửi → danh sách rỗng */

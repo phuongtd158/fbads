@@ -7,14 +7,14 @@ import com.fbads.dto.Responses.Connection;
 import com.fbads.dto.Responses.FbAccount;
 import com.fbads.dto.Responses.FbAccounts;
 import com.fbads.dto.Responses.TokenStatus;
-import com.fbads.entity.AppSettings;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.AccInfo;
 import com.fbads.service.facebook.GraphData.AccessToken;
 import com.fbads.service.facebook.GraphData.Account;
 import com.fbads.service.facebook.GraphData.Me;
 import com.fbads.service.facebook.GraphData.TokenDebug;
 import com.fbads.service.facebook.GraphData.TokenInfo;
+import com.fbads.settings.AppSettings;
+import com.fbads.settings.SettingsService;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 

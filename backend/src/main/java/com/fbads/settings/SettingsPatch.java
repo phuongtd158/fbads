@@ -1,4 +1,4 @@
-package com.fbads.dto;
+package com.fbads.settings;
 
 import com.fbads.common.JsNumber;
 

@@ -1,4 +1,4 @@
-package com.fbads.entity;
+package com.fbads.settings;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -35,7 +35,7 @@ public class AppSettings {
     private boolean mock = true;             // true = dữ liệu giả để dùng thử, không chạm vào Facebook
     private boolean dryRun = true;           // true = tự động hoá chỉ ghi log, không thực thi thật
     @Convert(converter = SecretConverter.class)   // mã hoá trong DB khi có SECRET_KEY
-    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // không gửi về giao diện: xem Responses.PublicSettings
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) // không gửi về giao diện: xem PublicSettings
     private String accessToken = "";
     private String adAccountId = "";         // tài khoản đầu tiên trong adAccountIds (giữ cho phần cũ)
     @Convert(converter = JsonConverters.StringList.class)

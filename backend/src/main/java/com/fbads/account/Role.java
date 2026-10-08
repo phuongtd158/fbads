@@ -1,4 +1,4 @@
-package com.fbads.entity;
+package com.fbads.account;
 
 /**
  * Vai trò trong một workspace, quyền tăng dần:

@@ -1,17 +1,9 @@
-package com.fbads.service;
+package com.fbads.account;
 
 import com.fbads.common.ApiException;
 import com.fbads.config.AppProperties;
-import com.fbads.entity.Role;
-import com.fbads.entity.User;
-import com.fbads.entity.Workspace;
-import com.fbads.entity.WorkspaceMember;
-import com.fbads.repository.MemberRepository;
-import com.fbads.repository.UserRepository;
-import com.fbads.repository.WorkspaceRepository;
 import com.fbads.security.Passwords;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.validation.StrongPassword;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;

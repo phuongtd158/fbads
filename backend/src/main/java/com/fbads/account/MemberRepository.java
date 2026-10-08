@@ -1,7 +1,5 @@
-package com.fbads.repository;
+package com.fbads.account;
 
-import com.fbads.entity.Role;
-import com.fbads.entity.WorkspaceMember;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

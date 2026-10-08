@@ -8,7 +8,7 @@ import com.fbads.client.MockAds;
 import com.fbads.config.CacheConfig;
 import com.fbads.dto.FbSnapshots;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;

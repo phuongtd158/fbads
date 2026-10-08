@@ -1,8 +1,8 @@
 package com.fbads.security;
 
-import com.fbads.entity.Role;
-import com.fbads.entity.User;
-import com.fbads.service.AuthService;
+import com.fbads.account.AuthService;
+import com.fbads.account.Role;
+import com.fbads.account.User;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

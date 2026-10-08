@@ -8,7 +8,7 @@ import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.rule.Rule;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

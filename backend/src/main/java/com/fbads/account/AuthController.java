@@ -1,17 +1,11 @@
-package com.fbads.controller;
+package com.fbads.account;
 
 import com.fbads.common.ApiException;
-import com.fbads.dto.Requests;
+import com.fbads.controller.ApiExceptionHandler;
 import com.fbads.dto.Responses.ApiError;
-import com.fbads.dto.Responses.AuthStatus;
 import com.fbads.dto.Responses.Ok;
-import com.fbads.dto.Responses.UserInfo;
-import com.fbads.entity.Role;
-import com.fbads.entity.User;
 import com.fbads.security.PasswordAuthProvider;
 import com.fbads.security.WorkspaceFilter;
-import com.fbads.service.AuthService;
-import com.fbads.service.LoginAttempts;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -89,9 +83,9 @@ public class AuthController {
 
     /** { username, password }. Bỏ trống username = "admin" (giao diện cũ chỉ gửi mật khẩu). */
     @PostMapping("/login")
-    ResponseEntity<?> login(@RequestBody(required = false) Requests.Login body, HttpServletRequest req,
+    ResponseEntity<?> login(@RequestBody(required = false) Login body, HttpServletRequest req,
             HttpServletResponse res) throws InterruptedException {
-        Requests.Login b = body == null ? Requests.Login.EMPTY : body;
+        Login b = body == null ? Login.EMPTY : body;
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) return ApiExceptionHandler.error(429, "Nhập sai quá nhiều lần. Thử lại sau " + wait + " phút.");
         if (auth.openMode()) return ResponseEntity.ok(Ok.OK);
@@ -119,8 +113,8 @@ public class AuthController {
 
     /** Tạo tài khoản đầu tiên (chỉ khi chưa có tài khoản nào): chủ workspace 1, đăng nhập luôn */
     @PostMapping("/setup")
-    Ok setup(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
-        Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
+    Ok setup(@RequestBody(required = false) Signup body, HttpServletRequest req, HttpServletResponse res) {
+        Signup b = body == null ? Signup.EMPTY : body;
         User u = auth.setup(b.username(), b.name(), b.password());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
         return Ok.OK;
@@ -128,10 +122,10 @@ public class AuthController {
 
     /** Tự đăng ký (ALLOW_SIGNUP=true): tài khoản + workspace riêng, đăng nhập luôn */
     @PostMapping("/register")
-    Ok register(@RequestBody(required = false) Requests.Signup body, HttpServletRequest req, HttpServletResponse res) {
+    Ok register(@RequestBody(required = false) Signup body, HttpServletRequest req, HttpServletResponse res) {
         int wait = attempts.lockedMinutes(req);
         if (wait > 0) throw new ApiException(429, "Thử quá nhiều lần. Thử lại sau " + wait + " phút.");
-        Requests.Signup b = body == null ? Requests.Signup.EMPTY : body;
+        Signup b = body == null ? Signup.EMPTY : body;
         User u = auth.register(b.username(), b.name(), b.password(), b.workspaceName());
         signIn(PasswordAuthProvider.signedIn(u.getUsername()), req, res);
         return Ok.OK;
@@ -139,7 +133,7 @@ public class AuthController {
 
     /** Đổi mật khẩu của chính mình, rồi đăng xuất mọi thiết bị khác của người này */
     @PostMapping("/password")
-    ResponseEntity<?> password(@Valid @RequestBody Requests.PasswordChange b, HttpServletRequest req, HttpServletResponse res) {
+    ResponseEntity<?> password(@Valid @RequestBody PasswordChange b, HttpServletRequest req, HttpServletResponse res) {
         Long uid = WorkspaceFilter.userId(req);
         if (uid == null) return ApiExceptionHandler.error(400, "Chưa có tài khoản nào. Hãy tạo tài khoản trước.");
         String cur = b.currentPassword() == null ? "" : b.currentPassword();

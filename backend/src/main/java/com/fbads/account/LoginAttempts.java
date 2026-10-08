@@ -1,4 +1,4 @@
-package com.fbads.service;
+package com.fbads.account;
 
 import com.fbads.config.AppProperties;
 import jakarta.servlet.http.HttpServletRequest;

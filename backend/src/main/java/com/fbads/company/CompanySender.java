@@ -8,7 +8,7 @@ import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
 import com.fbads.repository.CompanyReportRepository;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;

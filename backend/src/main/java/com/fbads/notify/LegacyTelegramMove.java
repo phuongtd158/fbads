@@ -3,7 +3,7 @@ package com.fbads.notify;
 import com.fbads.common.Ids;
 import com.fbads.common.SecretConverter;
 import com.fbads.notify.channel.TelegramChannel;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;

@@ -13,7 +13,7 @@ import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.rule.Rule;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EventStatsService;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;

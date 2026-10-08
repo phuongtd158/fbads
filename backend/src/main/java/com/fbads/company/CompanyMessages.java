@@ -9,7 +9,7 @@ import com.fbads.log.LogError;
 import com.fbads.log.LogKind;
 import com.fbads.log.LogService;
 import com.fbads.notify.Notice;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

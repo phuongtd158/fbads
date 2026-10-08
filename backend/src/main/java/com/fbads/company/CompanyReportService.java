@@ -17,7 +17,7 @@ import com.fbads.repository.CompanyConfigRepository;
 import com.fbads.repository.CompanyReportRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.SettingsService;
+import com.fbads.settings.SettingsService;
 import com.fbads.validation.Result;
 import org.springframework.stereotype.Service;
 

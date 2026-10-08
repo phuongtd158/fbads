@@ -1,8 +1,8 @@
-package com.fbads.validation;
+package com.fbads.settings;
 
 import com.fbads.common.Json;
-import com.fbads.dto.SettingsPatch;
-import com.fbads.entity.AppSettings;
+import com.fbads.validation.Checks;
+import com.fbads.validation.Result;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

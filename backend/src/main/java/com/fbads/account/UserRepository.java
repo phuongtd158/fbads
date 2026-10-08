@@ -1,6 +1,5 @@
-package com.fbads.repository;
+package com.fbads.account;
 
-import com.fbads.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;

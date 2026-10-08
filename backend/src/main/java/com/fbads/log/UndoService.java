@@ -4,11 +4,11 @@ import com.fbads.ads.AdObject;
 import com.fbads.common.ApiException;
 import com.fbads.common.Fmt;
 import com.fbads.engine.ActionExecutor;
-import com.fbads.entity.AppSettings;
 import com.fbads.service.EngineState;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.settings.AppSettings;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;

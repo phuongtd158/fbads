@@ -1,4 +1,4 @@
-package com.fbads.validation;
+package com.fbads.account;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.ConstraintValidator;

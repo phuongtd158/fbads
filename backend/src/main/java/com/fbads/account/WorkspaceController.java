@@ -1,13 +1,9 @@
-package com.fbads.controller;
+package com.fbads.account;
 
 import com.fbads.common.ApiException;
-import com.fbads.dto.Requests;
 import com.fbads.dto.Responses.Ok;
-import com.fbads.entity.Role;
-import com.fbads.entity.Workspace;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.security.WorkspaceFilter;
-import com.fbads.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,9 +36,9 @@ public class WorkspaceController {
 
     /** Chọn workspace làm việc (lưu trong phiên đăng nhập) */
     @PostMapping("/workspaces/switch")
-    Ok switchTo(@RequestBody(required = false) Requests.WorkspaceSwitch b, HttpServletRequest req) {
+    Ok switchTo(@RequestBody(required = false) WorkspaceSwitch b, HttpServletRequest req) {
         long uid = signedInUser(req);
-        long id = (b == null ? Requests.WorkspaceSwitch.EMPTY : b).id();
+        long id = (b == null ? WorkspaceSwitch.EMPTY : b).id();
         if (auth.role(id, uid) == null) throw new ApiException(403, "Bạn không thuộc workspace này");
         req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, id);
         return Ok.OK;
@@ -50,17 +46,17 @@ public class WorkspaceController {
 
     /** Tạo workspace mới (vd. cho một khách hàng khác): người tạo là chủ, chuyển sang workspace đó luôn */
     @PostMapping("/workspaces")
-    AuthService.Membership create(@RequestBody(required = false) Requests.WorkspaceName b, HttpServletRequest req) {
+    AuthService.Membership create(@RequestBody(required = false) WorkspaceName b, HttpServletRequest req) {
         long uid = signedInUser(req);
-        Workspace w = auth.createWorkspace(uid, (b == null ? Requests.WorkspaceName.EMPTY : b).name());
+        Workspace w = auth.createWorkspace(uid, (b == null ? WorkspaceName.EMPTY : b).name());
         req.getSession().setAttribute(WorkspaceFilter.SESSION_WS, w.getId());
         return new AuthService.Membership(w.getId(), w.getName(), Role.OWNER);
     }
 
     /** Đổi tên workspace đang chọn */
     @PostMapping("/workspace")
-    Ok rename(@RequestBody(required = false) Requests.WorkspaceName b) {
-        auth.renameWorkspace(WorkspaceContext.require(), (b == null ? Requests.WorkspaceName.EMPTY : b).name());
+    Ok rename(@RequestBody(required = false) WorkspaceName b) {
+        auth.renameWorkspace(WorkspaceContext.require(), (b == null ? WorkspaceName.EMPTY : b).name());
         return Ok.OK;
     }
 
@@ -69,15 +65,15 @@ public class WorkspaceController {
 
     /** { username, name?, password? (khi tạo tài khoản mới), role } */
     @PostMapping("/members")
-    AuthService.Member add(@RequestBody(required = false) Requests.MemberAdd body, HttpServletRequest req) {
+    AuthService.Member add(@RequestBody(required = false) MemberAdd body, HttpServletRequest req) {
         signedInUser(req);
-        Requests.MemberAdd b = body == null ? Requests.MemberAdd.EMPTY : body;
+        MemberAdd b = body == null ? MemberAdd.EMPTY : body;
         return auth.addMember(WorkspaceContext.require(), b.username(), b.name(), b.password(), Role.parse(b.role()));
     }
 
     @PostMapping("/members/{userId}/role")
-    Ok role(@PathVariable long userId, @RequestBody(required = false) Requests.RoleChange b) {
-        auth.setRole(WorkspaceContext.require(), userId, Role.parse((b == null ? Requests.RoleChange.EMPTY : b).role()));
+    Ok role(@PathVariable long userId, @RequestBody(required = false) RoleChange b) {
+        auth.setRole(WorkspaceContext.require(), userId, Role.parse((b == null ? RoleChange.EMPTY : b).role()));
         return Ok.OK;
     }
 

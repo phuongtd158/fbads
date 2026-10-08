@@ -1,6 +1,5 @@
-package com.fbads.repository;
+package com.fbads.account;
 
-import com.fbads.entity.Workspace;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 

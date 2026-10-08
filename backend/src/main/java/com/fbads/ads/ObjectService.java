@@ -12,10 +12,10 @@ import com.fbads.log.LogKind;
 import com.fbads.log.LogService;
 import com.fbads.log.LogSnapshot;
 import com.fbads.log.LogTarget;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;

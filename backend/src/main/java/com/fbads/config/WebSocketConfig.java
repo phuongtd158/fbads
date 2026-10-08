@@ -1,7 +1,7 @@
 package com.fbads.config;
 
+import com.fbads.account.AuthService;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.AuthService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;

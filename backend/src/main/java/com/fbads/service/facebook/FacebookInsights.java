@@ -7,11 +7,11 @@ import com.fbads.client.FbException;
 import com.fbads.client.RateLimits;
 import com.fbads.common.ApiException;
 import com.fbads.dto.FbSnapshots;
-import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.RangeEntry;
 import com.fbads.service.facebook.FacebookState.TrendEntry;
 import com.fbads.service.facebook.FacebookState.Ws;
 import com.fbads.service.facebook.GraphData.InsightRow;
+import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;

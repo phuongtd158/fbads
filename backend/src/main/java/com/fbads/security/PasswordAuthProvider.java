@@ -1,6 +1,6 @@
 package com.fbads.security;
 
-import com.fbads.service.AuthService;
+import com.fbads.account.AuthService;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
