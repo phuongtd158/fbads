@@ -17,14 +17,20 @@ final class TelegramStub implements AutoCloseable {
     private final HttpServer server;
     /** Nội dung (text) mọi lần gọi sendMessage, kể cả lần bị trả lỗi */
     final List<String> texts = new CopyOnWriteArrayList<>();
+    /** Chat ID của từng lần gọi, cùng thứ tự với texts */
+    final List<String> chats = new CopyOnWriteArrayList<>();
     volatile int status = 200;
+    /** Chat ID này luôn bị trả 500 (Telegram lỗi tạm thời), các chat khác theo status */
+    volatile String failChat;
 
     TelegramStub() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", ex -> {
             JsonNode body = Api.JSON.readTree(new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             texts.add(body.path("text").asString());
-            int code = status;
+            String chat = body.path("chat_id").asString();
+            chats.add(chat);
+            int code = chat.equals(failChat) ? 500 : status;
             String res = code == 200 ? "{\"ok\":true,\"result\":{}}"
                     : "{\"ok\":false,\"error_code\":" + code + ",\"description\":\"" + (code == 400 ? "Bad Request: chat not found" : "Internal Server Error") + "\"}";
             byte[] out = res.getBytes(StandardCharsets.UTF_8);

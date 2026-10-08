@@ -38,16 +38,6 @@ public final class SettingsValidator {
             String t = Json.str(patch.reportTime());
             if (!t.isEmpty() && !Checks.isTime(t)) e.put("reportTime", "Giờ báo cáo không hợp lệ (HH:MM)"); else v.put("reportTime", t);
         }
-        if (has.test("telegramChatId")) {
-            String ch = Json.str(patch.telegramChatId()).trim();
-            String m = Checks.checkTelegramChats(ch);
-            if (!m.isEmpty()) e.put("telegramChatId", m); else v.put("telegramChatId", String.join(", ", Checks.parseChatIds(ch)));
-        }
-        if (has.test("telegramToken")) {
-            String t = Json.str(patch.telegramToken()).trim();
-            String m = Checks.checkTelegramToken(t);
-            if (!m.isEmpty()) e.put("telegramToken", m); else if (!t.isEmpty()) v.put("telegramToken", t);
-        }
         // Tài khoản quảng cáo: quản lý được nhiều tài khoản. adAccountId = tài khoản đầu tiên, giữ cho phần cũ.
         if (has.test("adAccountIds") || has.test("adAccountId")) {
             List<String> raw = has.test("adAccountIds") ? Json.strings(patch.adAccountIds()) : List.of(Json.str(patch.adAccountId()));

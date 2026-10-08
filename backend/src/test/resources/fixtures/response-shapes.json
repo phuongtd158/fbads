@@ -280,7 +280,7 @@
       "fbConfigId" : "string",
       "has_accessToken" : "boolean",
       "has_fbAppSecret" : "boolean",
-      "has_telegramToken" : "boolean",
+      "has_notify" : "boolean",
       "killScope" : "string",
       "killSwitchEnabled" : "boolean",
       "mock" : "boolean",
@@ -290,8 +290,6 @@
       "skipLearning" : "boolean",
       "spikeMinSpend" : "number",
       "spikePct" : "number",
-      "telegramChatId" : "string",
-      "telegramToken" : "string",
       "timezone" : "string",
       "weeklyReport" : "boolean"
     },

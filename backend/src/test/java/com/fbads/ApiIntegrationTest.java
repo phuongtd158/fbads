@@ -2,10 +2,12 @@ package com.fbads;
 
 import com.fbads.config.CacheConfig;
 import com.fbads.dto.FbSnapshots;
-import com.fbads.entity.LogEntry;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineLock;
+import com.fbads.entity.LogEntry;
+import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.repository.ScheduleRepository;
 import com.fbads.repository.UserRepository;
 import com.fbads.repository.WorkspaceRepository;
@@ -15,7 +17,6 @@ import com.fbads.service.EventStatsService;
 import com.fbads.service.LogService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
-import com.fbads.notify.channel.TelegramChannel;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.AfterEach;
@@ -75,6 +76,8 @@ class ApiIntegrationTest extends IntegrationBase {
     LogService logs;
     @Autowired
     TelegramChannel telegram;
+    @Autowired
+    NotifyTargetRepository notifyTargets;
     @Autowired
     EventStatsService stats;
     @Autowired
@@ -367,19 +370,23 @@ class ApiIntegrationTest extends IntegrationBase {
         assertThat(api.get("/api/state").body().get("settings").get("ruleIntervalMin").asInt()).isEqualTo(45);
     }
 
-    /** Có SECRET_KEY: token lưu trong DB đã mã hoá, API và engine vẫn đọc ra đúng token */
+    /** Có SECRET_KEY: token lưu trong DB đã mã hoá (cả cấu hình kênh thông báo), API và engine vẫn đọc ra đúng token */
     @Test
     void secretsAreEncryptedInDb() {
-        settings.update(s -> { s.setTelegramToken("123:bi-mat"); s.setAccessToken("EAAB-token-that"); });
+        settings.update(s -> s.setAccessToken("EAAB-token-that"));
+        String channel = TestChannels.telegram(notifyTargets, "123:bi-mat", "111").getId();
         try {
-            Map<String, Object> row = jdbc.queryForMap("SELECT access_token, telegram_token FROM app_settings WHERE id = 1");
-            assertThat((String) row.get("access_token")).startsWith("enc:v1:").doesNotContain("EAAB");
-            assertThat((String) row.get("telegram_token")).startsWith("enc:v1:").doesNotContain("bi-mat");
+            assertThat(jdbc.queryForObject("SELECT access_token FROM app_settings WHERE id = 1", String.class))
+                    .startsWith("enc:v1:").doesNotContain("EAAB");
+            assertThat(jdbc.queryForObject("SELECT config FROM notify_targets WHERE id = ?", String.class, channel))
+                    .startsWith("enc:v1:").doesNotContain("bi-mat");
             settings.reload();
             assertThat(settings.get().getAccessToken()).isEqualTo("EAAB-token-that");
             assertThat(api.get("/api/state").body().get("settings").get("has_accessToken").asBoolean()).isTrue();
+            assertThat(notifyTargets.findById(channel).orElseThrow().getConfig()).contains("123:bi-mat");
         } finally {
-            settings.update(s -> { s.setTelegramToken(""); s.setAccessToken(""); });
+            settings.update(s -> s.setAccessToken(""));
+            TestChannels.clear(notifyTargets);
         }
     }
 
@@ -475,7 +482,7 @@ class ApiIntegrationTest extends IntegrationBase {
     void eventsWithoutKafka() throws Exception {
         try (TelegramStub tg = new TelegramStub()) {
             telegram.setApiBase(tg.base());
-            settings.update(s -> { s.setTelegramToken("123:abc"); s.setTelegramChatId("111"); });
+            TestChannels.telegram(notifyTargets, "123:abc", "111");
             String today = clock.now().date();
             int before = actions(today, "schedule");
             int manualBefore = actions(today, "manual");
@@ -503,8 +510,8 @@ class ApiIntegrationTest extends IntegrationBase {
             assertThat(tg.texts.get(2)).startsWith("📊 <b>Báo cáo Facebook Ads</b>");
         } finally {
             clock.setClock(Clock.systemUTC());
-            settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
             telegram.setApiBase("https://api.telegram.org");
+            TestChannels.clear(notifyTargets);
         }
     }
 

@@ -3,14 +3,15 @@ package com.fbads;
 import com.fbads.client.GraphClient;
 import com.fbads.engine.AlertWatch;
 import com.fbads.engine.EngineClock;
+import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
-import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.service.WsState;
 import com.fbads.service.facebook.FacebookGraph;
-import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookInsights.HourSpend;
+import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,7 @@ class AlertsIntegrationTest extends IntegrationBase {
     @Autowired FacebookGraph fbGraph;
     @Autowired FacebookState fbState;
     @Autowired TelegramChannel telegram;
+    @Autowired NotifyTargetRepository notifyTargets;
     @Autowired AlertWatch alerts;
     @Autowired EngineClock clock;
     @Autowired WsState state;
@@ -75,9 +77,9 @@ class AlertsIntegrationTest extends IntegrationBase {
         };
         fbGraph.setGraphBase(fbStub.base());
         telegram.setApiBase(tg.base());
+        TestChannels.telegram(notifyTargets, "1:x", "42");
         clock.setClock(Clock.fixed(now, ZoneOffset.UTC));
         settings.update(s -> { s.setMock(false); s.setAccessToken("EAAtoken-1234567890"); s.setAdAccountIds(List.of("111")); s.setAdAccountId("111");
-            s.setTelegramToken("1:x"); s.setTelegramChatId("42");
             s.setAlertAccount(true); s.setAlertDisapproved(true); s.setAlertSpike(true); s.setSpikePct(50); s.setSpikeMinSpend(100000); });
         fbState.resetCache();
         alerts.reset();
@@ -86,12 +88,13 @@ class AlertsIntegrationTest extends IntegrationBase {
 
     @AfterEach
     void tearDown() {
-        settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(List.of()); s.setAdAccountId(""); s.setTelegramToken(""); s.setTelegramChatId("");
+        settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(List.of()); s.setAdAccountId("");
             s.setAlertAccount(true); s.setAlertDisapproved(true); s.setAlertSpike(true); });
         fbState.resetCache();
         limits.reset();
         fbGraph.setGraphBase(GraphClient.BASE);
         telegram.setApiBase("https://api.telegram.org");
+        TestChannels.clear(notifyTargets);
         clock.setClock(Clock.systemUTC());
         alerts.reset();
         state.clearAll();

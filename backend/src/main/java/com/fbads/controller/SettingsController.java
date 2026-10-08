@@ -3,9 +3,6 @@ package com.fbads.controller;
 import com.fbads.dto.Responses.State;
 import com.fbads.dto.Responses.Storage;
 import com.fbads.dto.SettingsPatch;
-import com.fbads.notify.Notice;
-import com.fbads.notify.Notifier;
-import com.fbads.notify.SendResult;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
 import com.fbads.service.SettingsService;
@@ -23,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.Map;
 
-/** Trạng thái chung, cài đặt và thử kết nối Telegram. */
+/** Trạng thái chung và cài đặt. Kênh thông báo: NotifyController. */
 @RestController
 @RequestMapping("/api")
 public class SettingsController {
@@ -35,16 +32,14 @@ public class SettingsController {
     private final RuleService rules;
     private final FacebookObjects objects;
     private final FacebookState fbState;
-    private final Notifier notifier;
 
     public SettingsController(SettingsService settings, ScheduleService schedules, RuleService rules,
-            FacebookObjects objects, FacebookState fbState, Notifier notifier) {
+            FacebookObjects objects, FacebookState fbState) {
         this.settings = settings;
         this.schedules = schedules;
         this.rules = rules;
         this.objects = objects;
         this.fbState = fbState;
-        this.notifier = notifier;
     }
 
     @GetMapping("/state")
@@ -67,12 +62,5 @@ public class SettingsController {
         if (SOURCE_KEYS.stream().anyMatch(r.value()::containsKey)) fbState.resetCache();
         try { objects.listObjects(true); } catch (RuntimeException ignored) { /* lỗi kết nối hiện ở trang Kết nối */ }
         return ResponseEntity.ok(settings.publicSettings());
-    }
-
-    @PostMapping("/telegram/test")
-    ResponseEntity<?> telegramTest() {
-        SendResult.Reply out = notifier.sendNow(new Notice(Notice.Topic.ALERT, "✅ Kết nối Telegram thành công — Facebook Ads Auto Tool"))
-                .reply("Cần nhập Bot Token và Chat ID trước.");
-        return ResponseEntity.status(out.status()).body(out.body());
     }
 }

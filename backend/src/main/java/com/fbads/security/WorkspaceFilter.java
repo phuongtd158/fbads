@@ -24,7 +24,7 @@ import java.util.Set;
  * Chạy sau Spring Security, cho /api và /ws:
  *  1. xác định workspace của request: workspace đang chọn (lưu trong phiên), không còn là thành viên thì lấy workspace đầu tiên;
  *     chế độ mở (chưa có tài khoản nào) = workspace 1 với quyền OWNER;
- *  2. kiểm tra quyền: đọc (GET) thì thành viên nào cũng được; ghi cần EDITOR; cài đặt, Facebook, Telegram, thành viên cần OWNER;
+ *  2. kiểm tra quyền: đọc (GET) thì thành viên nào cũng được; ghi cần EDITOR; cài đặt, Facebook, kênh thông báo, thành viên cần OWNER;
  *  3. gắn workspace vào luồng (WorkspaceContext) trong lúc xử lý request, xong thì gỡ.
  */
 @Configuration
@@ -40,7 +40,7 @@ public class WorkspaceFilter {
     /** Việc của riêng người dùng, không phụ thuộc quyền trong workspace đang chọn */
     static final Set<String> PERSONAL = Set.of("/api/password", "/api/workspaces", "/api/workspaces/switch");
     /** Ghi vào đây cần quyền OWNER */
-    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/telegram/", "/api/members",
+    static final List<String> OWNER_PREFIXES = List.of("/api/settings", "/api/fb/", "/api/notify/", "/api/members",
             "/api/workspace", "/api/company/config");
 
     /** Quyền tối thiểu để gọi; null = không cần kiểm tra quyền */

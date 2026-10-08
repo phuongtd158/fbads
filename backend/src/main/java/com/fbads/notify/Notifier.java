@@ -1,29 +1,25 @@
 package com.fbads.notify;
 
-import com.fbads.entity.AppSettings;
+import com.fbads.entity.NotifyTarget;
 import com.fbads.event.AppEvent;
-import com.fbads.notify.channel.TelegramChannel;
-import com.fbads.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Phòng thư: nhận sự kiện, soạn thông báo, giao cho từng kênh của workspace.
  * <pre>
  * sự kiện tới
  *   → noticeOf(e): sự kiện này có cần báo không, nội dung gì?
- *   → targets(): các kênh đang bật của workspace
+ *   → targets(loại tin): các kênh đang bật của workspace có nhận loại tin này (bảng notify_targets)
  *   → với từng kênh: gửi (handleOnce: kênh nào đã gửi rồi thì bỏ qua)
  * </pre>
  * Kênh nào gửi không được thì ném lỗi sau khi đã thử hết các kênh, để nơi gọi quyết định: Kafka thử lại (lỗi tạm thời)
@@ -37,40 +33,47 @@ public class Notifier {
     private static final Logger log = LoggerFactory.getLogger(Notifier.class);
 
     /**
-     * Một kênh đã cài của workspace: loại kênh + cấu hình.
+     * Một kênh đã cài, sẵn sàng gửi: lớp kênh (biết cách gửi) + cấu hình của workspace.
      *
-     * @param id   mã của kênh đã cài, dùng làm dấu "đã gửi"
-     * @param name tên hiện trên giao diện
+     * @param id   mã kênh đã cài (NotifyTarget.id), dùng làm dấu "đã gửi"
+     * @param name tên hiện trong kết quả gửi
      */
-    public record Target(String id, String name, NotifyChannel channel, JsonNode config) {
+    record Target(String id, String name, NotifyChannel channel, JsonNode config) {
         SendResult send(Notice n) { return channel.send(n, config).named(name); }
     }
 
-    /** Các kênh có trong code, theo mã: "telegram" → TelegramChannel… */
-    private final Map<String, NotifyChannel> channels;
-    private final SettingsService settings;
+    private final NotifyTargetService targets;
     private final StringRedisTemplate redis;
-    private final JsonMapper json;
 
-    public Notifier(List<NotifyChannel> channels, SettingsService settings, StringRedisTemplate redis, JsonMapper json) {
-        this.channels = channels.stream().collect(Collectors.toMap(NotifyChannel::type, Function.identity()));
-        this.settings = settings;
+    public Notifier(NotifyTargetService targets, StringRedisTemplate redis) {
+        this.targets = targets;
         this.redis = redis;
-        this.json = json;
     }
 
-    /** Các kênh của workspace hiện tại nhận loại tin này. Hiện chỉ có Telegram (nhận mọi loại tin), cấu hình lấy từ Cài đặt. */
+    /** Các kênh đang bật của workspace hiện tại có nhận loại tin này */
     List<Target> targets(Notice.Topic topic) {
-        AppSettings s = settings.get();
-        if (s.getTelegramToken().isEmpty()) return List.of();
-        JsonNode cfg = json.valueToTree(Map.of("token", s.getTelegramToken(), "chatId", s.getTelegramChatId()));
-        return List.of(new Target("settings", "Telegram", channels.get(TelegramChannel.TYPE), cfg));
+        List<Target> out = new ArrayList<>();
+        for (NotifyTarget t : targets.all()) {
+            NotifyChannel channel = targets.channelOf(t);
+            if (!t.isEnabled() || channel == null || !t.getTopics().contains(topic.name())) continue;
+            out.add(new Target(t.getId(), targets.displayName(t), channel, targets.config(t)));
+        }
+        return out;
+    }
+
+    /** Nút "Gửi thử" của một kênh: gửi dù kênh đang tắt hay không nhận loại tin này */
+    public SendResult test(String id) {
+        NotifyTarget t = targets.get(id);
+        NotifyChannel channel = targets.channelOf(t);
+        if (channel == null) return SendResult.notConfigured();
+        Notice n = new Notice(Notice.Topic.ALERT, "✅ <b>Kết nối " + channel.label() + " thành công</b>\nFacebook Ads Auto Tool sẽ gửi thông báo tới đây.");
+        return new Target(t.getId(), targets.displayName(t), channel, targets.config(t)).send(n);
     }
 
     /** Workspace có kênh nào nhận loại tin này không (vd chưa cài kênh nào thì khỏi soạn báo cáo) */
     public boolean hasChannelFor(Notice.Topic topic) { return !targets(topic).isEmpty(); }
 
-    /** Gửi ngay cho mọi kênh (nút "Gửi báo cáo ngay", "Gửi tin thử"): trả kết quả từng người nhận, không ném lỗi */
+    /** Gửi ngay cho các kênh nhận loại tin này (nút "Gửi báo cáo ngay"): trả kết quả từng người nhận, không ném lỗi */
     public SendResult sendNow(Notice n) {
         List<SendResult> all = new ArrayList<>();
         for (Target t : targets(n.topic())) all.add(t.send(n));
@@ -102,7 +105,7 @@ public class Notifier {
      * @param claim   trước khi gửi: false = kênh này đã nhận rồi, bỏ qua
      * @param onError gửi lỗi: gỡ dấu "đã gửi" để lượt sau thử lại
      */
-    private void deliver(Notice n, java.util.function.Predicate<Target> claim, java.util.function.Consumer<Target> onError) {
+    private void deliver(Notice n, Predicate<Target> claim, Consumer<Target> onError) {
         NotifyFailure firstRetryable = null, firstPermanent = null;
         for (Target t : targets(n.topic())) {
             if (!claim.test(t)) {

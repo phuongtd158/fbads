@@ -5,6 +5,7 @@ import com.fbads.entity.CompanyReport;
 import com.fbads.entity.LogEntry;
 import com.fbads.entity.Rule;
 import com.fbads.entity.Schedule;
+import com.fbads.notify.ConfigField;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
@@ -85,4 +86,21 @@ public final class Responses {
     public record CompanyBuilt(List<CompanyReport> reports, List<String> built) {}
 
     public record CompanySynced(int synced, List<CompanyReport> reports) {}
+
+    // ------------------------------------------------------------------ Kênh thông báo (NotifyController)
+
+    /** Một loại kênh có trong code: giao diện vẽ form từ fields */
+    public record NotifyType(String type, String label, List<ConfigField> fields, String help) {}
+
+    /** Một loại tin (Notice.Topic) */
+    public record NotifyTopic(String key, String label) {}
+
+    /**
+     * Một kênh đã cài. config đã bỏ các ô bí mật (để ""), savedSecrets = các ô bí mật đã có giá trị (hiện "đã lưu").
+     */
+    public record NotifyTargetView(String id, String type, String label, String name, boolean enabled, List<String> topics,
+            ObjectNode config, List<String> savedSecrets) {}
+
+    /** GET /api/notify: các loại kênh, các loại tin, và kênh đã cài của workspace */
+    public record NotifyOverview(List<NotifyType> types, List<NotifyTopic> topics, List<NotifyTargetView> channels) {}
 }

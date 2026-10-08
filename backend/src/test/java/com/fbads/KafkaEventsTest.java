@@ -1,14 +1,17 @@
 package com.fbads;
 
+import com.fbads.common.Ids;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.EngineClock;
+import com.fbads.entity.NotifyTarget;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventTopics;
+import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EventStatsService;
 import com.fbads.service.ReportService;
 import com.fbads.service.SettingsService;
-import com.fbads.notify.channel.TelegramChannel;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -95,6 +98,8 @@ class KafkaEventsTest {
     @Autowired
     TelegramChannel telegram;
     @Autowired
+    NotifyTargetRepository notifyTargets;
+    @Autowired
     SettingsService settings;
     @Autowired
     EventStatsService stats;
@@ -121,8 +126,9 @@ class KafkaEventsTest {
     void setUp() {
         scope = WorkspaceContext.enter(WorkspaceContext.DEFAULT); // gọi service trực tiếp = workspace 1
         telegram.setApiBase(tg.base());
-        settings.update(s -> { s.setTelegramToken("123:abc"); s.setTelegramChatId("111"); });
+        TestChannels.telegram(notifyTargets, "123:abc", "111");
         tg.status = 200;
+        tg.failChat = null;
         // chờ mọi consumer (kể cả consumer topic thử lại, DLT) được Kafka chia partition xong
         await().atMost(Duration.ofSeconds(60)).until(() -> listeners.getAllListenerContainers().stream()
                 .allMatch(c -> c.getAssignedPartitions() != null && !c.getAssignedPartitions().isEmpty()));
@@ -130,7 +136,7 @@ class KafkaEventsTest {
 
     @AfterEach
     void tearDown() {
-        settings.update(s -> { s.setTelegramToken(""); s.setTelegramChatId(""); });
+        TestChannels.clear(notifyTargets);
         scope.close();
     }
 
@@ -258,6 +264,30 @@ class KafkaEventsTest {
         assertThat(tg.count("✅ <b>Lịch</b>\n" + name + ": Đã bật")).isEqualTo(3);
         assertThat(header(dead, "kafka_exception-cause-fqcn")).endsWith("Retryable");
         assertThat(header(dead, "kafka_exception-message")).contains("Internal Server Error");
+    }
+
+    /**
+     * Hai kênh, một kênh lỗi tạm thời: cả sự kiện được thử lại, nhưng kênh đã gửi được không nhận lại
+     * (dấu "đã gửi" trong Redis tính theo từng kênh). Kênh lỗi được thử đủ 3 lần.
+     */
+    @Test
+    void onlyTheFailingChannelIsRetried() {
+        NotifyTarget broken = TestChannels.telegram(notifyTargets, "123:abc", "111");
+        NotifyTarget second = new NotifyTarget(Ids.uid(), TelegramChannel.TYPE);
+        second.setName("Nhóm lỗi");
+        second.setTopics(broken.getTopics());
+        second.setConfig("{\"token\":\"123:abc\",\"chatId\":\"999\"}");
+        notifyTargets.save(second);
+        tg.failChat = "999";
+        String name = "Hai kênh " + UUID.randomUUID();
+        String logId = executor.record(false, e -> { e.setKind("schedule"); e.setSource("Lịch"); e.setName(name); e.setDetail("Đã bật"); }).getId();
+
+        find(EventTopics.NOTIFY_DLT, r -> r.value().contains(logId));
+        String text = "✅ <b>Lịch</b>\n" + name + ": Đã bật";
+        List<String> chats = new ArrayList<>();
+        for (int i = 0; i < tg.texts.size(); i++) if (tg.texts.get(i).equals(text)) chats.add(tg.chats.get(i));
+        assertThat(chats).filteredOn("111"::equals).hasSize(1);
+        assertThat(chats).filteredOn("999"::equals).hasSize(3);
     }
 
     /** Lỗi cố định (400: chat id sai): không thử lại, vào thẳng DLT */

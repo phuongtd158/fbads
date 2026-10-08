@@ -4,12 +4,13 @@ import com.fbads.client.FbException;
 import com.fbads.client.GraphClient;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineWatch;
-import com.fbads.security.WorkspaceContext;
-import com.fbads.service.LogService;
-import com.fbads.service.SettingsService;
 import com.fbads.notify.Notice;
 import com.fbads.notify.SendResult;
 import com.fbads.notify.channel.TelegramChannel;
+import com.fbads.repository.NotifyTargetRepository;
+import com.fbads.security.WorkspaceContext;
+import com.fbads.service.LogService;
+import com.fbads.service.SettingsService;
 import com.fbads.service.WsState;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookAuth;
@@ -50,6 +51,8 @@ class WatchIntegrationTest extends IntegrationBase {
     @Autowired
     TelegramChannel telegram;
     @Autowired
+    NotifyTargetRepository notifyTargets;
+    @Autowired
     EngineWatch watch;
     @Autowired
     EngineClock clock;
@@ -74,9 +77,9 @@ class WatchIntegrationTest extends IntegrationBase {
         fbGraph.setGraphBase(fbStub.base());
         graph.setTimeout(Duration.ofMillis(300));
         telegram.setApiBase(tg.base());
+        TestChannels.telegram(notifyTargets, "123:abc", "42");
         clock.setClock(Clock.fixed(now, ZoneOffset.UTC));
-        settings.update(s -> { s.setMock(false); s.setAccessToken("EAAtesttoken1234567890"); s.setAdAccountIds(java.util.List.of("123")); s.setAdAccountId("123");
-            s.setTelegramToken("123:abc"); s.setTelegramChatId("42"); });
+        settings.update(s -> { s.setMock(false); s.setAccessToken("EAAtesttoken1234567890"); s.setAdAccountIds(java.util.List.of("123")); s.setAdAccountId("123"); });
         fbState.resetCache();
         watch.reset();
         state.clearAll();
@@ -84,12 +87,13 @@ class WatchIntegrationTest extends IntegrationBase {
 
     @AfterEach
     void tearDown() {
-        settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(java.util.List.of()); s.setAdAccountId(""); s.setTelegramToken(""); s.setTelegramChatId(""); });
+        settings.update(s -> { s.setMock(true); s.setAccessToken(""); s.setAdAccountIds(java.util.List.of()); s.setAdAccountId(""); });
         fbState.resetCache();
         limits.reset(); // "rate" đã chặn gọi Facebook 5 phút: không để lây sang test khác
         fbGraph.setGraphBase(GraphClient.BASE);
         graph.setTimeout(GraphClient.TIMEOUT);
         telegram.setApiBase("https://api.telegram.org");
+        TestChannels.clear(notifyTargets);
         telegram.setTimeout(TelegramChannel.TIMEOUT);
         clock.setClock(Clock.systemUTC());
         watch.reset();

@@ -1,6 +1,8 @@
 package com.fbads.service;
 
 import com.fbads.entity.AppSettings;
+import com.fbads.entity.NotifyTarget;
+import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.repository.SettingsRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Service;
@@ -20,16 +22,18 @@ import java.util.function.Consumer;
 @Service
 public class SettingsService {
     /** Bí mật: không bao giờ gửi về giao diện, chỉ cho biết đã có hay chưa (has_…) */
-    public static final List<String> SECRETS = List.of("accessToken", "telegramToken", "fbAppSecret");
+    public static final List<String> SECRETS = List.of("accessToken", "fbAppSecret");
 
     private final SettingsRepository repo;
+    private final NotifyTargetRepository notifyTargets;
     private final JsonMapper mapper;
     private final Map<Long, AppSettings> current = new ConcurrentHashMap<>();
     /** Khoá theo workspace: 2 lần lưu cùng lúc của một workspace đi lần lượt, workspace khác không phải chờ */
     private final Map<Long, ReentrantLock> locks = new ConcurrentHashMap<>();
 
-    public SettingsService(SettingsRepository repo, JsonMapper mapper) {
+    public SettingsService(SettingsRepository repo, NotifyTargetRepository notifyTargets, JsonMapper mapper) {
         this.repo = repo;
+        this.notifyTargets = notifyTargets;
         this.mapper = mapper;
     }
 
@@ -72,7 +76,7 @@ public class SettingsService {
     /** Đọc lại từ DB (vd sau khi nhập dữ liệu cũ, hoặc khi test đổi DB) */
     public void reload() { current.clear(); }
 
-    /** Cài đặt gửi về giao diện: bí mật để trống + cờ has_… */
+    /** Cài đặt gửi về giao diện: bí mật để trống + cờ has_…, has_notify = có kênh thông báo nào đang bật */
     public ObjectNode publicSettings() {
         ObjectNode out = mapper.valueToTree(get());
         for (String k : SECRETS) {
@@ -80,6 +84,7 @@ public class SettingsService {
             out.put("has_" + k, !v.isEmpty());
             out.put(k, "");
         }
+        out.put("has_notify", notifyTargets.findAll().stream().anyMatch(NotifyTarget::isEnabled));
         return out;
     }
 }

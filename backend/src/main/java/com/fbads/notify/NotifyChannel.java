@@ -1,6 +1,10 @@
 package com.fbads.notify;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ObjectNode;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * Hợp đồng chung của mọi kênh thông báo (Telegram, Gmail, Zalo…).
@@ -16,6 +20,20 @@ public interface NotifyChannel {
 
     /** Tên hiện trên giao diện: "Telegram", "Gmail"… */
     String label();
+
+    /** Các ô cấu hình, theo thứ tự hiện trên form */
+    List<ConfigField> fields();
+
+    /** Hướng dẫn lấy cấu hình (HTML ngắn, hiện dưới form), "" = không có */
+    default String help() { return ""; }
+
+    /**
+     * Kiểm tra cấu hình người dùng nhập trước khi lưu, và chuẩn hoá ngay trong {@code config} (bỏ khoảng trắng, bỏ trùng…).
+     * Ô bí mật để trống khi sửa đã được điền lại giá trị cũ trước khi gọi.
+     *
+     * @return lỗi theo từng ô (khoá = key của ConfigField), rỗng = hợp lệ
+     */
+    Map<String, String> validate(ObjectNode config);
 
     /**
      * Gửi cho mọi người nhận trong cấu hình. Không ném lỗi khi gửi hỏng: lỗi từng người nằm trong kết quả,

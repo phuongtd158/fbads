@@ -3,6 +3,7 @@ package com.fbads.entity;
 import com.fbads.common.JsonConverters;
 import com.fbads.common.SecretConverter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -46,9 +47,13 @@ public class AppSettings {
     private String timezone = "Asia/Ho_Chi_Minh";
     private String resultAction = "purchase";
     private int ruleIntervalMin = 15;
+    // Telegram kiểu cũ: chỉ còn để nhận dữ liệu nhập từ bản Node (DataImporter). Lúc khởi động LegacyTelegramMove
+    // chuyển sang bảng notify_targets rồi xoá ở đây. Chỉ ghi, không bao giờ gửi về giao diện. Kênh thông báo: gói notify.
     @Convert(converter = SecretConverter.class)   // mã hoá trong DB khi có SECRET_KEY
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String telegramToken = "";
     @Column(name = "telegram_chat_id")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String telegramChatId = "";
     private String reportTime = "08:00";
     private boolean skipLearning = true;
@@ -58,13 +63,13 @@ public class AppSettings {
     private String killScope = "total";
     @Convert(converter = JsonConverters.TargetsMap.class)
     private Map<String, Map<String, Number>> accountTargets = new LinkedHashMap<>();
-    // Cảnh báo bất thường (engine/AlertWatch): 30 phút kiểm tra một lần, gửi Telegram và ghi nhật ký
+    // Cảnh báo bất thường (engine/AlertWatch): 30 phút kiểm tra một lần, gửi thông báo và ghi nhật ký
     private boolean alertAccount = true;     // tài khoản quảng cáo bị vô hiệu hoá / nợ thanh toán…
     private boolean alertDisapproved = true; // quảng cáo bị từ chối
     private boolean alertSpike = true;       // chi tiêu hôm nay tăng vọt so với cùng giờ hôm qua
     private int spikePct = 50;               // tăng hơn 50% thì báo
     private long spikeMinSpend = 100000;     // chỉ báo khi hôm nay đã chi từ mức này
-    private boolean weeklyReport = true;     // báo cáo tuần qua Telegram, sáng thứ Hai cùng giờ báo cáo hằng ngày
+    private boolean weeklyReport = true;     // báo cáo tuần, sáng thứ Hai cùng giờ báo cáo hằng ngày
 
     /** Chế độ đang chạy: mock (dữ liệu giả) / dry (chạy thử) / live (thật) */
     @JsonIgnore

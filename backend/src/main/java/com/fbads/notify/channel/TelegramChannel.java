@@ -1,9 +1,11 @@
 package com.fbads.notify.channel;
 
+import com.fbads.notify.ConfigField;
 import com.fbads.notify.Notice;
 import com.fbads.notify.NotifyChannel;
-import com.fbads.notify.SendResult;
 import com.fbads.notify.SendResult.Recipient;
+import com.fbads.notify.SendResult;
+import com.fbads.validation.Checks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpTimeoutException;
@@ -55,6 +58,39 @@ public class TelegramChannel implements NotifyChannel {
 
     @Override
     public String label() { return "Telegram"; }
+
+    @Override
+    public List<ConfigField> fields() {
+        return List.of(
+                new ConfigField("token", "Bot Token", true, "123456789:AAxxxxxxxx…", ""),
+                new ConfigField("chatId", "Chat ID người nhận", false, "Vd: 123456789, -100987654321, @kenhcuaban",
+                        "Nhiều người thì cách nhau bằng dấu phẩy (tối đa " + Checks.MAX_TG_CHATS + "). Mỗi người phải nhắn cho bot "
+                                + "ít nhất một tin trước, hoặc dùng Chat ID của một nhóm có bot."));
+    }
+
+    @Override
+    public String help() {
+        return "<ol><li>Chat với <b>@BotFather</b>, gõ <code>/newbot</code> để lấy Bot Token.</li>"
+                + "<li>Nhắn 1 tin bất kỳ cho bot vừa tạo.</li>"
+                + "<li>Mở <code>https://api.telegram.org/bot&lt;TOKEN&gt;/getUpdates</code> và lấy số <code>chat.id</code>.</li>"
+                + "<li><b>Gửi cho nhiều người:</b> mỗi người nhắn 1 tin cho bot rồi lấy <code>chat.id</code> của họ, nhập tất cả "
+                + "cách nhau bằng dấu phẩy. Hoặc tạo một nhóm, thêm bot và mọi người vào, gửi 1 tin trong nhóm rồi lấy "
+                + "<code>chat.id</code> của nhóm (số âm, dạng <code>-100…</code>).</li></ol>";
+    }
+
+    @Override
+    public Map<String, String> validate(ObjectNode config) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String token = config.path("token").asString("").trim();
+        String chat = config.path("chatId").asString("").trim();
+        String tokenError = token.isEmpty() ? "Cần Bot Token để gửi tin nhắn" : Checks.checkTelegramToken(token);
+        if (!tokenError.isEmpty()) errors.put("token", tokenError);
+        String chatError = chat.isEmpty() ? "Cần ít nhất một Chat ID để biết gửi tin cho ai" : Checks.checkTelegramChats(chat);
+        if (!chatError.isEmpty()) errors.put("chatId", chatError);
+        config.put("token", token);
+        config.put("chatId", String.join(", ", Checks.parseChatIds(chat))); // bỏ trùng, cách nhau ", "
+        return errors;
+    }
 
     /** Cho kiểm thử: trỏ tới máy chủ giả */
     public void setApiBase(String base) { this.apiBase = base; }

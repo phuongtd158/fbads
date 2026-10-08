@@ -27,9 +27,6 @@ public final class SettingsPatch {
     private Double ruleIntervalMin;
     /** Giờ gửi báo cáo "HH:MM", "" = tắt */
     private String reportTime;
-    /** Một hoặc nhiều chat id, cách nhau dấu phẩy */
-    private String telegramChatId;
-    private String telegramToken;
     /** Các tài khoản quảng cáo quản lý */
     private List<String> adAccountIds;
     /** Bản cũ: chỉ 1 tài khoản */
@@ -58,7 +55,7 @@ public final class SettingsPatch {
     private Double spikePct;
     /** Tăng vọt: chỉ báo khi hôm nay đã chi từ mức này; "" = 0 */
     private Double spikeMinSpend;
-    /** Báo cáo tuần qua Telegram */
+    /** Báo cáo tuần (gửi qua các kênh thông báo nhận Báo cáo) */
     private Boolean weeklyReport;
     /** Dùng dữ liệu giả */
     private Boolean mock;
@@ -75,8 +72,6 @@ public final class SettingsPatch {
     public String timezone() { return timezone; }
     public Double ruleIntervalMin() { return ruleIntervalMin; }
     public String reportTime() { return reportTime; }
-    public String telegramChatId() { return telegramChatId; }
-    public String telegramToken() { return telegramToken; }
     public List<String> adAccountIds() { return adAccountIds; }
     public String adAccountId() { return adAccountId; }
     public String accessToken() { return accessToken; }
@@ -104,9 +99,7 @@ public final class SettingsPatch {
 
     public void setReportTime(String v) { reportTime = v; sent.add("reportTime"); }
 
-    public void setTelegramChatId(String v) { telegramChatId = v; sent.add("telegramChatId"); }
 
-    public void setTelegramToken(String v) { telegramToken = v; sent.add("telegramToken"); }
 
     public void setAdAccountIds(List<String> v) { adAccountIds = v; sent.add("adAccountIds"); }
 

@@ -3,10 +3,10 @@ package com.fbads.controller;
 import com.fbads.dto.RuleRequest;
 import com.fbads.dto.Saved;
 import com.fbads.dto.ScheduleRequest;
+import com.fbads.notify.SendResult;
 import com.fbads.service.ReportService;
 import com.fbads.service.RuleService;
 import com.fbads.service.ScheduleService;
-import com.fbads.notify.SendResult;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -84,7 +84,7 @@ public class AutomationController {
     }
 
     // ----- Báo cáo -----
-    private static final String NO_CHANNEL = "Cần nhập Bot Token và Chat ID trước.";
+    private static final String NO_CHANNEL = "Chưa có kênh thông báo nào nhận Báo cáo. Thêm ở Cài đặt → Thông báo.";
 
     @PostMapping("/report")
     ResponseEntity<?> sendReport() {
