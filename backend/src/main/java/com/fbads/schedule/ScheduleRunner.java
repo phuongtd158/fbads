@@ -1,7 +1,7 @@
 package com.fbads.schedule;
 
+import com.fbads.ads.AdObject;
 import com.fbads.client.RateLimits;
-import com.fbads.dto.AdObject;
 import com.fbads.engine.ActCtx;
 import com.fbads.engine.ActResult;
 import com.fbads.engine.Action;
@@ -9,11 +9,11 @@ import com.fbads.engine.ActionExecutor;
 import com.fbads.engine.BudgetMode;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.AppSettings;
-import com.fbads.entity.LogAction;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogError;
-import com.fbads.entity.LogKind;
-import com.fbads.entity.LogTarget;
+import com.fbads.log.LogAction;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogError;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogTarget;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookObjects;

@@ -1,7 +1,7 @@
 package com.fbads;
 
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogKind;
 
 /** Dòng nhật ký mẫu cho kiểm thử */
 final class TestLogs {

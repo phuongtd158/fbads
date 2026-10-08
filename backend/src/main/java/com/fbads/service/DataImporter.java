@@ -2,8 +2,8 @@ package com.fbads.service;
 
 import com.fbads.common.UpstashCodec;
 import com.fbads.config.AppProperties;
-import com.fbads.entity.LogEntry;
-import com.fbads.repository.LogRepository;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogRepository;
 import com.fbads.rule.Rule;
 import com.fbads.rule.RuleRepository;
 import com.fbads.schedule.Schedule;

@@ -1,10 +1,10 @@
-package com.fbads.entity;
+package com.fbads.log;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
 import com.fbads.common.JsonConverters;
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
 
 /** Nhật ký: thao tác lên camp/nhóm nào. Lịch không tìm thấy camp thì chỉ có id. */
 @JsonInclude(JsonInclude.Include.NON_NULL)

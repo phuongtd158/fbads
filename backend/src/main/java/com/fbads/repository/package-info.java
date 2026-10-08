@@ -2,6 +2,6 @@
  * Đọc/ghi bảng (Spring Data JPA): interface trống, Spring tự viết SQL từ tên hàm (findByStatus → where status =
  * ?).
  * <p>
- * Đọc trước: LogRepository.
+ * Đọc trước: SettingsRepository.
  */
 package com.fbads.repository;

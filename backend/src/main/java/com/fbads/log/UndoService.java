@@ -1,16 +1,12 @@
-package com.fbads.service;
+package com.fbads.log;
 
+import com.fbads.ads.AdObject;
 import com.fbads.common.ApiException;
 import com.fbads.common.Fmt;
-import com.fbads.dto.AdObject;
 import com.fbads.engine.ActionExecutor;
 import com.fbads.entity.AppSettings;
-import com.fbads.entity.LogChange;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogError;
-import com.fbads.entity.LogKind;
-import com.fbads.entity.LogSnapshot;
-import com.fbads.entity.LogUndone;
+import com.fbads.service.EngineState;
+import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookActions;
 import com.fbads.service.facebook.FacebookObjects;
 import org.springframework.stereotype.Service;

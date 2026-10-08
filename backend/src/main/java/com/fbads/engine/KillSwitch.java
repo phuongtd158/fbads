@@ -1,11 +1,11 @@
 package com.fbads.engine;
 
+import com.fbads.ads.AdObject;
 import com.fbads.common.Fmt;
-import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
-import com.fbads.entity.LogCondition;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogCondition;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogKind;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Service;

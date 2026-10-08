@@ -1,6 +1,6 @@
 package com.fbads.service.facebook;
 
-import com.fbads.dto.AdObject;
+import com.fbads.ads.AdObject;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
 import org.springframework.stereotype.Service;

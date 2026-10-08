@@ -1,6 +1,6 @@
 package com.fbads.service.facebook;
 
-import com.fbads.dto.Metrics;
+import com.fbads.ads.Metrics;
 import com.fbads.service.facebook.GraphData.ActionStat;
 import com.fbads.service.facebook.GraphData.InsightRow;
 

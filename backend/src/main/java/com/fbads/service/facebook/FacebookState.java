@@ -1,12 +1,12 @@
 package com.fbads.service.facebook;
 
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
+import com.fbads.ads.ObjectsMeta.AccountError;
+import com.fbads.ads.Trend.TrendDay;
 import com.fbads.client.MockAds;
 import com.fbads.config.CacheConfig;
-import com.fbads.dto.AdObject;
 import com.fbads.dto.FbSnapshots;
-import com.fbads.dto.Metrics;
-import com.fbads.dto.Responses.AccountError;
-import com.fbads.dto.Responses.TrendDay;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.SettingsService;
 import org.springframework.cache.Cache;

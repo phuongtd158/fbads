@@ -1,4 +1,4 @@
-package com.fbads.dto;
+package com.fbads.ads;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;

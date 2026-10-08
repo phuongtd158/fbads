@@ -1,6 +1,6 @@
 package com.fbads.engine;
 
-import com.fbads.entity.LogChange;
+import com.fbads.log.LogChange;
 
 /**
  * Kế hoạch cho một hành động (tính trước, chưa gọi Facebook). Xem PlanKind.

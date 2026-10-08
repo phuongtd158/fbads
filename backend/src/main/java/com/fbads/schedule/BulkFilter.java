@@ -1,7 +1,7 @@
 package com.fbads.schedule;
 
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
 import com.fbads.engine.Delivery;
 
 import java.util.ArrayList;

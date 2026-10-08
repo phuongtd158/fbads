@@ -1,4 +1,4 @@
-package com.fbads.dto;
+package com.fbads.ads;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonIgnore;

@@ -1,12 +1,13 @@
 package com.fbads;
 
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.LogCondition;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogCondition;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogService;
 import com.fbads.rule.Condition;
 import com.fbads.rule.DecisionStatus;
 import com.fbads.rule.Rule;
@@ -21,7 +22,6 @@ import com.fbads.rule.RuleService;
 import com.fbads.rule.RuleValidator;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
-import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState;
 import com.fbads.validation.Result;

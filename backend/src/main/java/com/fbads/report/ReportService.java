@@ -1,20 +1,20 @@
 package com.fbads.report;
 
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.common.Fmt;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.AppSettings;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogService;
 import com.fbads.notify.Notice;
 import com.fbads.notify.Notifier;
 import com.fbads.notify.SendResult;
 import com.fbads.schedule.ScheduleRunner;
 import com.fbads.service.EngineState;
-import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookInsights;
 import com.fbads.service.facebook.FacebookObjects;

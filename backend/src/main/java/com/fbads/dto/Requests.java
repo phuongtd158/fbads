@@ -3,9 +3,6 @@ package com.fbads.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fbads.common.JsNumber;
 import com.fbads.validation.StrongPassword;
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
@@ -23,14 +20,6 @@ public final class Requests {
     static String text(String s) { return s == null ? "" : s; }
 
     static String trimmed(String s) { return s == null ? "" : s.trim(); }
-
-    /** Đặt ngân sách tay cho 1 camp */
-    public record Budget(
-            @NotNull(message = "Nhập ngân sách hợp lệ (số)")
-            @Positive(message = "Ngân sách phải lớn hơn 0")
-            @DecimalMax(value = "10000000000", message = "Ngân sách quá lớn, hãy kiểm tra lại số 0")
-            Double amount,
-            String name) {}
 
     /** Đổi mật khẩu đăng nhập */
     public record PasswordChange(String currentPassword, @StrongPassword String newPassword) {}
@@ -75,20 +64,6 @@ public final class Requests {
         public static final RoleChange EMPTY = new RoleChange(null);
 
         public RoleChange { role = text(role); }
-    }
-
-    /** Bật/tắt 1 camp hoặc nhóm QC. name chỉ để ghi nhật ký, có thể null. */
-    public record StatusChange(Boolean on, String name) {
-        public static final StatusChange EMPTY = new StatusChange(null, null);
-
-        public StatusChange { on = Boolean.TRUE.equals(on); }
-    }
-
-    /** Hoàn tác 1 dòng nhật ký; force = hoàn tác dù camp đã bị đổi tay sau đó */
-    public record Undo(Boolean force) {
-        public static final Undo EMPTY = new Undo(null);
-
-        public Undo { force = Boolean.TRUE.equals(force); }
     }
 
     /** Token Facebook (bỏ trống = token đã lưu) + App ID/Secret khi gia hạn token */

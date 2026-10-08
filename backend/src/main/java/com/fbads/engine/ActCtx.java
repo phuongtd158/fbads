@@ -1,7 +1,7 @@
 package com.fbads.engine;
 
-import com.fbads.entity.LogCondition;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogCondition;
+import com.fbads.log.LogKind;
 
 /** Ngữ cảnh của một lần thực thi: nguồn (lịch/rule/hệ thống/thủ công), lịch/rule nào, điều kiện đã khớp, có gửi Telegram không */
 public record ActCtx(LogKind kind, String refId, String refName, LogCondition condition, boolean silent, boolean noCap,

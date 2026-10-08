@@ -1,12 +1,12 @@
 package com.fbads.service.facebook;
 
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
+import com.fbads.ads.Trend.TrendDay;
 import com.fbads.client.FbException;
 import com.fbads.client.RateLimits;
 import com.fbads.common.ApiException;
-import com.fbads.dto.AdObject;
 import com.fbads.dto.FbSnapshots;
-import com.fbads.dto.Metrics;
-import com.fbads.dto.Responses.TrendDay;
 import com.fbads.service.SettingsService;
 import com.fbads.service.facebook.FacebookState.RangeEntry;
 import com.fbads.service.facebook.FacebookState.TrendEntry;

@@ -3,12 +3,12 @@ package com.fbads.company;
 import com.fbads.common.Fmt;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogError;
-import com.fbads.entity.LogKind;
 import com.fbads.event.EventBus;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogError;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogService;
 import com.fbads.notify.Notice;
-import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;
 

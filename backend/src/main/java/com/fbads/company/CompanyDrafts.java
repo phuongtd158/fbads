@@ -1,8 +1,8 @@
 package com.fbads.company;
 
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.common.Ids;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
 import com.fbads.engine.EngineClock;
 import com.fbads.entity.CompanyConfig;
 import com.fbads.entity.CompanyReport;

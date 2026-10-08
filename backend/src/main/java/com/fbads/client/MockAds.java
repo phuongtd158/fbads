@@ -1,8 +1,9 @@
 package com.fbads.client;
 
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;

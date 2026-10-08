@@ -2,7 +2,7 @@ package com.fbads.rule;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fbads.dto.AdLevel;
+import com.fbads.ads.AdLevel;
 
 import java.util.List;
 

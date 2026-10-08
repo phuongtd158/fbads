@@ -1,9 +1,9 @@
 package com.fbads.rule;
 
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
 import com.fbads.common.Fmt;
 import com.fbads.common.Json;
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
 import com.fbads.validation.Checks;
 import com.fbads.validation.Result;
 

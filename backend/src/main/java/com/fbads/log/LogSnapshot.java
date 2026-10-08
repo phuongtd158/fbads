@@ -1,11 +1,11 @@
-package com.fbads.entity;
+package com.fbads.log;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.common.JsonConverters;
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
 
 /**
  * Nhật ký: camp/nhóm trông thế nào ngay trước thao tác (để xem lại và hoàn tác).

@@ -1,11 +1,8 @@
-package com.fbads.service;
+package com.fbads.log;
 
 import com.fbads.common.Ids;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
-import com.fbads.repository.LogRepository;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;

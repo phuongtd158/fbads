@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import com.fbads.company.CompanyApi;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.CompanyReport;
-import com.fbads.entity.LogEntry;
 import com.fbads.entity.User;
 import com.fbads.notify.ConfigField;
 import com.fbads.rule.Rule;
@@ -41,50 +40,6 @@ public final class Responses {
     public record Ok(boolean ok) {
         public static final Ok OK = new Ok(true);
     }
-
-    // ------------------------------------------------------------------ Camp / nhóm QC (ObjectsController)
-
-    /** Mức dùng API Facebook: phần trăm và loại giới hạn */
-    public record Usage(double pct, String tier) {}
-
-    /**
-     * Thông tin kèm danh sách camp: số liệu lúc nào (at), có phải số cũ không (stale), bị chặn tới khi nào
-     * (blockedUntil), mức dùng API, tài khoản và lỗi từng tài khoản
-     */
-    public record ObjectsMeta(Long at, boolean stale, Long blockedUntil, Usage usage,
-            List<AccountRef> accounts, List<AccountError> accountErrors) {}
-
-    /** Một tài khoản quảng cáo đang quản lý */
-    public record AccountRef(String id, String name, String currency) {}
-
-    /** Tài khoản tải lỗi (các tài khoản khác vẫn hiện) */
-    public record AccountError(String id, String name, String error) {}
-
-    /** GET /api/objects: camp + nhóm QC kèm số hôm nay, và các trường của ObjectsMeta */
-    public record ObjectsList(List<AdObject> items, Long at, boolean stale, Long blockedUntil, Usage usage,
-            List<AccountRef> accounts, List<AccountError> accountErrors) {
-        public ObjectsList(List<AdObject> items, ObjectsMeta m) {
-            this(items, m.at(), m.stale(), m.blockedUntil(), m.usage(), m.accounts(), m.accountErrors());
-        }
-    }
-
-    /** GET /api/insights: số liệu theo khoảng ngày, metrics = { [id camp/nhóm QC]: số liệu } */
-    public record Insights(Map<String, Object> range, String key, String since, String until, Integer days, Long at,
-            boolean stale, Long blockedUntil, Usage usage, List<AccountError> accountErrors,
-            Map<String, Metrics> metrics) {}
-
-    /** Một lần bật / tắt / đổi ngân sách (lấy từ Nhật ký) để đánh dấu trên biểu đồ xu hướng */
-    public record TrendEvent(String ts, String date, String type, String source, String detail) {}
-
-    /** GET /api/objects/{id}/trend: days = [{ date, spend, … }] */
-    public record Trend(String id, String since, String until, List<TrendDay> days,
-            List<TrendEvent> events, Long at, boolean stale, Long blockedUntil) {}
-
-    /** Số liệu của một ngày trên biểu đồ xu hướng: { date, spend, impressions, … } (các trường của Metrics nằm cùng cấp) */
-    public record TrendDay(String date, @JsonUnwrapped Metrics metrics) {}
-
-    /** POST /api/logs/{id}/undo */
-    public record Undone(boolean ok, LogEntry entry) {}
 
     // ------------------------------------------------------------------ Cài đặt (SettingsController)
 

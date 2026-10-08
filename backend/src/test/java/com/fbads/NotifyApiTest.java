@@ -2,7 +2,7 @@ package com.fbads;
 
 import com.fbads.common.SecretConverter;
 import com.fbads.engine.ActionExecutor;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogKind;
 import com.fbads.notify.LegacyTelegramMove;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.repository.NotifyTargetRepository;

@@ -1,20 +1,20 @@
 package com.fbads;
 
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
+import com.fbads.ads.Trend.TrendDay;
 import com.fbads.client.FbException;
 import com.fbads.client.GraphClient;
 import com.fbads.common.ApiException;
 import com.fbads.common.Ids;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
-import com.fbads.dto.Responses.TrendDay;
 import com.fbads.engine.ActionType;
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.LogAction;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogAction;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogRepository;
 import com.fbads.notify.channel.TelegramChannel;
 import com.fbads.report.ReportService;
-import com.fbads.repository.LogRepository;
 import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;

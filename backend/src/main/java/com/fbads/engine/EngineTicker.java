@@ -1,11 +1,12 @@
 package com.fbads.engine;
 
 import com.fbads.company.CompanyReportService;
-import com.fbads.entity.LogEntry;
-import com.fbads.entity.LogError;
-import com.fbads.entity.LogKind;
 import com.fbads.event.AppEvent;
 import com.fbads.event.EventBus;
+import com.fbads.log.LogEntry;
+import com.fbads.log.LogError;
+import com.fbads.log.LogKind;
+import com.fbads.log.LogService;
 import com.fbads.report.ReportService;
 import com.fbads.repository.WorkspaceRepository;
 import com.fbads.rule.RuleRunner;
@@ -13,7 +14,6 @@ import com.fbads.schedule.ScheduleRunner;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.EngineState;
 import com.fbads.service.EventStatsService;
-import com.fbads.service.LogService;
 import com.fbads.service.SettingsService;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;

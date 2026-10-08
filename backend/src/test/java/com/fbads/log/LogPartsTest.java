@@ -1,9 +1,9 @@
-package com.fbads.entity;
+package com.fbads.log;
 
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.common.JsonConverters;
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
 import com.fbads.engine.Action;
 import com.fbads.engine.ActionType;
 import com.fbads.engine.BudgetMode;

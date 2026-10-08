@@ -1,7 +1,8 @@
 package com.fbads.engine;
 
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

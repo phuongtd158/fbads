@@ -1,9 +1,9 @@
 package com.fbads.rule;
 
+import com.fbads.ads.AdLevel;
+import com.fbads.ads.AdObject;
+import com.fbads.ads.Metrics;
 import com.fbads.common.Fmt;
-import com.fbads.dto.AdLevel;
-import com.fbads.dto.AdObject;
-import com.fbads.dto.Metrics;
 import com.fbads.engine.ActCtx;
 import com.fbads.engine.Action;
 import com.fbads.engine.ActionExecutor;
@@ -12,7 +12,7 @@ import com.fbads.engine.Delivery;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.Labels;
 import com.fbads.engine.Plan;
-import com.fbads.entity.LogKind;
+import com.fbads.log.LogKind;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
 import org.springframework.stereotype.Component;

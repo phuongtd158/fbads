@@ -1,4 +1,4 @@
-package com.fbads.entity;
+package com.fbads.log;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
