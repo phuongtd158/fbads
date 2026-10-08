@@ -10,6 +10,7 @@ import com.fbads.entity.LogKind;
 import com.fbads.entity.LogTarget;
 import com.fbads.entity.Schedule;
 import com.fbads.entity.ScheduleAction;
+import com.fbads.entity.ScheduleFilter;
 import com.fbads.repository.ScheduleRepository;
 import com.fbads.service.EngineState;
 import com.fbads.service.SettingsService;
@@ -19,7 +20,6 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -122,7 +122,7 @@ public class ScheduleRunner {
         for (int i = 0; i < targets.size(); i++) {
             String id = targets.get(i);
             if (i > 0 && limits.blocked()) { stopLog(sch, targets.size() - i); break; }
-            AdObject obj = objs.stream().filter(o -> o.id.equals(id)).findFirst().orElse(null);
+            AdObject obj = objs.stream().filter(o -> o.id().equals(id)).findFirst().orElse(null);
             if (obj == null) {
                 LogEntry e = entry(sch, id);
                 e.setDetail("Không tìm thấy đối tượng");
@@ -172,11 +172,12 @@ public class ScheduleRunner {
      * từng mục; cuối lượt ghi 1 dòng tóm tắt (và 1 tin Telegram nếu có thay đổi/lỗi).
      */
     private void runFilter(Schedule sch, List<AdObject> objs, Action action, String source, ActCtx ctx) {
-        Map<String, Object> f = sch.getFilter() == null ? Map.of() : sch.getFilter();
+        ScheduleFilter f = sch.getFilter() == null ? new ScheduleFilter(null, null, null, null, null, null, null, null)
+                : sch.getFilter();
         Set<String> ex = new HashSet<>(sch.getExclude() == null ? List.of() : sch.getExclude());
-        List<AdObject> list = new ArrayList<>(BulkFilter.match(objs, f).stream().filter(o -> !ex.contains(o.id)).toList());
-        if (action.isBudget()) list.removeIf(o -> o.dailyBudget == null); // CBO: không có ngân sách ở cấp này → không áp dụng
-        String desc = BulkFilter.describe(f) + (ex.isEmpty() ? "" : " · trừ " + ex.size() + " mục");
+        List<AdObject> list = new ArrayList<>(BulkFilter.match(objs, f).stream().filter(o -> !ex.contains(o.id())).toList());
+        if (action.isBudget()) list.removeIf(o -> o.dailyBudget() == null); // CBO: không có ngân sách ở cấp này → không áp dụng
+        String desc = f.describe() + (ex.isEmpty() ? "" : " · trừ " + ex.size() + " mục");
         int ok = 0, fail = 0, same = 0, left = 0;
         for (int i = 0; i < list.size(); i++) {
             if (i > 0 && limits.blocked()) { left = list.size() - i; break; }

@@ -1,7 +1,6 @@
 package com.fbads.engine;
 
 import com.fbads.common.Fmt;
-import com.fbads.dto.AdLevel;
 import com.fbads.dto.AdObject;
 import com.fbads.entity.AppSettings;
 import com.fbads.entity.LogAction;
@@ -45,13 +44,6 @@ public class ActionExecutor {
     }
 
     // ------------------------------------------------------------------ Bảo vệ ngân sách
-    /** Ngân sách chỉ nằm ở 1 cấp: camp CBO giữ ngân sách (nhóm QC không có), camp ABO thì ngược lại */
-    public static String noBudgetReason(AdObject o) {
-        return o.level == AdLevel.ADSET
-                ? "Nhóm QC không có ngân sách riêng (chiến dịch dùng ngân sách chiến dịch - CBO), chỉnh ngân sách ở cấp chiến dịch"
-                : "Chiến dịch không có ngân sách riêng (ngân sách đặt ở từng nhóm QC - ABO), hãy dùng rule cấp nhóm QC";
-    }
-
     /** Ngân sách "gốc" hôm nay: giá trị trước lần đổi đầu tiên do rule (để tính giới hạn thay đổi cộng dồn) */
     private Double budgetBase(String objId) {
         return state.daily(clock.now().date(), "base:" + objId).map(m -> m.getNumValue()).orElse(null);
@@ -66,13 +58,13 @@ public class ActionExecutor {
             if (obj.isActive() == want) return Plan.noop(); // đã đúng trạng thái
             return Plan.doIt((want ? "Bật " : "Tắt ") + obj.unit(), LogChange.status(want), 0, false);
         }
-        if (obj.dailyBudget == null) return Plan.error(noBudgetReason(obj) + ".");
+        if (obj.dailyBudget() == null) return Plan.error(obj.noBudgetReason() + ".");
         AppSettings s = settings.get();
         boolean isRule = ctx != null && ctx.isRule();
         int capPct = s.getDailyChangeCapPct() > 0 ? s.getDailyChangeCapPct() : 30;
-        if (isRule && s.isSkipLearning() && obj.learning && !ctx.includeLearning())
+        if (isRule && s.isSkipLearning() && obj.learning() && !ctx.includeLearning())
             return Plan.skip("learning", "Đang trong giai đoạn học nên tạm không đổi ngân sách (tránh làm Facebook học lại từ đầu).");
-        double cur = obj.dailyBudget;
+        double cur = obj.dailyBudget();
         double next = switch (action.mode()) {
             case PERCENT -> cur * (1 + action.value() / 100);
             case ADD -> cur + action.value();
@@ -87,7 +79,7 @@ public class ActionExecutor {
         // giới hạn tổng thay đổi mỗi ngày (chỉ áp dụng cho rule; lịch là ý định rõ ràng của bạn; rule tăng theo bậc
         // không dùng vì đã bắt buộc có trần)
         if (isRule && !ctx.noCap()) {
-            Double b = budgetBase(obj.id);
+            Double b = budgetBase(obj.id());
             base = b != null ? b : cur;
             double lo = Math.round(base * (1 - capPct / 100.0)), hi = Math.round(base * (1 + capPct / 100.0));
             double c = Math.min(hi, Math.max(lo, next));
@@ -120,7 +112,7 @@ public class ActionExecutor {
     /** Ghi nhận việc bỏ qua, mỗi lý do 1 lần/ngày/camp để khỏi đầy nhật ký; không gửi Telegram */
     private ActResult recordSkip(AdObject obj, Action action, String source, ActCtx ctx, Plan p, LogSnapshot before,
             boolean dry) {
-        String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id + ":" + p.code();
+        String day = clock.now().date(), key = "skip:" + (ctx.refId() == null ? "" : ctx.refId()) + ":" + obj.id() + ":" + p.code();
         if (state.hasDaily(day, key)) return ActResult.SKIP;
         state.putDaily(day, key, null);
         LogEntry e = entry(obj, action, source, ctx, before);
@@ -150,15 +142,15 @@ public class ActionExecutor {
         try {
             if (!action.isNotify() && !dry) {
                 if (p.after().changesStatus()) {
-                    actions.setStatus(obj.id, p.after().turnsOn());
-                    obj.status = obj.effective = p.after().status();
+                    actions.setStatus(obj.id(), p.after().turnsOn());
+                    obj.applyStatus(p.after().turnsOn());
                 } else {
-                    actions.setBudget(obj.id, p.next());
+                    actions.setBudget(obj.id(), p.next());
                     if (ctx.isRule()) {
                         String day = clock.now().date();
-                        if (!state.hasDaily(day, "base:" + obj.id)) state.putDaily(day, "base:" + obj.id, obj.dailyBudget);
+                        if (!state.hasDaily(day, "base:" + obj.id())) state.putDaily(day, "base:" + obj.id(), obj.dailyBudget());
                     }
-                    obj.dailyBudget = p.next();
+                    obj.applyBudget(p.next());
                 }
             }
             LogEntry e = entry(obj, action, source, ctx, before);
@@ -181,7 +173,7 @@ public class ActionExecutor {
 
     /** Phần chung của mọi dòng nhật ký do act() ghi: ai làm, làm gì, lên camp nào, trạng thái trước đó */
     private LogEntry entry(AdObject obj, Action action, String source, ActCtx ctx, LogSnapshot before) {
-        LogEntry e = LogEntry.of(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL, source, obj.name);
+        LogEntry e = LogEntry.of(ctx.kind() != null ? ctx.kind() : LogKind.MANUAL, source, obj.name());
         e.setRefId(ctx.refId());
         e.setRefName(ctx.refName());
         if (ctx.condition() != null) e.setCondition(ctx.condition());

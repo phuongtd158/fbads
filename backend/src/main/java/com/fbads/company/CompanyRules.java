@@ -89,8 +89,8 @@ public final class CompanyRules {
         List<String> words = matchWords(team == null ? null : team.match());
         if (accs.isEmpty() && words.isEmpty()) return List.of();
         return objs.stream().filter(o -> o.isCampaign()
-                && (accs.isEmpty() || accs.contains(o.accountId == null ? "" : o.accountId))
-                && (words.isEmpty() || words.stream().anyMatch(w -> (o.name == null ? "" : o.name).toLowerCase().contains(w)))).toList();
+                && (accs.isEmpty() || accs.contains(o.accountId() == null ? "" : o.accountId()))
+                && (words.isEmpty() || words.stream().anyMatch(w -> (o.name() == null ? "" : o.name()).toLowerCase().contains(w)))).toList();
     }
 
     /**
@@ -100,7 +100,7 @@ public final class CompanyRules {
     public static Map<String, Long> sumMetrics(List<AdObject> camps, Map<String, Metrics> data) {
         double[] t = new double[7];
         for (AdObject o : camps) {
-            Metrics m = data == null ? null : data.get(o.id);
+            Metrics m = data == null ? null : data.get(o.id());
             if (m == null) continue;
             t[0] += m.spend(); t[1] += m.conversations(); t[2] += m.leads(); t[3] += m.results(); t[4] += m.revenue();
             t[5] += m.impressions(); t[6] += m.clicks();

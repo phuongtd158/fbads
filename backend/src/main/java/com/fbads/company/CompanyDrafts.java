@@ -48,7 +48,7 @@ class CompanyDrafts {
         List<AdObject> camps = CompanyRules.teamCampaigns(team,
                 objects.listObjects(false).stream().filter(AdObject::isCampaign).toList());
         Map<String, Metrics> data = insights.rangeMetrics(CompanyRules.rangeOf(slot), false);
-        return new Built(CompanyRules.sumMetrics(camps, data), camps.stream().map(o -> o.name).toList());
+        return new Built(CompanyRules.sumMetrics(camps, data), camps.stream().map(o -> o.name()).toList());
     }
 
     /**

@@ -126,7 +126,7 @@ public class FacebookObjects {
         List<AdObject> list = state.ws().cache.data();
         if (list == null) return null;
         for (AdObject o : list) {
-            if (o.id.equals(id)) return o;
+            if (o.id().equals(id)) return o;
         }
         return null;
     }
@@ -233,38 +233,27 @@ public class FacebookObjects {
 
             List<AdObject> out = new ArrayList<>();
             for (Campaign c : camps) {
-                AdObject o = base(c.id(), c.name(), AdLevel.CAMPAIGN, c.status(), c.effectiveStatus(), id, info);
-                o.dailyBudget = budget(c.dailyBudget(), info.currency());
-                o.learning = learningCamps.contains(o.id);
-                o.metrics = mc.getOrDefault(o.id, Metrics.EMPTY);
-                out.add(o);
+                out.add(base(c.id(), c.name(), AdLevel.CAMPAIGN, c.status(), c.effectiveStatus(), id, info)
+                        .budget(budget(c.dailyBudget(), info.currency()))
+                        .learning(learningCamps.contains(c.id()))
+                        .metrics(mc.getOrDefault(c.id(), Metrics.EMPTY))
+                        .build());
             }
             for (AdSet a : adsets) {
-                AdObject o = base(a.id(), a.name(), AdLevel.ADSET, a.status(), a.effectiveStatus(), id, info);
-                o.campaignId = a.campaignId();
-                o.dailyBudget = budget(a.dailyBudget(), info.currency());
-                o.learning = a.isLearning();
-                o.startTime = ms(a.startTime());
-                o.endTime = ms(a.endTime());
-                o.metrics = ma.getOrDefault(o.id, Metrics.EMPTY);
-                out.add(o);
+                out.add(base(a.id(), a.name(), AdLevel.ADSET, a.status(), a.effectiveStatus(), id, info)
+                        .adset(a.campaignId(), ms(a.startTime()), ms(a.endTime()))
+                        .budget(budget(a.dailyBudget(), info.currency()))
+                        .learning(a.isLearning())
+                        .metrics(ma.getOrDefault(a.id(), Metrics.EMPTY))
+                        .build());
             }
             return out;
         }
     }
 
-    private static AdObject base(String id, String name, AdLevel level, String status, String effective, String accountId,
-            AccInfo info) {
-        AdObject o = new AdObject();
-        o.id = id;
-        o.name = name;
-        o.level = level;
-        o.status = status;
-        o.effective = effective;
-        o.accountId = accountId;
-        o.accountName = info.name();
-        o.currency = info.currency();
-        return o;
+    private static AdObject.Builder base(String id, String name, AdLevel level, String status, String effective,
+            String accountId, AccInfo info) {
+        return AdObject.builder(id, name, level).state(status, effective).account(accountId, info.name(), info.currency());
     }
 
     private static <T> T get(Future<T> f) {

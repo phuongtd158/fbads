@@ -29,19 +29,10 @@ public class MockAds {
         if (objs == null) {
             objs = new ArrayList<>();
             for (int i = 0; i < NAMES.length; i++) {
-                AdObject o = new AdObject();
-                o.id = "mock_" + (i + 1);
-                o.name = NAMES[i];
-                o.level = AdLevel.CAMPAIGN;
-                o.status = o.effective = i % 3 == 2 ? "PAUSED" : "ACTIVE";
-                o.dailyBudget = BUDGETS[i];
-                o.seed = i + 1;
-                o.learning = i == 4;
+                String st = i % 3 == 2 ? "PAUSED" : "ACTIVE";
                 Account a = i < 4 ? ACCOUNTS.get(0) : ACCOUNTS.get(1);
-                o.accountId = a.accountId();
-                o.accountName = a.accountName();
-                o.currency = a.currency();
-                objs.add(o);
+                objs.add(AdObject.builder("mock_" + (i + 1), NAMES[i], AdLevel.CAMPAIGN).state(st, st).budget(BUDGETS[i])
+                        .seed(i + 1).learning(i == 4).account(a.accountId(), a.accountName(), a.currency()).build());
             }
         }
         return objs;
@@ -74,11 +65,9 @@ public class MockAds {
         List<AdObject> out = new ArrayList<>();
         for (AdObject o : objs()) {
             boolean active = o.isActive();
-            double spend = active ? Math.round(o.dailyBudget * Math.min(1, h / 24) * (0.7 + (o.seed % 4) * 0.12)) : 0;
-            double results = active ? Math.floor(spend / (60000 + o.seed * 25000 + (o.seed % 2) * 90000)) : 0;
-            AdObject c = o.copy();
-            c.metrics = metrics(spend, results, o.seed);
-            out.add(c);
+            double spend = active ? Math.round(o.dailyBudget() * Math.min(1, h / 24) * (0.7 + (o.seed() % 4) * 0.12)) : 0;
+            double results = active ? Math.floor(spend / (60000 + o.seed() * 25000 + (o.seed() % 2) * 90000)) : 0;
+            out.add(o.withMetrics(metrics(spend, results, o.seed())));
         }
         return out;
     }
@@ -88,9 +77,9 @@ public class MockAds {
         days = Math.max(1, Math.min(days, 400));
         Map<String, Metrics> out = new LinkedHashMap<>();
         for (AdObject o : objs()) {
-            double spend = Math.round(o.dailyBudget * days * (0.75 + (o.seed % 4) * 0.1));
-            double results = Math.floor(spend / (60000 + o.seed * 25000 + (o.seed % 2) * 90000));
-            out.put(o.id, metrics(spend, results, o.seed));
+            double spend = Math.round(o.dailyBudget() * days * (0.75 + (o.seed() % 4) * 0.1));
+            double results = Math.floor(spend / (60000 + o.seed() * 25000 + (o.seed() % 2) * 90000));
+            out.put(o.id(), metrics(spend, results, o.seed()));
         }
         return out;
     }
@@ -100,25 +89,25 @@ public class MockAds {
      * quanh ngân sách. null = không có mục này
      */
     public synchronized List<Map.Entry<String, Metrics>> trend(String id, List<String> dates) {
-        AdObject o = objs().stream().filter(x -> x.id.equals(id)).findFirst().orElse(null);
+        AdObject o = objs().stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
         if (o == null) return null;
         List<Map.Entry<String, Metrics>> out = new ArrayList<>();
         for (String date : dates) {
             double n = LocalDate.parse(date).toEpochDay();
-            DoubleUnaryOperator wave = k -> (Math.sin(n * k + o.seed * 1.7) + 1) / 2; // 0..1
-            double spend = Math.round(o.dailyBudget * (0.55 + 0.45 * wave.applyAsDouble(0.9)));
-            double results = Math.floor(spend / ((60000 + o.seed * 25000 + (o.seed % 2) * 90000) * (0.75
+            DoubleUnaryOperator wave = k -> (Math.sin(n * k + o.seed() * 1.7) + 1) / 2; // 0..1
+            double spend = Math.round(o.dailyBudget() * (0.55 + 0.45 * wave.applyAsDouble(0.9)));
+            double results = Math.floor(spend / ((60000 + o.seed() * 25000 + (o.seed() % 2) * 90000) * (0.75
                     + 0.5 * wave.applyAsDouble(0.37))));
-            out.add(Map.entry(date, metrics(spend, results, o.seed)));
+            out.add(Map.entry(date, metrics(spend, results, o.seed())));
         }
         return out;
     }
 
     public synchronized void setStatus(String id, boolean on) {
-        for (AdObject o : objs()) if (o.id.equals(id)) o.status = o.effective = on ? "ACTIVE" : "PAUSED";
+        for (AdObject o : objs()) if (o.id().equals(id)) o.applyStatus(on);
     }
 
     public synchronized void setBudget(String id, double amount) {
-        for (AdObject o : objs()) if (o.id.equals(id)) o.dailyBudget = amount;
+        for (AdObject o : objs()) if (o.id().equals(id)) o.applyBudget(amount);
     }
 }

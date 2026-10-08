@@ -16,11 +16,8 @@ class LogPartsTest {
     static <T> String write(JsonConverters.Of<T> c, T v) { return c.convertToDatabaseColumn(v); }
 
     static AdObject adset() {
-        AdObject o = new AdObject();
-        o.id = "a1"; o.name = "Nhóm 1"; o.level = AdLevel.ADSET; o.status = "ACTIVE"; o.effective = "ACTIVE";
-        o.accountId = "act_1"; o.accountName = "TK 1";
-        o.metrics = new Metrics(1000, 0, 0, 0, 2, 500.0, 0, null, 0, 0, 0, 0, 0);
-        return o;
+        return AdObject.builder("a1", "Nhóm 1", AdLevel.ADSET).state("ACTIVE", "ACTIVE").account("act_1", "TK 1", null)
+                .metrics(new Metrics(1000, 0, 0, 0, 2, 500.0, 0, null, 0, 0, 0, 0, 0)).build();
     }
 
     @Test

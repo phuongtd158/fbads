@@ -59,18 +59,18 @@ public class ReportService {
     String text() {
         List<AdObject> camps = objects.listObjects(true).stream().filter(AdObject::isCampaign).toList();
         Map<String, List<AdObject>> groups = new LinkedHashMap<>();
-        for (AdObject o : camps) groups.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);
+        for (AdObject o : camps) groups.computeIfAbsent(o.accountId() == null ? "" : o.accountId(), k -> new ArrayList<>()).add(o);
         boolean multi = groups.size() > 1;
         List<String> parts = new ArrayList<>();
         for (List<AdObject> list : groups.values()) {
             List<AdObject> active = list.stream().filter(AdObject::isActive).toList();
-            double spend = list.stream().mapToDouble(o -> o.metrics.spend()).sum();
-            double results = list.stream().mapToDouble(o -> o.metrics.results()).sum();
-            String cur = multi && list.getFirst().currency != null ? " " + list.getFirst().currency : "";
+            double spend = list.stream().mapToDouble(o -> o.metrics().spend()).sum();
+            double results = list.stream().mapToDouble(o -> o.metrics().results()).sum();
+            String cur = multi && list.getFirst().currency() != null ? " " + list.getFirst().currency() : "";
             List<String> lines = active.stream().limit(multi ? 10 : 15)
-                    .map(o -> "• " + o.name + ": " + Fmt.money(o.metrics.spend()) + " | KQ " + Fmt.num(o.metrics.results())).toList();
-            String head = multi ? "\n🏷 <b>" + (list.getFirst().accountName != null ? list.getFirst().accountName
-                    : list.getFirst().accountId) + "</b>\n" : "";
+                    .map(o -> "• " + o.name() + ": " + Fmt.money(o.metrics().spend()) + " | KQ " + Fmt.num(o.metrics().results())).toList();
+            String head = multi ? "\n🏷 <b>" + (list.getFirst().accountName() != null ? list.getFirst().accountName()
+                    : list.getFirst().accountId()) + "</b>\n" : "";
             parts.add(head + "Đang chạy: " + active.size() + "/" + list.size() + " camp\nChi tiêu hôm nay: " + Fmt.money(spend) + cur
                     + "\nKết quả: " + Fmt.num(results) + (results > 0 ? " | CPA " + Fmt.money(spend / results) + cur : "")
                     + (lines.isEmpty() ? "" : "\n" + String.join("\n", lines)));
@@ -136,7 +136,7 @@ public class ReportService {
 
     /** Một dòng camp trong báo cáo tuần: tên và CPA (hoặc chi tiêu nếu chưa có kết quả) */
     private static String line(Row x) {
-        return "• " + esc(x.o().name) + ": "
+        return "• " + esc(x.o().name()) + ": "
                 + (x.m().results() > 0 ? "CPA " + Fmt.money(cpaOf(x.m())) + ", " + Fmt.num(x.m().results()) + " KQ"
                         : "chi " + Fmt.money(x.m().spend()) + ", chưa có KQ");
     }
@@ -166,7 +166,7 @@ public class ReportService {
     private static Sum sum(List<AdObject> list, Map<String, Metrics> data) {
         double sp = 0, rs = 0, rv = 0;
         for (AdObject o : list) {
-            Metrics m = data.get(o.id);
+            Metrics m = data.get(o.id());
             if (m != null) { sp += m.spend(); rs += m.results(); rv += m.revenue(); }
         }
         return new Sum(sp, rs, rv);
@@ -177,13 +177,13 @@ public class ReportService {
         List<AdObject> camps = objects.listObjects(false).stream().filter(AdObject::isCampaign).toList();
         Map<String, Metrics> cur = weekData(w.since(), w.until()), prev = weekData(w.prevSince(), w.prevUntil());
         Map<String, List<AdObject>> groups = new LinkedHashMap<>();
-        for (AdObject o : camps) groups.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);
+        for (AdObject o : camps) groups.computeIfAbsent(o.accountId() == null ? "" : o.accountId(), k -> new ArrayList<>()).add(o);
         boolean multi = groups.size() > 1;
         List<String> parts = new ArrayList<>();
         for (List<AdObject> list : groups.values()) {
             Sum c = sum(list, cur), p = sum(list, prev);
-            String unit = list.getFirst().currency != null
-                    && !list.getFirst().currency.isEmpty() ? " " + esc(list.getFirst().currency) : "";
+            String unit = list.getFirst().currency() != null
+                    && !list.getFirst().currency().isEmpty() ? " " + esc(list.getFirst().currency()) : "";
             Double cpa = c.results() > 0 ? c.spend() / c.results() : null, pcpa = p.results() > 0 ? p.spend() / p.results() : null;
             List<String> lines = new ArrayList<>();
             lines.add("Chi tiêu: <b>" + Fmt.money(c.spend()) + unit + "</b>"
@@ -195,12 +195,12 @@ public class ReportService {
             if (c.revenue() > 0 && c.spend() > 0)
                 lines.add("ROAS: <b>" + Fmt.fixed2(c.revenue() / c.spend()) + "</b>"
                         + (p.revenue() > 0 && p.spend() > 0 ? " (tuần trước " + Fmt.fixed2(p.revenue() / p.spend()) + ")" : ""));
-            Ranked r = rankCamps(list.stream().filter(o -> cur.containsKey(o.id)).map(o -> new Row(o, cur.get(o.id))).toList());
+            Ranked r = rankCamps(list.stream().filter(o -> cur.containsKey(o.id())).map(o -> new Row(o, cur.get(o.id()))).toList());
             if (!r.best().isEmpty()) lines.add("👍 Tốt nhất:\n" + String.join("\n", r.best().stream().map(ReportService::line).toList()));
             if (!r.worst().isEmpty())
                 lines.add("👎 Cần xem lại:\n" + String.join("\n", r.worst().stream().map(ReportService::line).toList()));
             AdObject f = list.getFirst();
-            parts.add((multi ? "\n🏷 <b>" + esc(f.accountName != null ? f.accountName : f.accountId) + "</b>\n" : "")
+            parts.add((multi ? "\n🏷 <b>" + esc(f.accountName() != null ? f.accountName() : f.accountId()) + "</b>\n" : "")
                     + String.join("\n", lines));
         }
         Map<String, Integer> n = toolActions(w.since(), w.until());

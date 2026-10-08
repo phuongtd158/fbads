@@ -20,9 +20,9 @@ public record LogSnapshot(AdLevel level, String status, String effective, Double
 
     public static LogSnapshot of(AdObject o) {
         if (o == null) return null;
-        Metrics m = o.metrics == null ? null
-                : new Metrics(o.metrics.spend(), o.metrics.results(), o.metrics.cpa(), o.metrics.roas());
-        return new LogSnapshot(o.level, o.status, o.effective, o.dailyBudget, m);
+        Metrics m = o.metrics() == null ? null
+                : new Metrics(o.metrics().spend(), o.metrics().results(), o.metrics().cpa(), o.metrics().roas());
+        return new LogSnapshot(o.level(), o.status(), o.effective(), o.dailyBudget(), m);
     }
 
     public boolean wasActive() { return "ACTIVE".equals(status); }

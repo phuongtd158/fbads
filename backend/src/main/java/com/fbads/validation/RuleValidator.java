@@ -314,9 +314,9 @@ public final class RuleValidator {
         if (!allActive) {
             if (targets.isEmpty()) e.put("targets", "Hãy chọn ít nhất 1 " + unit + " áp dụng");
             else if (objs != null) {
-                List<String> unknown = targets.stream().filter(id -> objs.stream().noneMatch(o -> o.id.equals(id))).toList();
+                List<String> unknown = targets.stream().filter(id -> objs.stream().noneMatch(o -> o.id().equals(id))).toList();
                 List<String> other = targets.stream()
-                        .filter(id -> objs.stream().anyMatch(o -> o.id.equals(id) && o.level != null && o.level != level))
+                        .filter(id -> objs.stream().anyMatch(o -> o.id().equals(id) && o.level() != null && o.level() != level))
                         .toList();
                 if (!unknown.isEmpty())
                     e.put("targets", "Có mục không còn tồn tại trên tài khoản: "
@@ -341,10 +341,10 @@ public final class RuleValidator {
         // Rule đổi ngân sách: mục không có ngân sách riêng (CBO/ABO) bị bỏ qua
         if (budgetAction && objs != null && !e.containsKey("targets")) {
             List<AdObject> pool = allActive
-                    ? objs.stream().filter(o -> o.level == level && o.isActive()
-                            && (accountIds.isEmpty() || accountIds.contains(o.accountId))).toList()
-                    : objs.stream().filter(o -> targets.contains(o.id)).toList();
-            long none = pool.stream().filter(o -> o.dailyBudget == null).count();
+                    ? objs.stream().filter(o -> o.level() == level && o.isActive()
+                            && (accountIds.isEmpty() || accountIds.contains(o.accountId()))).toList()
+                    : objs.stream().filter(o -> targets.contains(o.id())).toList();
+            long none = pool.stream().filter(o -> o.dailyBudget() == null).count();
             String why = level == AdLevel.ADSET ? "nằm trong chiến dịch CBO (ngân sách đặt ở chiến dịch)"
                     : "là chiến dịch ABO (ngân sách đặt ở từng nhóm QC)";
             if (!pool.isEmpty() && none == pool.size())
@@ -359,7 +359,7 @@ public final class RuleValidator {
             List<String> inScope = !accountIds.isEmpty() ? accountIds
                     : allActive ? accounts.stream().map(Account::id).toList()
                     : uniq(targets.stream().map(id -> (objs == null ? List.<AdObject>of()
-                            : objs).stream().filter(o -> o.id.equals(id)).map(o -> o.accountId).findFirst().orElse(null))
+                            : objs).stream().filter(o -> o.id().equals(id)).map(o -> o.accountId()).findFirst().orElse(null))
                     .filter(Objects::nonNull).toList());
             for (String id : inScope) {
                 Map<String, Number> t = accountTargets.getOrDefault(id, Map.of());

@@ -44,24 +44,98 @@ public class RuleEvaluator {
     /** Rule tăng theo bậc: bậc vừa đạt (0 = bậc 1), số kết quả đang có, số kết quả cần, loại kết quả */
     public record Ladder(int step, double count, double need, String metric) {}
 
-    /** Kết quả xét rule cho 1 camp */
+    /**
+     * Kết quả xét rule cho 1 camp. Chỉ RuleEvaluator điền vào (qua các bước có tên: skip, measured, reachedStep, planned);
+     * nơi khác chỉ đọc.
+     */
     public static final class Decision {
-        public AdObject obj;
-        public RuleRange range;
-        public Metrics metrics;
-        public Double value;
-        public boolean hit, eligible;
-        public DecisionStatus status = DecisionStatus.NOMATCH;
-        public String code = "", reason = "";
-        public Plan plan;
-        public List<CondEval> conds = List.of();
-        public Action action;
-        /** Rule tăng theo bậc: bậc đạt được (null = không phải rule tăng theo bậc / chưa đạt) */
-        public Ladder ladder;
-        /** Ngữ cảnh thực thi riêng (rule tăng theo bậc: không giới hạn %/ngày, có tăng nhóm đang học không) */
-        public ActCtx planCtx;
+        private final AdObject obj;
+        private final RuleRange range;
+        private final Metrics metrics;
+        private Double value;
+        private boolean hit, eligible;
+        private DecisionStatus status = DecisionStatus.NOMATCH;
+        private String code = "", reason = "";
+        private Plan plan;
+        private List<CondEval> conds = List.of();
+        private Action action;
+        private Ladder ladder;
+        private ActCtx planCtx;
 
-        Decision skip(String code, String reason) { this.status = DecisionStatus.SKIP; this.code = code; this.reason = reason; return this; }
+        Decision(AdObject obj, RuleRange range, Metrics metrics) {
+            this.obj = obj;
+            this.range = range;
+            this.metrics = metrics;
+        }
+
+        /** Bỏ qua camp này (đang tắt, chưa đủ chi tiêu, đang nghỉ…): code để máy đọc, reason để người đọc */
+        void skip(String code, String reason) {
+            this.status = DecisionStatus.SKIP;
+            this.code = code;
+            this.reason = reason;
+        }
+
+        /** Đã đo các điều kiện: value = số liệu của điều kiện đầu, hit = rule khớp */
+        void measured(List<CondEval> conds, Double value, boolean hit) {
+            this.conds = conds;
+            this.value = value;
+            this.hit = hit;
+        }
+
+        /** Chưa khớp, kèm lý do cho người đọc (vd rule tăng theo bậc chưa đạt bậc 1) */
+        void notYet(String reason) { this.reason = reason; }
+
+        /** Rule tăng theo bậc: đã đạt bậc này */
+        void reachedStep(Ladder ladder) {
+            this.hit = true;
+            this.ladder = ladder;
+        }
+
+        /** Đủ điều kiện ra tay: lưu hành động, ngữ cảnh và kế hoạch; noopReason = lý do khi kế hoạch không cần làm gì */
+        void planned(Action action, ActCtx ctx, Plan plan, String noopReason) {
+            this.eligible = true;
+            this.action = action;
+            this.planCtx = ctx;
+            this.plan = plan;
+            this.status = DecisionStatus.of(plan.kind());
+            switch (plan.kind()) {
+                case SKIP -> { code = plan.code(); reason = plan.reason(); }
+                case NOOP -> reason = noopReason;
+                case ERROR -> reason = plan.reason();
+                case DO -> { }
+            }
+        }
+
+        public AdObject obj() { return obj; }
+
+        public RuleRange range() { return range; }
+
+        public Metrics metrics() { return metrics; }
+
+        public Double value() { return value; }
+
+        public boolean hit() { return hit; }
+
+        /** Qua hết các bước kiểm tra (không bị bỏ qua) nên đã có kế hoạch */
+        public boolean eligible() { return eligible; }
+
+        public DecisionStatus status() { return status; }
+
+        public String code() { return code; }
+
+        public String reason() { return reason; }
+
+        public Plan plan() { return plan; }
+
+        public List<CondEval> conds() { return conds; }
+
+        public Action action() { return action; }
+
+        /** Rule tăng theo bậc: bậc đạt được (null = không phải rule tăng theo bậc / chưa đạt) */
+        public Ladder ladder() { return ladder; }
+
+        /** Ngữ cảnh thực thi (rule tăng theo bậc: không giới hạn %/ngày, có tăng nhóm đang học không) */
+        public ActCtx planCtx() { return planCtx; }
     }
 
     private final ActionExecutor executor;
@@ -110,11 +184,11 @@ public class RuleEvaluator {
     private Double thresholdOf(Condition c, AdObject obj, Map<String, Map<String, Metrics>> byRange) {
         if (c.vsRange()) {
             Map<String, Metrics> m = byRange.get(c.compareRange());
-            Metrics bm = m == null ? null : m.get(obj.id);
+            Metrics bm = m == null ? null : m.get(obj.id());
             return bm != null && bm.spend() > 0 ? RuleValidator.compareThreshold(c, metricValue(bm, c.metric())) : null;
         }
         if (!c.vsTarget()) return c.value() == null ? 0 : c.value();
-        double t = settings.get().target(obj.accountId, "spend".equals(c.metric()) ? "cpa" : c.metric()); // chi tiêu so với CPA mục tiêu
+        double t = settings.get().target(obj.accountId(), "spend".equals(c.metric()) ? "cpa" : c.metric()); // chi tiêu so với CPA mục tiêu
         double f = c.factor() == null || c.factor() == 0 ? 100 : c.factor();
         return t > 0 ? t * f / 100 : null;
     }
@@ -182,19 +256,16 @@ public class RuleEvaluator {
         List<String> accs = rule.getAccountIds() == null ? List.of() : rule.getAccountIds();
         // luôn xét cả effective: mục vừa bị rule trước tắt trong cùng lượt đã được cập nhật effective = PAUSED
         List<AdObject> list = rule.isAllActive()
-                ? objs.stream().filter(o -> o.level == level && isRunning(o, running)
-                        && (accs.isEmpty() || accs.contains(o.accountId))).toList()
-                : objs.stream().filter(o -> rule.getTargets() != null && rule.getTargets().contains(o.id)).toList();
+                ? objs.stream().filter(o -> o.level() == level && isRunning(o, running)
+                        && (accs.isEmpty() || accs.contains(o.accountId()))).toList()
+                : objs.stream().filter(o -> rule.getTargets() != null && rule.getTargets().contains(o.id())).toList();
         List<Condition> conditions = rule.conditionList();
         boolean any = rule.getMatch() == MatchMode.ANY;
         Action action = actionOf(rule);
 
         List<Decision> out = new ArrayList<>();
         for (AdObject obj : list) {
-            Decision d = new Decision();
-            d.obj = obj;
-            d.range = range;
-            d.metrics = map.getOrDefault(obj.id, Metrics.EMPTY);
+            Decision d = new Decision(obj, range, map.getOrDefault(obj.id(), Metrics.EMPTY));
             out.add(d);
             if (!isRunning(obj, running)) {
                 String why = running != null ? running.label(obj) : "";
@@ -202,10 +273,10 @@ public class RuleEvaluator {
                         + (why.isEmpty() ? "" : " (" + why + ")"));
                 continue;
             }
-            if (action.isBudget() && obj.dailyBudget == null) { d.skip("nobudget", ActionExecutor.noBudgetReason(obj)); continue; }
+            if (action.isBudget() && obj.dailyBudget() == null) { d.skip("nobudget", obj.noBudgetReason()); continue; }
             if (outside) { d.skip("window", "Ngoài khung giờ của rule (" + rule.getFrom() + "–" + rule.getTo() + ")"); continue; }
-            if (d.metrics.spend() < rule.getMinSpend()) {
-                d.skip("minspend", "Chưa đủ chi tiêu tối thiểu (" + Fmt.money(d.metrics.spend()) + " < "
+            if (d.metrics().spend() < rule.getMinSpend()) {
+                d.skip("minspend", "Chưa đủ chi tiêu tối thiểu (" + Fmt.money(d.metrics().spend()) + " < "
                         + Fmt.money(rule.getMinSpend()) + ")");
                 continue;
             }
@@ -213,9 +284,9 @@ public class RuleEvaluator {
             // Từng điều kiện rồi gộp bằng VÀ (mặc định) hoặc HOẶC. So với mục tiêu mà tài khoản chưa đặt mục tiêu → "chưa biết".
             List<CondEval> conds = new ArrayList<>();
             for (Condition c : conditions) {
-                double actual = metricValue(d.metrics, c.metric());
+                double actual = metricValue(d.metrics(), c.metric());
                 // Ngưỡng nâng theo số kết quả: đếm kết quả trong cùng khoảng của rule rồi chọn bậc
-                Double tierCount = c.hasTiers() ? metricValue(d.metrics, c.tierMetric()) : null;
+                Double tierCount = c.hasTiers() ? metricValue(d.metrics(), c.tierMetric()) : null;
                 TierPick tp = tierCount != null ? spendTierOf(c, tierCount) : null;
                 Double th = tp != null ? Double.valueOf(tp.value()) : thresholdOf(c, obj, byRange);
                 boolean unknown = th == null;
@@ -223,19 +294,18 @@ public class RuleEvaluator {
                 conds.add(new CondEval(c.metric(), c.op(), c.vs(), c.factor(), c.compareRange(), actual, th, unknown, hit,
                         tp != null ? c.tierMetric() : null, tierCount, tp != null ? tp.tier() : null, null, null));
             }
-            d.conds = conds;
-            d.value = conds.isEmpty() ? null : conds.getFirst().actual();
             List<CondEval> known = conds.stream().filter(c -> !c.unknown()).toList();
             boolean someUnknown = known.size() < conds.size();
-            d.hit = any ? known.stream().anyMatch(CondEval::hit) : !someUnknown && known.stream().allMatch(CondEval::hit);
-            if (!d.hit) {
+            boolean hit = any ? known.stream().anyMatch(CondEval::hit) : !someUnknown && known.stream().allMatch(CondEval::hit);
+            d.measured(conds, conds.isEmpty() ? null : conds.getFirst().actual(), hit);
+            if (!hit) {
                 // Chưa quyết định được vì thiếu mục tiêu → báo lý do thay vì im lặng
                 boolean undecided = someUnknown && (any || known.stream().allMatch(CondEval::hit));
                 if (undecided) {
                     LinkedHashSet<String> need = new LinkedHashSet<>();
                     for (CondEval c : conds) if (c.unknown() && "target".equals(c.vs())) need.add(Labels.metric(c.metric()));
                     if (!need.isEmpty()) {
-                        String acc = obj.accountName != null ? obj.accountName : obj.accountId != null ? obj.accountId : "";
+                        String acc = obj.accountName() != null ? obj.accountName() : obj.accountId() != null ? obj.accountId() : "";
                         d.skip("notarget", "Tài khoản " + acc + " chưa đặt mục tiêu " + String.join(", ", need) + " (Cài đặt → Mục tiêu)");
                     } else {
                         LinkedHashSet<String> what = new LinkedHashSet<>();
@@ -247,7 +317,7 @@ public class RuleEvaluator {
                 }
                 continue;
             }
-            RuleMark mark = state.mark(rule.getId() == null ? "" : rule.getId(), obj.id);
+            RuleMark mark = state.mark(rule.getId() == null ? "" : rule.getId(), obj.id());
             long holdLeft = mark.holdUntil() - nowMs;
             if (holdLeft > 0) {
                 d.skip("hold", "Tạm hoãn sau khi bạn hoàn tác (còn " + (long) Math.ceil(holdLeft / 3600e3) + " giờ)");
@@ -258,19 +328,12 @@ public class RuleEvaluator {
                 d.skip("cooldown", "Đang nghỉ giữa hai lần (còn khoảng " + (long) Math.ceil(left / 3600e3) + " giờ)");
                 continue;
             }
-            d.eligible = true;
-            d.action = action.isNotify()
+            Action act = action.isNotify()
                     ? action.withMessage(String.join(any ? " HOẶC " : " VÀ ",
                             conds.stream().filter(CondEval::hit).map(c -> condSentence(c, range)).toList()))
                     : action;
-            d.plan = executor.plan(obj, d.action, ActCtx.of(LogKind.RULE, rule.getId(), rule.getName()));
-            d.status = DecisionStatus.of(d.plan.kind());
-            switch (d.plan.kind()) {
-                case SKIP -> { d.code = d.plan.code(); d.reason = d.plan.reason(); }
-                case NOOP -> d.reason = "Không có gì để thay đổi (đã ở trạng thái/ngân sách mong muốn)";
-                case ERROR -> d.reason = d.plan.reason();
-                case DO -> { }
-            }
+            ActCtx ctx = ActCtx.of(LogKind.RULE, rule.getId(), rule.getName());
+            d.planned(act, ctx, executor.plan(obj, act, ctx), "Không có gì để thay đổi (đã ở trạng thái/ngân sách mong muốn)");
         }
         return out;
     }
@@ -282,17 +345,15 @@ public class RuleEvaluator {
     private void evaluateLadder(Rule rule, AdObject obj, Decision d, EngineClock.Now now, long nowMs) {
         List<Rule.Step> steps = rule.getSteps() == null ? List.of() : rule.getSteps();
         String m = rule.getLadderMetric() == null || rule.getLadderMetric().isEmpty() ? "results" : rule.getLadderMetric();
-        double count = metricValue(d.metrics, m);
+        double count = metricValue(d.metrics(), m);
         int h = -1;
         for (int i = 0; i < steps.size(); i++) if (count >= steps.get(i).count()) h = i;
         double refCount = steps.isEmpty() ? 1 : steps.get(Math.max(h, 0)).count();
-        d.value = count;
-        d.conds = List.of(new CondEval(m, ">", null, null, null, count, refCount - 1, false, h >= 0, null, null, null, h + 1,
-                (int) refCount));
-        if (h < 0) { d.reason = "Chưa có " + Fmt.num(refCount) + " " + unitWord(m) + " (đang có " + Fmt.num(count) + ")"; return; }
-        d.hit = true;
-        d.ladder = new Ladder(h, count, steps.get(h).count(), m);
-        RuleMark mark = state.mark(rule.getId() == null ? "" : rule.getId(), obj.id);
+        d.measured(List.of(new CondEval(m, ">", null, null, null, count, refCount - 1, false, h >= 0, null, null, null, h + 1,
+                (int) refCount)), count, false);
+        if (h < 0) { d.notYet("Chưa có " + Fmt.num(refCount) + " " + unitWord(m) + " (đang có " + Fmt.num(count) + ")"); return; }
+        d.reachedStep(new Ladder(h, count, steps.get(h).count(), m));
+        RuleMark mark = state.mark(rule.getId() == null ? "" : rule.getId(), obj.id());
         int done = mark.ladderStep(now.date());
         if (h <= done) {
             double every = h == steps.size() - 1 && steps.get(h).everyHours() != null ? steps.get(h).everyHours() : 0;
@@ -312,17 +373,9 @@ public class RuleEvaluator {
         }
         long holdLeft = mark.holdUntil() - nowMs;
         if (holdLeft > 0) { d.skip("hold", "Tạm hoãn sau khi bạn hoàn tác (còn " + (long) Math.ceil(holdLeft / 3600e3) + " giờ)"); return; }
-        d.eligible = true;
         Rule.Step t = steps.get(h);
-        d.action = Action.budget("amount".equals(t.mode()) ? BudgetMode.ADD : BudgetMode.PERCENT, t.value(), rule.getMaxBudget(), 0);
-        d.planCtx = ActCtx.of(LogKind.RULE, rule.getId(), rule.getName()).ladder(!Boolean.FALSE.equals(rule.getIncludeLearning()));
-        d.plan = executor.plan(obj, d.action, d.planCtx);
-        d.status = DecisionStatus.of(d.plan.kind());
-        switch (d.plan.kind()) {
-            case SKIP -> { d.code = d.plan.code(); d.reason = d.plan.reason(); }
-            case NOOP -> d.reason = "Đã chạm trần ngân sách " + Fmt.money(rule.getMaxBudget());
-            case ERROR -> d.reason = d.plan.reason();
-            case DO -> { }
-        }
+        Action act = Action.budget("amount".equals(t.mode()) ? BudgetMode.ADD : BudgetMode.PERCENT, t.value(), rule.getMaxBudget(), 0);
+        ActCtx ctx = ActCtx.of(LogKind.RULE, rule.getId(), rule.getName()).ladder(!Boolean.FALSE.equals(rule.getIncludeLearning()));
+        d.planned(act, ctx, executor.plan(obj, act, ctx), "Đã chạm trần ngân sách " + Fmt.money(rule.getMaxBudget()));
     }
 }

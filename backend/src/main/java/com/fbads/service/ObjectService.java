@@ -110,7 +110,7 @@ public class ObjectService {
     public void setBudget(String id, double amount, String name) {
         long value = Math.round(amount);
         AdObject cur = objects.findCached(id);
-        if (cur != null && cur.dailyBudget == null)
+        if (cur != null && cur.dailyBudget() == null)
             throw new ApiException(400, "Mục này không có ngân sách riêng (đang dùng ngân sách chiến dịch - CBO). Hãy "
                     + "chỉnh ở cấp có ngân sách.");
         manual(id, name, LogAction.setBudget(value), "Đặt ngân sách " + Fmt.money(value), LogChange.budget(value),

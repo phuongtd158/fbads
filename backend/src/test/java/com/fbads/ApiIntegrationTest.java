@@ -398,7 +398,7 @@ class ApiIntegrationTest extends IntegrationBase {
         var objects = caches.getCache(CacheConfig.OBJECTS);
         FbSnapshots.Objects saved = objects.get("ws1|mock", FbSnapshots.Objects.class);
         assertThat(saved).isNotNull();
-        assertThat(saved.items()).anyMatch(o -> o.id.equals("mock_1"));
+        assertThat(saved.items()).anyMatch(o -> o.id().equals("mock_1"));
         assertThat(redis.keys("fbads:cache:fb-objects::*")).isNotEmpty();
 
         assertThat(api.post("/api/objects/mock_2/budget", Map.of("amount", 222000, "name", "Camp 2")).status()).isEqualTo(200);

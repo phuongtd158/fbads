@@ -68,7 +68,7 @@ public class FacebookInsights {
         if ("p:today".equals(q.key())) {
             List<AdObject> list = objects.listObjects(force);
             Map<String, Metrics> m = new LinkedHashMap<>();
-            for (AdObject o : list) m.put(o.id, o.metrics);
+            for (AdObject o : list) m.put(o.id(), o.metrics());
             return new RangeResult(m, w.cache.at(), w.cache.stale());
         }
         w.lock.lock();

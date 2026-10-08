@@ -153,14 +153,12 @@ class TrendWeeklyTest extends IntegrationBase {
     @Test
     void rankCamps() {
         java.util.function.BiFunction<String, double[], ReportService.Row> r = (id, v) -> {
-            AdObject o = new AdObject();
-            o.id = id;
-            return new ReportService.Row(o, new Metrics(v[0], 0, 0, 0, v[1], v[1] > 0 ? v[0] / v[1] : null, 0, null, 0, 0, 0, 0, 0));
+            return new ReportService.Row(AdObject.builder(id, null, null).build(), new Metrics(v[0], 0, 0, 0, v[1], v[1] > 0 ? v[0] / v[1] : null, 0, null, 0, 0, 0, 0, 0));
         };
         ReportService.Ranked x = ReportService.rankCamps(List.of(r.apply("a", new double[]{100, 10}), r.apply("b", new double[]{100, 2}), r.apply("c", new double[]{300, 0}),
                 r.apply("d", new double[]{100, 5}), r.apply("e", new double[]{0, 0}), r.apply("f", new double[]{100, 1}), r.apply("g", new double[]{50, 0})));
-        assertThat(x.best().stream().map(y -> y.o().id).toList()).containsExactly("a", "d", "b");
-        assertThat(x.worst().stream().map(y -> y.o().id).toList()).containsExactly("c", "g", "f");
+        assertThat(x.best().stream().map(y -> y.o().id()).toList()).containsExactly("a", "d", "b");
+        assertThat(x.worst().stream().map(y -> y.o().id()).toList()).containsExactly("c", "g", "f");
     }
 
     void addLog(String day, String kind, boolean dry, String type) {

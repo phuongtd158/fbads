@@ -164,7 +164,7 @@ class CompanyReportTest extends IntegrationBase {
         assertThat(CompanyRules.fireMinute(9, 999)).as("tối đa 60 phút").isEqualTo(8 * 60);
 
         List<AdObject> objs = List.of(camp("1", "A", "CT01 Hoạt huyết - Mess"), camp("2", "A", "CT02 Xương khớp"), camp("3", "B", "ct01 retarget"), adset("4", "A", "CT01 nhóm"));
-        java.util.function.Function<CompanyConfig.Team, List<String>> ids = t -> CompanyRules.teamCampaigns(t, objs).stream().map(o -> o.id).toList();
+        java.util.function.Function<CompanyConfig.Team, List<String>> ids = t -> CompanyRules.teamCampaigns(t, objs).stream().map(o -> o.id()).toList();
         assertThat(ids.apply(new CompanyConfig.Team("t", "", "", List.of("A"), ""))).containsExactly("1", "2");
         assertThat(ids.apply(new CompanyConfig.Team("t", "", "", List.of(), "CT01"))).containsExactly("1", "3");
         assertThat(ids.apply(new CompanyConfig.Team("t", "", "", List.of("A"), "ct01, xương"))).containsExactly("1", "2");
@@ -258,15 +258,15 @@ class CompanyReportTest extends IntegrationBase {
 
     // ------------------------------------------------------------------ Tạo báo cáo theo mốc (dữ liệu giả)
     static AdObject camp(String id, String acc, String name) {
-        AdObject o = new AdObject();
-        o.id = id; o.accountId = acc; o.name = name; o.level = AdLevel.CAMPAIGN; o.status = o.effective = "ACTIVE";
-        return o;
+        return obj(id, acc, name, AdLevel.CAMPAIGN);
     }
 
     static AdObject adset(String id, String acc, String name) {
-        AdObject o = camp(id, acc, name);
-        o.level = AdLevel.ADSET;
-        return o;
+        return obj(id, acc, name, AdLevel.ADSET);
+    }
+
+    static AdObject obj(String id, String acc, String name, AdLevel level) {
+        return AdObject.builder(id, name, level).state("ACTIVE", "ACTIVE").account(acc, null, null).build();
     }
 
     static Metrics m(double spend, double conv, double leads, double results, double revenue, double imp, double clicks) {

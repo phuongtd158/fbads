@@ -102,9 +102,8 @@ class RulesSmartTest extends IntegrationBase {
     }
 
     static AdObject obj(String id, String level, double budget, boolean learning) {
-        AdObject o = new AdObject();
-        o.id = id; o.name = id; o.level = AdLevel.from(level); o.status = "ACTIVE"; o.effective = "ACTIVE"; o.dailyBudget = budget; o.accountId = "a1"; o.learning = learning;
-        return o;
+        return AdObject.builder(id, id, AdLevel.from(level)).state("ACTIVE", "ACTIVE").budget(budget).account("a1", null, null)
+                .learning(learning).build();
     }
 
     /** spend, results; leads/tin nhắn tuỳ chọn */
@@ -170,25 +169,25 @@ class RulesSmartTest extends IntegrationBase {
                 "today", Map.of("c1", m(300000, 1), "c2", m(300000, 3)),          // c1: CPA 300k; c2: CPA 100k
                 "last_7d", Map.of("c1", m(1400000, 14), "c2", m(1400000, 14)));   // CPA 7 ngày = 100k → ngưỡng 130k
         Map<String, RuleEvaluator.Decision> by = new HashMap<>();
-        for (RuleEvaluator.Decision d : eval(rule, List.of(obj("c1", "campaign", 500000, false), obj("c2", "campaign", 500000, false)), maps::get)) by.put(d.obj.id, d);
-        assertThat(by.get("c1").status).isEqualTo(DecisionStatus.MATCH);
-        assertThat(by.get("c1").conds.getFirst().threshold()).isEqualTo(130000.0);
-        assertThat(by.get("c1").plan.detail()).contains("130% CPA 7 ngày gần nhất");
-        assertThat(by.get("c2").status).isEqualTo(DecisionStatus.NOMATCH);
+        for (RuleEvaluator.Decision d : eval(rule, List.of(obj("c1", "campaign", 500000, false), obj("c2", "campaign", 500000, false)), maps::get)) by.put(d.obj().id(), d);
+        assertThat(by.get("c1").status()).isEqualTo(DecisionStatus.MATCH);
+        assertThat(by.get("c1").conds().getFirst().threshold()).isEqualTo(130000.0);
+        assertThat(by.get("c1").plan().detail()).contains("130% CPA 7 ngày gần nhất");
+        assertThat(by.get("c2").status()).isEqualTo(DecisionStatus.NOMATCH);
 
         // khoảng so sánh chưa có số liệu (camp mới) → bỏ qua, nói rõ lý do
         RuleEvaluator.Decision d = eval(rule, List.of(obj("c1", "campaign", 500000, false)),
                 Map.of("today", Map.of("c1", m(300000, 1)), "last_7d", Map.<String, Metrics>of())::get).getFirst();
-        assertThat(d.status).isEqualTo(DecisionStatus.SKIP);
-        assertThat(d.code).isEqualTo("nobaseline");
-        assertThat(d.reason).contains("Chưa có số liệu CPA 7 ngày gần nhất");
+        assertThat(d.status()).isEqualTo(DecisionStatus.SKIP);
+        assertThat(d.code()).isEqualTo("nobaseline");
+        assertThat(d.reason()).contains("Chưa có số liệu CPA 7 ngày gần nhất");
 
         // số tin nhắn hôm qua thấp hơn 50% trung bình 3 ngày: 30/3 = 10/ngày → ngưỡng 5
         Rule msg = cmpRule(map("metric", "messages", "op", "<", "vs", "range", "compareRange", "last_3d", "factor", 50), "range", "yesterday");
         d = eval(msg, List.of(obj("c1", "campaign", 500000, false)),
                 Map.of("yesterday", Map.of("c1", m(300000, 0, 0, 2)), "last_3d", Map.of("c1", m(900000, 0, 0, 30)))::get).getFirst();
-        assertThat(d.conds.getFirst().threshold()).isEqualTo(5.0);
-        assertThat(d.status).isEqualTo(DecisionStatus.MATCH);
+        assertThat(d.conds().getFirst().threshold()).isEqualTo(5.0);
+        assertThat(d.status()).isEqualTo(DecisionStatus.MATCH);
     }
 
     @Test
@@ -253,10 +252,10 @@ class RulesSmartTest extends IntegrationBase {
         Result<Rule> r = validate(with(tierBase, "minSpend", 0, "conditions", List.of(tierCond())));
         r.value().setId("r1");
         for (RuleEvaluator.Decision d : eval(r.value(), objs, x -> metrics)) {
-            Object[] c = cases.get(d.obj.id);
-            assertThat(d.hit).as(d.obj.id).isEqualTo(c[2]);
-            assertThat(d.conds.getFirst().threshold()).as(d.obj.id).isEqualTo((int) c[1] >= 2 ? 200000.0 : 150000.0);
-            assertThat(d.conds.getFirst().tierCount()).isEqualTo(((Integer) c[1]).doubleValue());
+            Object[] c = cases.get(d.obj().id());
+            assertThat(d.hit()).as(d.obj().id()).isEqualTo(c[2]);
+            assertThat(d.conds().getFirst().threshold()).as(d.obj().id()).isEqualTo((int) c[1] >= 2 ? 200000.0 : 150000.0);
+            assertThat(d.conds().getFirst().tierCount()).isEqualTo(((Integer) c[1]).doubleValue());
         }
         Condition c2 = new Condition("spend", ">", null, null, null, 150000.0, "leads", List.of(new Condition.Tier(2, 200000), new Condition.Tier(4, 300000)));
         assertThat(List.of(0, 1, 2, 3, 4, 9).stream().map(n -> RuleEvaluator.spendTierOf(c2, n).value()).toList())
@@ -292,13 +291,13 @@ class RulesSmartTest extends IntegrationBase {
     }
 
     RuleEvaluator.Decision ev(Rule r, AdObject o, double spend, double results) {
-        return eval(r, List.of(o), x -> Map.of(o.id, m(spend, results))).getFirst();
+        return eval(r, List.of(o), x -> Map.of(o.id(), m(spend, results))).getFirst();
     }
 
     /** Như runRules sau khi tăng thành công: ghi bậc đã chạy, cập nhật ngân sách */
     void did(RuleEvaluator.Decision d, long agoMs) {
-        state.setLadder("rl", d.obj.id, clock.now().date(), d.ladder.step(), clock.millis() - agoMs);
-        d.obj.dailyBudget = d.plan.next();
+        state.setLadder("rl", d.obj().id(), clock.now().date(), d.ladder().step(), clock.millis() - agoMs);
+        d.obj().applyBudget(d.plan().next());
     }
 
     @Test
@@ -328,10 +327,10 @@ class RulesSmartTest extends IntegrationBase {
 
     @Test
     void ladderNotReached() {
-        assertThat(ev(ladder(), obj("a1", "adset", 200000, true), 90000, 1).status).isEqualTo(DecisionStatus.SKIP);
+        assertThat(ev(ladder(), obj("a1", "adset", 200000, true), 90000, 1).status()).isEqualTo(DecisionStatus.SKIP);
         RuleEvaluator.Decision d = ev(ladder(), obj("a1", "adset", 200000, true), 120000, 0);
-        assertThat(d.hit).isFalse();
-        assertThat(d.reason).isEqualTo("Chưa có 1 kết quả (đang có 0)");
+        assertThat(d.hit()).isFalse();
+        assertThat(d.reason()).isEqualTo("Chưa có 1 kết quả (đang có 0)");
     }
 
     @Test
@@ -339,40 +338,40 @@ class RulesSmartTest extends IntegrationBase {
         AdObject o = obj("a1", "adset", 200000, true);
         Rule r = ladder();
         RuleEvaluator.Decision d = ev(r, o, 120000, 1);
-        assertThat(d.status).isEqualTo(DecisionStatus.MATCH);
-        assertThat(d.plan.next()).isEqualTo(300000);
+        assertThat(d.status()).isEqualTo(DecisionStatus.MATCH);
+        assertThat(d.plan().next()).isEqualTo(300000);
         did(d, 0);
         d = ev(r, o, 130000, 1);
-        assertThat(d.status).isEqualTo(DecisionStatus.SKIP);
-        assertThat(d.code).isEqualTo("ladderdone");
-        assertThat(d.reason).isEqualTo("Hôm nay đã tăng bậc 1, chờ có 2 kết quả để lên bậc 2");
+        assertThat(d.status()).isEqualTo(DecisionStatus.SKIP);
+        assertThat(d.code()).isEqualTo("ladderdone");
+        assertThat(d.reason()).isEqualTo("Hôm nay đã tăng bậc 1, chờ có 2 kết quả để lên bậc 2");
         d = ev(r, o, 150000, 2);
-        assertThat(d.status).isEqualTo(DecisionStatus.MATCH);
-        assertThat(d.plan.next()).as("không bị giới hạn 30%/ngày, kể cả đang học").isEqualTo(450000);
+        assertThat(d.status()).isEqualTo(DecisionStatus.MATCH);
+        assertThat(d.plan().next()).as("không bị giới hạn 30%/ngày, kể cả đang học").isEqualTo(450000);
         did(d, 0);
         d = ev(r, o, 180000, 3);
-        assertThat(d.status).isEqualTo(DecisionStatus.MATCH);
-        assertThat(d.plan.next()).isEqualTo(675000);
+        assertThat(d.status()).isEqualTo(DecisionStatus.MATCH);
+        assertThat(d.plan().next()).isEqualTo(675000);
         did(d, 0);
         d = ev(r, o, 200000, 3);
-        assertThat(d.code).as("chưa đủ 3 giờ").isEqualTo("ladderwait");
+        assertThat(d.code()).as("chưa đủ 3 giờ").isEqualTo("ladderwait");
         state.setLadder("rl", "a1", clock.now().date(), 2, clock.millis() - 3 * 3_600_000L - 1000);
         d = ev(r, o, 250000, 4);
-        assertThat(d.status).isEqualTo(DecisionStatus.MATCH);
-        assertThat(d.plan.next()).isEqualTo(1012500);
+        assertThat(d.status()).isEqualTo(DecisionStatus.MATCH);
+        assertThat(d.plan().next()).isEqualTo(1012500);
     }
 
     @Test
     void ladderJumpsAndCaps() {
         AdObject o = obj("a1", "adset", 1500000, true);
         RuleEvaluator.Decision d = ev(ladder(), o, 120000, 3);
-        assertThat(d.ladder.step()).isEqualTo(2);
-        assertThat(d.plan.next()).as("chạm trần 2.000.000").isEqualTo(2000000);
+        assertThat(d.ladder().step()).isEqualTo(2);
+        assertThat(d.plan().next()).as("chạm trần 2.000.000").isEqualTo(2000000);
         did(d, 0);
-        assertThat(ev(ladder(), o, 120000, 3).code).isEqualTo("ladderwait");
+        assertThat(ev(ladder(), o, 120000, 3).code()).isEqualTo("ladderwait");
         // ngày mới: bậc tính lại từ đầu
         clock.setClock(Clock.fixed(Instant.parse("2031-03-05T13:00:00Z"), ZoneOffset.UTC));
-        assertThat(ev(ladder(), obj("a1", "adset", 200000, true), 120000, 3).status).isEqualTo(DecisionStatus.MATCH);
+        assertThat(ev(ladder(), obj("a1", "adset", 200000, true), 120000, 3).status()).isEqualTo(DecisionStatus.MATCH);
     }
 
     @Test
@@ -380,8 +379,8 @@ class RulesSmartTest extends IntegrationBase {
         Rule r = ladder();
         r.setIncludeLearning(false);
         RuleEvaluator.Decision d = ev(r, obj("a1", "adset", 200000, true), 120000, 1);
-        assertThat(d.status).isEqualTo(DecisionStatus.SKIP);
-        assertThat(d.code).isEqualTo("learning");
+        assertThat(d.status()).isEqualTo(DecisionStatus.SKIP);
+        assertThat(d.code()).isEqualTo("learning");
     }
 
     @Test

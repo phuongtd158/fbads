@@ -43,7 +43,7 @@ public class KillSwitch {
 
         if ("account".equals(s.getKillScope())) {
             Map<String, List<AdObject>> byAcc = new LinkedHashMap<>();
-            for (AdObject o : camps) byAcc.computeIfAbsent(o.accountId == null ? "" : o.accountId, k -> new ArrayList<>()).add(o);
+            for (AdObject o : camps) byAcc.computeIfAbsent(o.accountId() == null ? "" : o.accountId(), k -> new ArrayList<>()).add(o);
             boolean fired = false;
             for (var entry : byAcc.entrySet()) {
                 String id = entry.getKey();
@@ -51,12 +51,12 @@ public class KillSwitch {
                 double own = s.target(id, "dailySpendLimit");
                 double limit = own > 0 ? own : globalLimit;
                 if (limit <= 0 || state.hasDaily(today, "kill:acc:" + id)) continue;
-                double spend = list.stream().mapToDouble(o -> o.metrics.spend()).sum();
+                double spend = list.stream().mapToDouble(o -> o.metrics().spend()).sum();
                 if (spend < limit) continue;
                 state.putDaily(today, "kill:acc:" + id, null);
                 List<AdObject> active = list.stream().filter(AdObject::isActive).toList();
-                String cur = list.getFirst().currency != null ? " " + list.getFirst().currency : "";
-                String accName = list.getFirst().accountName != null ? list.getFirst().accountName : id;
+                String cur = list.getFirst().currency() != null ? " " + list.getFirst().currency() : "";
+                String accName = list.getFirst().accountName() != null ? list.getFirst().accountName() : id;
                 LogEntry e = LogEntry.of(LogKind.SYSTEM, "Dừng khẩn", "Tài khoản " + accName);
                 e.setOk(true);
                 e.setDry(dry);
@@ -73,7 +73,7 @@ public class KillSwitch {
         }
 
         if (globalLimit <= 0 || state.hasDaily(today, "kill:total")) return false;
-        double spend = camps.stream().mapToDouble(o -> o.metrics.spend()).sum();
+        double spend = camps.stream().mapToDouble(o -> o.metrics().spend()).sum();
         if (spend < globalLimit) return false;
         state.putDaily(today, "kill:total", null);
         List<AdObject> active = camps.stream().filter(AdObject::isActive).toList();

@@ -31,10 +31,10 @@ public final class Delivery {
     private Delivery() {}
 
     private static String own(AdObject o) {
-        String e = o.effective == null ? "" : o.effective;
+        String e = o.effective() == null ? "" : o.effective();
         if (e.equals("DELETED")) return "deleted";
         if (e.equals("ARCHIVED")) return "archived";
-        if ("PAUSED".equals(o.status)) return "off";
+        if ("PAUSED".equals(o.status())) return "off";
         if (e.equals("CAMPAIGN_PAUSED")) return "campaignOff";
         if (e.equals("ADSET_PAUSED")) return "adsetsOff";
         if (e.equals("DISAPPROVED")) return "rejected";
@@ -46,9 +46,9 @@ public final class Delivery {
     private static String adset(AdObject a, long now) {
         String k = own(a);
         if (!k.isEmpty()) return k;
-        if (a.endTime != null && a.endTime != 0 && a.endTime < now) return "completed";
-        if (a.startTime != null && a.startTime != 0 && a.startTime > now) return "scheduled";
-        if (a.learning) return "learning";
+        if (a.endTime() != null && a.endTime() != 0 && a.endTime() < now) return "completed";
+        if (a.startTime() != null && a.startTime() != 0 && a.startTime() > now) return "scheduled";
+        if (a.learning()) return "learning";
         return a.isActive() ? "active" : "off";
     }
 
@@ -70,10 +70,10 @@ public final class Delivery {
     /** id → khoá trạng thái phân phối cho toàn bộ danh sách */
     public static Map<String, String> map(List<AdObject> objs, long now) {
         Map<String, List<AdObject>> byCamp = new HashMap<>();
-        for (AdObject o : objs) if (o.level == AdLevel.ADSET) byCamp.computeIfAbsent(o.campaignId, k -> new ArrayList<>()).add(o);
+        for (AdObject o : objs) if (o.level() == AdLevel.ADSET) byCamp.computeIfAbsent(o.campaignId(), k -> new ArrayList<>()).add(o);
         Map<String, String> out = new HashMap<>();
         for (AdObject o : objs)
-            out.put(o.id, o.level == AdLevel.ADSET ? adset(o, now) : campaign(o, byCamp.getOrDefault(o.id, List.of()), now));
+            out.put(o.id(), o.level() == AdLevel.ADSET ? adset(o, now) : campaign(o, byCamp.getOrDefault(o.id(), List.of()), now));
         return out;
     }
 
@@ -83,8 +83,8 @@ public final class Delivery {
 
         public View(List<AdObject> objs) { this.map = Delivery.map(objs, System.currentTimeMillis()); }
 
-        public boolean running(AdObject o) { Info i = INFO.get(map.get(o.id)); return i != null && i.running(); }
+        public boolean running(AdObject o) { Info i = INFO.get(map.get(o.id())); return i != null && i.running(); }
 
-        public String label(AdObject o) { Info i = INFO.get(map.get(o.id)); return i == null ? "" : i.label(); }
+        public String label(AdObject o) { Info i = INFO.get(map.get(o.id())); return i == null ? "" : i.label(); }
     }
 }

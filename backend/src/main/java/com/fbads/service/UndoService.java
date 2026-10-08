@@ -79,17 +79,17 @@ public class UndoService {
             throw new ApiException(400, "Dòng nhật ký này được ghi ở chế độ khác (Dùng thử/Thật) nên không thể hoàn tác "
                     + "ở chế độ hiện tại.");
         String targetId = l.getTarget().id();
-        AdObject cur = objects.listObjects(true).stream().filter(o -> o.id.equals(targetId)).findFirst()
+        AdObject cur = objects.listObjects(true).stream().filter(o -> o.id().equals(targetId)).findFirst()
                 .orElseThrow(() -> new ApiException(404, "Không tìm thấy camp/nhóm này trên tài khoản (có thể đã bị xoá)."));
 
         // Nếu sau đó có ai đổi tiếp thì hỏi lại trước khi ghi đè
         List<String> drift = new ArrayList<>();
         LogChange after = l.getAfter();
         LogSnapshot before = l.getBefore();
-        if (after.changesStatus() && !after.status().equals(cur.status))
-            drift.add("trạng thái hiện tại là “" + ("ACTIVE".equals(cur.status) ? "Đang chạy" : "Tạm dừng") + "”");
-        if (after.changesBudget() && cur.dailyBudget != null && Math.round(cur.dailyBudget) != Math.round(after.dailyBudget()))
-            drift.add("ngân sách hiện tại là " + Fmt.money(cur.dailyBudget));
+        if (after.changesStatus() && !after.status().equals(cur.status()))
+            drift.add("trạng thái hiện tại là “" + ("ACTIVE".equals(cur.status()) ? "Đang chạy" : "Tạm dừng") + "”");
+        if (after.changesBudget() && cur.dailyBudget() != null && Math.round(cur.dailyBudget()) != Math.round(after.dailyBudget()))
+            drift.add("ngân sách hiện tại là " + Fmt.money(cur.dailyBudget()));
         if (!drift.isEmpty() && !force)
             throw new ApiException(409, "Camp đã thay đổi kể từ lúc đó (" + String.join(", ", drift)
                     + "). Hoàn tác vẫn sẽ đặt về giá trị trước đó.").withDrift();
@@ -101,15 +101,15 @@ public class UndoService {
         try {
             if (after.changesStatus()) {
                 boolean want = before.wasActive();
-                actions.setStatus(cur.id, want);
+                actions.setStatus(cur.id(), want);
                 newAfter = LogChange.status(want);
                 detail = want ? "Hoàn tác: bật lại camp" : "Hoàn tác: tắt lại camp";
             }
             if (after.changesBudget()) {
                 double b = before.dailyBudget() == null ? 0 : before.dailyBudget();
-                actions.setBudget(cur.id, b);
+                actions.setBudget(cur.id(), b);
                 newAfter = LogChange.budget(Math.round(b));
-                detail = "Hoàn tác: ngân sách " + Fmt.money(cur.dailyBudget == null ? 0 : cur.dailyBudget) + " → " + Fmt.money(b);
+                detail = "Hoàn tác: ngân sách " + Fmt.money(cur.dailyBudget() == null ? 0 : cur.dailyBudget()) + " → " + Fmt.money(b);
             }
         } catch (RuntimeException ex) {
             LogEntry e = undoEntry(l, mode, snapshot);

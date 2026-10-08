@@ -10,11 +10,11 @@ import com.fbads.dto.AdObject;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record LogTarget(String id, String name, AdLevel level, String accountId, String accountName) {
-    public static LogTarget of(AdObject o) { return of(o, o.name); }
+    public static LogTarget of(AdObject o) { return of(o, o.name()); }
 
     /** Như of(o) nhưng ghi tên khác (thao tác tay ghi tên người dùng thấy trên màn hình) */
     public static LogTarget of(AdObject o, String name) {
-        return new LogTarget(o.id, name, o.level, o.accountId, o.accountId == null ? null : o.accountName);
+        return new LogTarget(o.id(), name, o.level(), o.accountId(), o.accountId() == null ? null : o.accountName());
     }
 
     public static LogTarget idOnly(String id) { return new LogTarget(id, null, null, null, null); }

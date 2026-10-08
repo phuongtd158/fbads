@@ -49,7 +49,7 @@ public class FacebookActions {
             state.ws().mock.setBudget(id, rounded);
         } else {
             AdObject o = objects.findCached(id);
-            String cur = o != null && o.currency != null ? o.currency : state.ws().currency;
+            String cur = o != null && o.currency() != null ? o.currency() : state.ws().currency;
             try {
                 graph.call("POST", id, Map.of("daily_budget", Long.toString(Math.round(rounded * offsetOf(cur)))), null);
             } finally {

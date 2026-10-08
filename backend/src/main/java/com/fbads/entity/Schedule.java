@@ -14,7 +14,6 @@ import jakarta.persistence.Table;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Lịch tự động: bật / tắt / đổi ngân sách / khung giờ (bật lúc on, tắt lúc off) vào các giờ cố định trong tuần.
@@ -47,14 +46,14 @@ public class Schedule {
     @Convert(converter = JsonConverters.IntList.class)
     private List<Integer> days = new ArrayList<>();   // 0 = Chủ nhật … 6 = Thứ bảy
     @Column(name = "window_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> window; // { on: "HH:MM", off: "HH:MM" } khi action = window
+    @Convert(converter = ScheduleWindow.Converter.class)
+    private ScheduleWindow window; // khi action = window
     private String targetMode = "list"; // list | filter
     @Convert(converter = JsonConverters.StringList.class)
     private List<String> targets = new ArrayList<>();
     @Column(name = "filter_json")
-    @Convert(converter = JsonConverters.AnyMap.class)
-    private Map<String, Object> filter;
+    @Convert(converter = ScheduleFilter.Converter.class)
+    private ScheduleFilter filter;
     @Column(name = "exclude_json")
     @Convert(converter = JsonConverters.StringList.class)
     private List<String> exclude;
@@ -68,8 +67,8 @@ public class Schedule {
     @Column(name = "min_budget")
     private Double min;
 
-    public String windowOn() { return window == null ? null : (String) window.get("on"); }
-    public String windowOff() { return window == null ? null : (String) window.get("off"); }
+    public String windowOn() { return window == null ? null : window.on(); }
+    public String windowOff() { return window == null ? null : window.off(); }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -83,14 +82,14 @@ public class Schedule {
     public void setTimes(List<String> times) { this.times = times; }
     public List<Integer> getDays() { return days; }
     public void setDays(List<Integer> days) { this.days = days; }
-    public Map<String, Object> getWindow() { return window; }
-    public void setWindow(Map<String, Object> window) { this.window = window; }
+    public ScheduleWindow getWindow() { return window; }
+    public void setWindow(ScheduleWindow window) { this.window = window; }
     public String getTargetMode() { return targetMode; }
     public void setTargetMode(String targetMode) { this.targetMode = targetMode; }
     public List<String> getTargets() { return targets; }
     public void setTargets(List<String> targets) { this.targets = targets; }
-    public Map<String, Object> getFilter() { return filter; }
-    public void setFilter(Map<String, Object> filter) { this.filter = filter; }
+    public ScheduleFilter getFilter() { return filter; }
+    public void setFilter(ScheduleFilter filter) { this.filter = filter; }
     public List<String> getExclude() { return exclude; }
     public void setExclude(List<String> exclude) { this.exclude = exclude; }
     public String getMode() { return mode; }
