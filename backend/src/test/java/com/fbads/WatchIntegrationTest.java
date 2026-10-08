@@ -1,21 +1,21 @@
 package com.fbads;
 
-import com.fbads.client.FbException;
-import com.fbads.client.GraphClient;
 import com.fbads.engine.EngineClock;
 import com.fbads.engine.EngineWatch;
+import com.fbads.facebook.FacebookActions;
+import com.fbads.facebook.FacebookAuth;
+import com.fbads.facebook.FacebookGraph;
+import com.fbads.facebook.FacebookObjects;
+import com.fbads.facebook.FacebookState;
+import com.fbads.facebook.FbException;
+import com.fbads.facebook.GraphClient;
 import com.fbads.log.LogService;
 import com.fbads.notify.Notice;
+import com.fbads.notify.NotifyTargetRepository;
 import com.fbads.notify.SendResult;
 import com.fbads.notify.channel.TelegramChannel;
-import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.WsState;
-import com.fbads.service.facebook.FacebookActions;
-import com.fbads.service.facebook.FacebookAuth;
-import com.fbads.service.facebook.FacebookGraph;
-import com.fbads.service.facebook.FacebookObjects;
-import com.fbads.service.facebook.FacebookState;
 import com.fbads.settings.SettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -61,7 +61,7 @@ class WatchIntegrationTest extends IntegrationBase {
     @Autowired
     LogService logs;
     @Autowired
-    com.fbads.client.RateLimits limits;
+    com.fbads.facebook.RateLimits limits;
 
     GraphStub fbStub;
     TelegramStub tg;

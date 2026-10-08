@@ -5,9 +5,6 @@ import com.fbads.company.CompanyJson.NewReport;
 import com.fbads.company.CompanyJson.RemoteReport;
 import com.fbads.company.CompanyJson.ReportUpdate;
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.CompanyConfig;
-import com.fbads.entity.CompanyReport;
-import com.fbads.repository.CompanyReportRepository;
 import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Component;
 

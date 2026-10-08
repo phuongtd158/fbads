@@ -1,7 +1,7 @@
 package com.fbads.config;
 
-import com.fbads.dto.FbSnapshots;
-import com.fbads.dto.Responses.FbAccounts;
+import com.fbads.facebook.FbAccounts;
+import com.fbads.facebook.FbSnapshots;
 import org.springframework.boot.cache.autoconfigure.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;

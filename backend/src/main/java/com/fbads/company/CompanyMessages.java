@@ -1,8 +1,6 @@
 package com.fbads.company;
 
 import com.fbads.common.Fmt;
-import com.fbads.entity.CompanyConfig;
-import com.fbads.entity.CompanyReport;
 import com.fbads.event.EventBus;
 import com.fbads.log.LogEntry;
 import com.fbads.log.LogError;

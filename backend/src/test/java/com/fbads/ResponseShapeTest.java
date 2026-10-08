@@ -1,11 +1,11 @@
 package com.fbads;
 
+import com.fbads.company.CompanyConfig;
+import com.fbads.company.CompanyConfigRepository;
+import com.fbads.company.CompanyReportRepository;
 import com.fbads.company.CompanyRules;
-import com.fbads.entity.CompanyConfig;
-import com.fbads.repository.CompanyConfigRepository;
-import com.fbads.repository.CompanyReportRepository;
+import com.fbads.facebook.FacebookState;
 import com.fbads.security.WorkspaceContext;
-import com.fbads.service.facebook.FacebookState;
 import com.fbads.settings.SettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

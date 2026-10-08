@@ -1,6 +1,5 @@
 package com.fbads.notify;
 
-import com.fbads.entity.NotifyTarget;
 import com.fbads.event.AppEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

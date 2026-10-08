@@ -10,6 +10,7 @@
  * </ul>
  * Thêm kênh mới = thêm một class cài {@code NotifyChannel} trong gói {@code channel}. Không phải sửa nơi phát thông báo.
  * <p>
- * Đọc trước: Notice, NotifyChannel, rồi Notifier.
+ * Đọc trước: Notice, NotifyChannel, rồi Notifier. Kênh của workspace lưu ở NotifyTarget (bảng notify_targets),
+ * quản lý qua NotifyController → NotifyTargetService.
  */
 package com.fbads.notify;

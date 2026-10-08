@@ -1,16 +1,16 @@
 package com.fbads;
 
-import com.fbads.client.GraphClient;
 import com.fbads.engine.AlertWatch;
 import com.fbads.engine.EngineClock;
+import com.fbads.facebook.FacebookGraph;
+import com.fbads.facebook.FacebookInsights.HourSpend;
+import com.fbads.facebook.FacebookState;
+import com.fbads.facebook.GraphClient;
 import com.fbads.log.LogService;
+import com.fbads.notify.NotifyTargetRepository;
 import com.fbads.notify.channel.TelegramChannel;
-import com.fbads.repository.NotifyTargetRepository;
 import com.fbads.security.WorkspaceContext;
 import com.fbads.service.WsState;
-import com.fbads.service.facebook.FacebookGraph;
-import com.fbads.service.facebook.FacebookInsights.HourSpend;
-import com.fbads.service.facebook.FacebookState;
 import com.fbads.settings.SettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +37,7 @@ class AlertsIntegrationTest extends IntegrationBase {
     @Autowired EngineClock clock;
     @Autowired WsState state;
     @Autowired LogService logs;
-    @Autowired com.fbads.client.RateLimits limits;
+    @Autowired com.fbads.facebook.RateLimits limits;
 
     GraphStub fbStub;
     TelegramStub tg;

@@ -4,11 +4,8 @@ import com.fbads.ads.AdObject;
 import com.fbads.ads.Metrics;
 import com.fbads.common.Ids;
 import com.fbads.engine.EngineClock;
-import com.fbads.entity.CompanyConfig;
-import com.fbads.entity.CompanyReport;
-import com.fbads.repository.CompanyReportRepository;
-import com.fbads.service.facebook.FacebookInsights;
-import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.facebook.FacebookInsights;
+import com.fbads.facebook.FacebookObjects;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;

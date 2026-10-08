@@ -2,6 +2,7 @@ package com.fbads.engine;
 
 import com.fbads.ads.AdObject;
 import com.fbads.common.Fmt;
+import com.fbads.facebook.FacebookActions;
 import com.fbads.log.LogAction;
 import com.fbads.log.LogChange;
 import com.fbads.log.LogEntry;
@@ -11,7 +12,6 @@ import com.fbads.log.LogService;
 import com.fbads.log.LogSnapshot;
 import com.fbads.log.LogTarget;
 import com.fbads.service.EngineState;
-import com.fbads.service.facebook.FacebookActions;
 import com.fbads.settings.AppSettings;
 import com.fbads.settings.SettingsService;
 import org.springframework.stereotype.Service;

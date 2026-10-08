@@ -2,8 +2,8 @@ package com.fbads.log;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fbads.client.FbException;
 import com.fbads.common.JsonConverters;
+import com.fbads.facebook.FbException;
 
 import java.util.Map;
 

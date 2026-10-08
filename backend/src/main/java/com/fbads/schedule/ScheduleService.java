@@ -5,7 +5,7 @@ import com.fbads.common.Ids;
 import com.fbads.common.ValidationException;
 import com.fbads.dto.Saved;
 import com.fbads.engine.EngineLock;
-import com.fbads.service.facebook.FacebookObjects;
+import com.fbads.facebook.FacebookObjects;
 import com.fbads.validation.Result;
 import org.springframework.stereotype.Service;
 

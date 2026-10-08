@@ -1,10 +1,10 @@
 package com.fbads;
 
 import com.fbads.common.Ids;
-import com.fbads.entity.NotifyTarget;
 import com.fbads.notify.Notice;
+import com.fbads.notify.NotifyTarget;
+import com.fbads.notify.NotifyTargetRepository;
 import com.fbads.notify.channel.TelegramChannel;
-import com.fbads.repository.NotifyTargetRepository;
 
 import java.util.Arrays;
 import java.util.Map;

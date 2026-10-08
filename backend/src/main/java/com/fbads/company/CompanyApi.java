@@ -7,7 +7,6 @@ import com.fbads.company.CompanyJson.ErrorBody;
 import com.fbads.company.CompanyJson.LoginResponse;
 import com.fbads.company.CompanyJson.RemoteReport;
 import com.fbads.company.CompanyJson.User;
-import com.fbads.entity.CompanyConfig;
 import com.fbads.security.WorkspaceContext;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.json.JsonMapper;

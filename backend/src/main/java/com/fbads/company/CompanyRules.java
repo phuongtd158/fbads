@@ -4,10 +4,6 @@ import com.fbads.ads.AdObject;
 import com.fbads.ads.Metrics;
 import com.fbads.company.CompanyJson.NewReport;
 import com.fbads.company.CompanyJson.ReportUpdate;
-import com.fbads.dto.CompanyConfigPatch;
-import com.fbads.dto.CompanyReportPatch;
-import com.fbads.entity.CompanyConfig;
-import com.fbads.entity.CompanyReport;
 import com.fbads.validation.Result;
 
 import java.net.URI;

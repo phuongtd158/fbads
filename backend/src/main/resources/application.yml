@@ -79,7 +79,7 @@ resilience4j:
         wait-duration: 1s
         exponential-backoff-multiplier: 3
         enable-exponential-backoff: true
-        retry-exception-predicate: com.fbads.client.GraphClient$Transient
+        retry-exception-predicate: com.fbads.facebook.GraphClient$Transient
 
 fbads:
   public-dir: ${PUBLIC_DIR:../frontend/dist}   # bản build giao diện Vue (cd frontend && npm run build)
