@@ -1,7 +1,7 @@
 // Gợi ý cách khắc phục theo mã lỗi Facebook / nội dung lỗi của tool.
 // Trả về [{ text, to?, cta? }] — `to` là đường dẫn trong app để sửa nhanh.
 
-export const KIND_LABEL = { schedule: 'Lịch tự động', rule: 'Rule hiệu quả', manual: 'Thủ công', undo: 'Hoàn tác', company: 'Báo cáo công ty', system: 'Hệ thống' }
+export const KIND_LABEL = { schedule: 'Lịch tự động', rule: 'Rule hiệu quả', manual: 'Thủ công', undo: 'Hoàn tác', unhold: 'Bỏ tạm hoãn', company: 'Báo cáo công ty', system: 'Hệ thống' }
 export const MODE_LABEL = { mock: 'Dùng thử (dữ liệu giả)', dry: 'Chạy thử (không thay đổi camp thật)', live: 'Chạy thật' }
 
 // Nhật ký cũ chưa có `kind`: suy ra từ chữ đầu của nguồn

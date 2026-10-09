@@ -221,6 +221,17 @@ test('hoàn tác: tắt camp rồi hoàn tác thì bật lại; không hoàn tá
   assert.ok(S().state.hold['r1:mock_1'] > Date.now()) // rule tạm hoãn để không tắt lại ngay
 })
 
+test('bỏ tạm hoãn: xoá hoãn sau hoàn tác, ghi nhật ký; không có hoãn/rule thì báo lỗi', async () => {
+  S().rules.push({ id: 'r1', name: 'Tắt camp đắt', enabled: true })
+  S().state.hold['r1:mock_1'] = Date.now() + 3600e3
+  const entry = await engine.clearHold('r1', 'mock_1')
+  assert.equal(entry.kind, 'unhold')
+  assert.equal(S().state.hold['r1:mock_1'], undefined)
+  assert.ok(S().logs.find((l) => l.kind === 'unhold' && l.refId === 'r1'))
+  await assert.rejects(() => engine.clearHold('r1', 'mock_1'), /không còn tạm hoãn/)
+  await assert.rejects(() => engine.clearHold('nope', 'mock_1'), /Không tìm thấy rule/)
+})
+
 test('hoàn tác: ngân sách về giá trị cũ', async () => {
   await engine.act(await camp('mock_2'), { type: 'budget', mode: 'percent', value: 20 }, 'Lịch: t', { kind: 'schedule', refId: 's1' })
   assert.equal((await camp('mock_2')).dailyBudget, 360000)
