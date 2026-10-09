@@ -120,7 +120,7 @@ const runNow = async () => { await api('rules/run', 'POST'); toast('Đã kiểm 
     <RuleEditor v-model="editor" :item="editing" @saved="loadState(); loadActivity()" />
 
     <Modal v-model="pvOpen" title="Xem trước rule" :subtitle="pvRule && pvRule.name" width="640px">
-      <RulePreview :data="pvData" :rule="pvRule" :loading="pvLoading" :error="pvError" />
+      <RulePreview :data="pvData" :rule="pvRule" :loading="pvLoading" :error="pvError" @changed="openPreview(pvRule)" />
       <template #footer><Btn variant="primary" @click="pvOpen = false">Đóng</Btn></template>
     </Modal>
   </div>

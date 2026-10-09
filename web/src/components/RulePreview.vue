@@ -1,5 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { api } from '../lib/api'
+import { confirm, toast, toastError } from '../stores/ui'
 import { Loader2, CheckCircle2, MinusCircle, SkipForward, CircleAlert, Eye, Bell } from 'lucide-vue-next'
 import { fmt, fmtDec } from '../lib/format'
 import { METRICS, METRIC_SHORT, RANGE_LABEL } from '../lib/constants'
@@ -9,6 +11,22 @@ import Callout from './Callout.vue'
 
 // data: kết quả /api/rules/preview; rule: rule đang xem (để định dạng số liệu)
 const props = defineProps({ data: Object, rule: Object, loading: Boolean, error: String })
+// changed: đã bỏ tạm hoãn một mục → trang cha chạy lại xem trước
+const emit = defineEmits(['changed'])
+
+// Bỏ tạm hoãn sau hoàn tác (chỉ rule đã lưu mới có tạm hoãn)
+const unholding = ref('')
+async function unhold(i) {
+  const ruleId = props.data && props.data.ruleId
+  if (!ruleId || unholding.value) return
+  if (!await confirm('Bỏ tạm hoãn?', `Rule sẽ có thể tác động lại “${i.name}” ở lần kiểm tra tới.`, { ok: 'Bỏ tạm hoãn' })) return
+  unholding.value = i.id
+  try {
+    await api(`rules/${encodeURIComponent(ruleId)}/hold/${encodeURIComponent(i.id)}/clear`, 'POST')
+    toast('Đã bỏ tạm hoãn')
+    emit('changed')
+  } catch (e) { toastError(e) } finally { unholding.value = '' }
+}
 
 const order = { match: 0, error: 1, skip: 2, nochange: 3, nomatch: 4 }
 const items = computed(() => [...((props.data && props.data.items) || [])].sort((a, b) => order[a.status] - order[b.status]))
@@ -66,7 +84,7 @@ const modeNote = computed(() => {
           <div class="tx">
             <b>{{ i.name }}<Badge v-if="i.learning" tone="info">Đang học</Badge></b>
             <small v-if="i.status === 'match'" class="muted"><Bell v-if="i.result && i.result.notify" :size="12" /> <b>{{ line(i) }}</b> · {{ i.result ? i.result.detail : '' }}</small>
-            <small v-else-if="i.reason" class="muted"><template v-if="i.hit || i.code === 'notarget' || i.code === 'nobaseline'"><b>{{ line(i) }}</b> · </template>{{ i.reason }}</small>
+            <small v-else-if="i.reason" class="muted"><template v-if="i.hit || i.code === 'notarget' || i.code === 'nobaseline'"><b>{{ line(i) }}</b> · </template>{{ i.reason }}<button v-if="i.code === 'hold' && data.ruleId" type="button" class="unhold" :disabled="unholding === i.id" @click="unhold(i)"><Loader2 v-if="unholding === i.id" class="spin" :size="12" />Bỏ tạm hoãn</button></small>
             <small v-else class="faint">{{ line(i) }} · chi tiêu {{ fmt(i.spend) }}</small>
           </div>
           <Badge :tone="meta[i.status].tone">{{ meta[i.status].label }}</Badge>
@@ -84,6 +102,8 @@ header { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin
 .sum { margin: 0 0 4px; font-size: 14.5px; } .note { margin: 0 0 10px; font-size: 13px; }
 .more { margin-top: 8px; border: 0; background: none; padding: 4px 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
 .more:hover { text-decoration: underline; }
+.unhold { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; padding: 2px 9px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface-2); font: inherit; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; vertical-align: middle; }
+.unhold:hover { border-color: var(--accent); } .unhold:disabled { opacity: .6; cursor: default; }
 ul:empty { display: none; }
 ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; max-height: 260px; overflow: auto; }
 li { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); }

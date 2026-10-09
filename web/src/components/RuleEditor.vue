@@ -321,7 +321,7 @@ const advSummary = computed(() => {
 
       <Callout v-for="w in check.warnings" :key="w" tone="warning">{{ w }}</Callout>
 
-      <RulePreview v-if="pv || pvLoading || pvError" :data="pv" :rule="check.value" :loading="pvLoading" :error="pvError" />
+      <RulePreview v-if="pv || pvLoading || pvError" :data="pv" :rule="check.value" :loading="pvLoading" :error="pvError" @changed="preview" />
     </div>
 
     <template #footer>
