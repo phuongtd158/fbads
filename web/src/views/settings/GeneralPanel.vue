@@ -43,7 +43,7 @@ async function save() {
       <p>
         <b>Nơi lưu dữ liệu:</b>
         <template v-if="state.storage.mode === 'remote'"> {{ state.storage.provider }}, đã mã hoá bằng DATA_KEY; thay đổi được đồng bộ tự động.</template>
-        <template v-else> file <code>data.json</code> trên máy chủ.</template>
+        <template v-else> bộ nhớ tạm (không lưu).</template>
         <span v-if="state.storage.lastSavedAt" class="muted"> Lần lưu cuối: {{ timeOf(state.storage.lastSavedAt) }}.</span>
         <span v-if="state.storage.lastError"> Lỗi gần nhất: {{ state.storage.lastError }}.</span>
       </p>

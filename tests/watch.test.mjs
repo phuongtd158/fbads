@@ -131,7 +131,7 @@ test('không xong lượt nào trong 5 phút: /health trả không ổn', async 
 test('/api/health không cần đăng nhập, trả 200 khi vòng tự động đang chạy', async () => {
   const port = 10600 + Math.floor(Math.random() * 400)
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'fbads-health-test-'))
-  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, PORT: String(port), HOST: '127.0.0.1', DATA_DIR: data, APP_PASSWORD: crypto.randomBytes(12).toString('base64url') } // bật đăng nhập; mật khẩu ngẫu nhiên, test không cần biết
+  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, PORT: String(port), HOST: '127.0.0.1', STORE_MEMORY: '1', APP_PASSWORD: crypto.randomBytes(12).toString('base64url') } // bật đăng nhập; mật khẩu ngẫu nhiên, test không cần biết
   const proc = spawn(process.execPath, ['server.js'], { cwd: path.resolve(import.meta.dirname, '..'), env })
   // fetch trong file này là hàm giả → gọi server bằng http
   const call = (method, p) => new Promise((resolve, reject) => {

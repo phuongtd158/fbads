@@ -91,7 +91,7 @@ for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => shutdown(sig));
   });
   server.listen(PORT, HOST, () => {
     const st = store.status();
-    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : 'file data.json'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
+    console.log(`\n  Facebook Ads Auto Tool đang chạy: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n  Đăng nhập: ${auth.enabled() ? 'BẬT' : 'tắt (chỉ dùng trên máy này)'}\n  Lưu dữ liệu: ${st.mode === 'remote' ? `${st.provider} (đã mã hoá bằng DATA_KEY)` : 'bộ nhớ tạm (chỉ để kiểm thử, không lưu)'}\n  Giữ cửa sổ này mở để lịch tự động hoạt động.\n`);
     engine.start();
     require('./lib/tgbot').start(); // chỉ hỏi tin Telegram khi đã bật "Nhận lệnh từ Telegram"
   });

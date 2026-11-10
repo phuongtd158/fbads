@@ -1,23 +1,15 @@
-// Kiểm thử lớp lưu trữ: mã hoá, Upstash (server giả chạy cục bộ), chống ghi đè khi lỗi, cách ly file hỏng.
-import { test, after } from 'node:test'
+// Kiểm thử lớp lưu trữ: mã hoá, Upstash (server giả chạy cục bộ), chống ghi đè khi lỗi. Không còn lưu file.
+import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import http from 'node:http'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
 
-const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fbads-store-'))
-// BẮT BUỘC đặt trước khi nạp store: lib/store.js tạo sẵn 1 bản dùng DATA_DIR, nếu không đặt nó sẽ đọc/cách ly data.json THẬT của dự án
-process.env.DATA_DIR = tmp()
+process.env.STORE_MEMORY = '1' // bản store tạo sẵn khi nạp module chạy ở chế độ bộ nhớ
 delete process.env.UPSTASH_REDIS_REST_URL; delete process.env.UPSTASH_REDIS_REST_TOKEN
 const require = createRequire(import.meta.url)
 const remote = require('../lib/remote')
 const { create } = require('../lib/store')
 
-const dirs = [process.env.DATA_DIR]
-const newDir = () => { const d = tmp(); dirs.push(d); return d }
-after(() => { for (const d of dirs) fs.rmSync(d, { recursive: true, force: true }) })
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ----- Server Upstash giả: POST / với ["GET"|"SET", ...]; đếm lệnh, có thể cố tình trả lỗi -----
@@ -46,7 +38,7 @@ async function fake() {
   return s
 }
 const envFor = (s, key = 'khoa-bi-mat-rat-dai-123') => ({ UPSTASH_REDIS_REST_URL: s.url, UPSTASH_REDIS_REST_TOKEN: s.token, DATA_KEY: key })
-const mk = (s, extra = {}) => create({ dir: newDir(), env: envFor(s, extra.key), debounceMs: 20, retryBaseMs: 20, startRetryMs: 5, ...extra.opts })
+const mk = (s, extra = {}) => create({ env: envFor(s, extra.key), debounceMs: 20, retryBaseMs: 20, startRetryMs: 5, ...extra.opts })
 
 // ----- Mã hoá -----
 test('mã hoá: khứ hồi đúng, không lộ nội dung, mỗi lần một bản khác nhau', () => {
@@ -68,7 +60,7 @@ test('mã hoá: sai khoá hoặc bị sửa đều bị từ chối (BAD_KEY), �
 })
 
 // ----- Cấu hình -----
-test('cấu hình: không đặt gì → chế độ file; thiếu/sai → lỗi rõ ràng', () => {
+test('cấu hình: không đặt gì → null; thiếu/sai → lỗi rõ ràng', () => {
   assert.equal(remote.config({}), null)
   assert.throws(() => remote.config({ UPSTASH_REDIS_REST_URL: 'https://a.upstash.io' }), /cả UPSTASH/)
   assert.throws(() => remote.config({ UPSTASH_REDIS_REST_URL: 'khong-phai-url', UPSTASH_REDIS_REST_TOKEN: 't' }), /hợp lệ/)
@@ -78,8 +70,8 @@ test('cấu hình: không đặt gì → chế độ file; thiếu/sai → lỗi
   assert.ok(remote.config({ UPSTASH_REDIS_REST_URL: 'https://a.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't', DATA_KEY: 'x'.repeat(20) }))
 })
 
-test('cấu hình sai thì init() từ chối, không âm thầm chạy chế độ file', async () => {
-  const st = create({ dir: newDir(), env: { UPSTASH_REDIS_REST_URL: 'https://a.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't' } })
+test('cấu hình sai thì init() từ chối, không âm thầm chạy chế độ khác', async () => {
+  const st = create({ env: { UPSTASH_REDIS_REST_URL: 'https://a.upstash.io', UPSTASH_REDIS_REST_TOKEN: 't' } })
   await assert.rejects(st.init(), /DATA_KEY/)
 })
 
@@ -163,7 +155,7 @@ test('Upstash không đọc được lúc khởi động: dừng lại, không g
 
 test('token Upstash sai: báo lỗi, không lộ token trong thông báo', async () => {
   const s = await fake()
-  const st = create({ dir: newDir(), env: { ...envFor(s), UPSTASH_REDIS_REST_TOKEN: 'token-sai-nhung-dai' }, startRetryMs: 1 })
+  const st = create({ env: { ...envFor(s), UPSTASH_REDIS_REST_TOKEN: 'token-sai-nhung-dai' }, startRetryMs: 1 })
   await assert.rejects(st.init(), (e) => /401/.test(e.message) && !e.message.includes('token-sai-nhung-dai'))
   s.close()
 })
@@ -184,79 +176,32 @@ test('ghi lỗi giữa chừng: giữ thay đổi và tự thử lại tới khi
   s.close()
 })
 
-// ----- Chế độ file -----
-test('file hỏng: cách ly (không xoá, không ghi đè), khôi phục từ bản sao gần nhất, ghi nhật ký', () => {
-  const dir = newDir()
-  const good = { settings: { accessToken: 'tok-cu' }, rules: [{ id: 'r1' }], schedules: [], logs: [], state: {} }
-  fs.writeFileSync(path.join(dir, 'data.json.bak-2026-09-20'), JSON.stringify(good))
-  fs.writeFileSync(path.join(dir, 'data.json.bak-2026-09-21'), '{ hỏng nốt')
-  fs.writeFileSync(path.join(dir, 'data.json'), '{ "a": "GET",`1 }')
-  const st = create({ dir, env: {} })
-  assert.equal(st.get().settings.accessToken, 'tok-cu')
+// ----- Không có Upstash -----
+test('không cấu hình Upstash (và không phải chế độ bộ nhớ) → init() từ chối, không ghi file', async () => {
+  const st = create({ env: {} })
+  await assert.rejects(st.init(), /Chưa cấu hình Upstash/)
+})
+
+test('chế độ bộ nhớ (kiểm thử): dùng được ngay, không lưu đi đâu', async () => {
+  const st = create({ env: { STORE_MEMORY: '1' } })
+  await st.init()
+  st.get().rules.push({ id: 'r1' }); st.save()
+  assert.equal(st.status().mode, 'memory')
   assert.equal(st.get().rules.length, 1)
-  const files = fs.readdirSync(dir)
-  const q = files.find((f) => f.startsWith('data.json.corrupt-'))
-  assert.ok(q, 'file hỏng được giữ lại')
-  assert.equal(fs.readFileSync(path.join(dir, q), 'utf8'), '{ "a": "GET",`1 }')
-  assert.match(st.get().logs[0].detail, /khôi phục từ bản sao data\.json\.bak-2026-09-20/)
-  assert.equal(st.get().logs[0].ok, false)
-  assert.ok(JSON.parse(fs.readFileSync(path.join(dir, 'data.json'), 'utf8')).rules.length === 1)
-})
-
-test('file hỏng và chưa có bản sao: bắt đầu trống nhưng vẫn giữ file hỏng để cứu tay', () => {
-  const dir = newDir()
-  fs.writeFileSync(path.join(dir, 'data.json'), 'không phải json')
-  const st = create({ dir, env: {} })
-  assert.equal(st.get().rules.length, 0)
-  assert.ok(fs.readdirSync(dir).some((f) => f.startsWith('data.json.corrupt-')))
-  assert.match(st.get().logs[0].detail, /bắt đầu với dữ liệu trống/)
-})
-
-test('file là mảng/null cũng coi là hỏng', () => {
-  for (const body of ['[]', 'null', '"chuoi"']) {
-    const dir = newDir(); fs.writeFileSync(path.join(dir, 'data.json'), body)
-    const st = create({ dir, env: {} })
-    assert.equal(st.get().rules.length, 0)
-    assert.ok(fs.readdirSync(dir).some((f) => f.startsWith('data.json.corrupt-')), body)
-  }
-})
-
-test('bản sao hằng ngày: lần lưu đầu trong ngày chép trạng thái trước đó, chỉ giữ 7 bản', () => {
-  const dir = newDir()
-  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: { accessToken: 'hom-qua' } }))
-  for (let d = 1; d <= 9; d++) fs.writeFileSync(path.join(dir, `data.json.bak-2026-01-0${d}`), '{}')
-  const st = create({ dir, env: {} })
-  st.get().settings.accessToken = 'hom-nay'; st.save()
-  const today = new Date().toISOString().slice(0, 10)
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, `data.json.bak-${today}`), 'utf8')).settings.accessToken, 'hom-qua')
-  assert.equal(fs.readdirSync(dir).filter((f) => f.includes('.bak-')).length, 7)
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'data.json'), 'utf8')).settings.accessToken, 'hom-nay')
-  st.save() // lần lưu thứ hai trong ngày không đè bản sao
-  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, `data.json.bak-${today}`), 'utf8')).settings.accessToken, 'hom-qua')
-})
-
-test('lần đầu có data.json cục bộ: được đưa lên Upstash', async () => {
-  const s = await fake()
-  const dir = newDir()
-  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: { adAccountId: 'act_999' }, rules: [{ id: 'r9' }] }))
-  const st = create({ dir, env: envFor(s), debounceMs: 20, startRetryMs: 5 }); await st.init()
-  assert.equal(st.get().settings.adAccountId, 'act_999')
-  const other = mk(s); await other.init()
-  assert.equal(other.get().rules[0].id, 'r9')
-  s.close()
 })
 
 test('dữ liệu cũ chỉ có 1 tài khoản quảng cáo → tự chuyển sang danh sách nhiều tài khoản', async () => {
-  const dir = newDir()
-  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: { adAccountId: '9876543', mock: false } }))
-  const st = create({ dir, env: {} })
+  const s = await fake()
+  s.kv.set('fbads:data', remote.encode(JSON.stringify({ settings: { adAccountId: '9876543', mock: false } }), 'khoa-bi-mat-rat-dai-123'))
+  const st = mk(s)
   await st.init()
+  s.close()
   assert.deepEqual(st.get().settings.adAccountIds, ['9876543'])
   assert.equal(st.get().settings.adAccountId, '9876543')
 })
 
-test('báo cáo công ty mốc 9h tạo theo cách tính ngày cũ mà chưa gửi thì bị bỏ khi mở dữ liệu', () => {
-  const dir = newDir()
+test('báo cáo công ty mốc 9h tạo theo cách tính ngày cũ mà chưa gửi thì bị bỏ khi mở dữ liệu', async () => {
+  const s = await fake()
   const companyReports = [
     { id: 'a', slot: 9, date: '2026-10-04', status: 'exists' },
     { id: 'b', slot: 9, date: '2026-10-04', status: 'sent' },
@@ -264,7 +209,8 @@ test('báo cáo công ty mốc 9h tạo theo cách tính ngày cũ mà chưa g�
     { id: 'd', slot: 9, date: '2026-10-05', status: 'failed', dateRule: 2 }, // ghi nhầm ngày nộp (công ty từ chối)
     { id: 'e', slot: 9, date: '2026-10-04', status: 'pending', dateRule: 3 },
   ]
-  fs.writeFileSync(path.join(dir, 'data.json'), JSON.stringify({ settings: {}, rules: [], schedules: [], logs: [], state: {}, companyReports }))
-  const st = create({ dir, env: {} })
+  s.kv.set('fbads:data', remote.encode(JSON.stringify({ settings: {}, rules: [], schedules: [], logs: [], state: {}, companyReports }), 'khoa-bi-mat-rat-dai-123'))
+  const st = mk(s); await st.init()
   assert.deepEqual(st.get().companyReports.map((r) => r.id), ['b', 'c', 'e'])
+  s.close()
 })

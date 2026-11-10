@@ -14,7 +14,7 @@ const BASE = `http://127.0.0.1:${PORT}`
 let proc
 
 before(async () => {
-  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: dir, APP_PASSWORD: crypto.randomBytes(12).toString('base64url') } // bật đăng nhập; mật khẩu ngẫu nhiên
+  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, PORT: String(PORT), HOST: '127.0.0.1', STORE_MEMORY: '1', APP_PASSWORD: crypto.randomBytes(12).toString('base64url') } // bật đăng nhập; mật khẩu ngẫu nhiên
   proc = spawn(process.execPath, ['server.js'], { cwd: path.resolve(import.meta.dirname, '..'), env })
   let out = ''
   proc.stdout.on('data', (d) => (out += d)); proc.stderr.on('data', (d) => (out += d))

@@ -55,31 +55,26 @@ Dùng **Facebook Login for Business** thì tạo một cấu hình có 2 quyền
 An toàn: file .bat từ chối mở đường hầm nếu đang có một bản tool chạy sẵn mà **không có mật khẩu**. Máy phải bật thì link mới dùng được; dùng lâu dài nên chuyển sang VPS.
 
 ## Nơi lưu dữ liệu
-Tool có 2 chế độ lưu, chọn bằng biến môi trường:
-- **File `data.json`** (mặc định) trong `DATA_DIR`. Mỗi ngày tự giữ 1 bản sao `data.json.bak-<ngày>` (7 bản gần nhất). Nếu file bị hỏng, tool **không ghi đè**: đổi tên file hỏng thành `data.json.corrupt-<giờ>`, khôi phục từ bản sao gần nhất và ghi một dòng cảnh báo vào Nhật ký.
-- **Upstash Redis** (khi đặt `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` + `DATA_KEY`): dùng khi nơi chạy **không có ổ đĩa bền** (Render gói Free). Toàn bộ dữ liệu được nén và **mã hoá AES-256-GCM bằng `DATA_KEY`** trước khi gửi đi, nên Upstash không đọc được token hay cấu hình. Thay đổi được gộp và ghi sau ~1,5 giây, tự thử lại khi lỗi mạng (giao diện hiện cảnh báo đỏ khi chưa ghi được) và được ghi nốt khi tool bị tắt. Nếu lúc khởi động không đọc được dữ liệu (mạng lỗi, sai `DATA_KEY`) thì tool **dừng lại** thay vì chạy với dữ liệu trống rồi ghi đè.
+Dữ liệu **chỉ lưu ở Upstash Redis**, không ghi file nào ra ổ đĩa. Bắt buộc đặt `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` + `DATA_KEY` (có thể để trong file `.env` cạnh `server.js`); thiếu thì tool từ chối khởi động.
+- Toàn bộ dữ liệu được nén và **mã hoá AES-256-GCM bằng `DATA_KEY`** trước khi gửi đi, nên Upstash không đọc được token hay cấu hình. Thay đổi được gộp và ghi sau ~1,5 giây, tự thử lại khi lỗi mạng (giao diện hiện cảnh báo đỏ khi chưa ghi được) và được ghi nốt khi tool bị tắt. Nếu lúc khởi động không đọc được dữ liệu (mạng lỗi, sai `DATA_KEY`) thì tool **dừng lại** thay vì chạy với dữ liệu trống rồi ghi đè.
   - **Lưu `DATA_KEY` ở nơi khác** (trình quản lý mật khẩu). Mất khoá thì không giải mã được dữ liệu trên Upstash (token nhập lại được, lịch/rule phải tạo lại). Đừng đổi `DATA_KEY` khi đã có dữ liệu.
   - Chỉ chạy **một nơi** dùng chung một Upstash: hai bản cùng chạy sẽ ghi đè nhau và làm việc hai lần trên cùng tài khoản Facebook.
-  - Lần đầu, nếu chạy ở máy có sẵn `data.json` thì dữ liệu đó được đưa lên Upstash (dùng để chuyển từ máy bạn lên Render).
   - Đặt biến `UPSTASH_…` mà thiếu `DATA_KEY` (hoặc sai định dạng) thì tool từ chối khởi động và nói rõ thiếu gì.
 
 ## Deploy lên Render
-### Cách A: gói Free + Upstash (không mất tiền)
+### Gói Free + Upstash (không mất tiền)
 Gói Free không có ổ đĩa, nên dữ liệu để ở Upstash. Gói Free còn **tự ngủ sau 15 phút không có truy cập**, nên cần một dịch vụ bên ngoài gọi vào định kỳ để giữ tool thức (bước 4), nếu không lịch buổi sáng có thể không chạy đúng giờ.
 1. **Upstash**: đăng ký upstash.com → Create Database (Redis, chọn vùng gần Singapore) → tab **REST API**: sao chép `UPSTASH_REDIS_REST_URL` và `UPSTASH_REDIS_REST_TOKEN`.
 2. **Tạo `DATA_KEY`**: chuỗi ngẫu nhiên dài, ví dụ chạy `node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"`. Lưu nó vào trình quản lý mật khẩu.
 3. **Render**: dashboard.render.com → **New → Blueprint** → repo này, nhánh `dev`. Render đọc `render.yaml` (Docker, gói Free, Singapore). Khi được hỏi, nhập 4 biến: `APP_PASSWORD` (mật khẩu đăng nhập), `DATA_KEY`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`. Bấm Apply.
-   - Nếu đã tạo service tay: **Environment** → thêm 4 biến trên (và `TZ` = `Asia/Ho_Chi_Minh`), **xoá `DATA_DIR`** nếu có, rồi Deploy lại. Gói Free thì không gắn Disk.
+   - Nếu đã tạo service tay: **Environment** → thêm 4 biến trên (và `TZ` = `Asia/Ho_Chi_Minh`), xoá `DATA_DIR` nếu có (không còn dùng), rồi Deploy lại. 
 4. **Giữ tool thức**: dùng UptimeRobot (hoặc dịch vụ tương tự) tạo monitor HTTP(s) gọi `https://<tên>.onrender.com/api/health` mỗi 5 phút. Bật cảnh báo qua Telegram/email: `/api/health` báo lỗi cả khi web còn sống mà vòng lịch/rule đã ngừng.
    - Service tạo tay (không qua Blueprint) thì `render.yaml` không có tác dụng: vào **Settings → Health Check Path** đặt `/api/health`.
 5. Xem log deploy, cần có `Lưu dữ liệu: Upstash (đã mã hoá bằng DATA_KEY)` và `Đăng nhập: BẬT`. Mở địa chỉ tool, đăng nhập rồi vào Cài đặt → Kết nối Facebook. Ở Cài đặt → Chung có dòng "Nơi lưu dữ liệu" cho biết lần lưu cuối.
 
-Lưu ý gói Free: mỗi lần Render khởi động lại tool mất khoảng 1 phút, lịch trễ dưới 10 phút vẫn được chạy bù. Render có thể khởi động lại instance Free bất cứ lúc nào. Lịch phải chạy đúng giờ thì nên dùng cách B.
+Lưu ý gói Free: mỗi lần Render khởi động lại tool mất khoảng 1 phút, lịch trễ dưới 10 phút vẫn được chạy bù. Render có thể khởi động lại instance Free bất cứ lúc nào. Lịch phải chạy đúng giờ thì nên dùng gói trả phí (vẫn dùng Upstash, không cần ổ đĩa).
 
-### Cách B: gói trả phí + ổ đĩa
-Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) gắn vào `/data`. Trong `render.yaml`, bỏ đoạn "Cách A" và bỏ dấu `#` ở đoạn "Cách B" (gói trả phí + `disk` + `DATA_DIR=/data`), rồi Blueprint như trên (chỉ cần nhập `APP_PASSWORD`). Không có Disk thì `data.json` mất mỗi lần deploy.
-
-### Chung cho cả hai cách
+### Chung
 - Chỉ chạy **1 instance**. Đừng chạy song song bản ngrok/máy bạn với cùng token Facebook vì việc sẽ bị làm hai lần.
 - Mỗi lần push lên `dev` Render tự deploy lại (đổi `autoDeployTrigger: off` trong `render.yaml` nếu không muốn).
 - GitHub Actions (`.github/workflows/ci.yml`) chạy `npm test` và build giao diện cho mỗi PR và mỗi lần push lên `dev`. Chỉ merge PR khi CI xanh.
@@ -93,6 +88,6 @@ Không cần Upstash: dữ liệu nằm ở `data.json` trên ổ đĩa (Disk) g
 ## An toàn
 - Mặc định ở chế độ dùng thử (dữ liệu giả). Khi kết nối thật, mặc định "Chạy thử" (chỉ ghi log). Tắt sau vài ngày khi thấy log đúng ý.
 - Server mặc định chỉ lắng nghe 127.0.0.1. Mở ra mạng (`HOST=0.0.0.0`) bắt buộc phải có `APP_PASSWORD`.
-- Token lưu trong `data.json` trên máy bạn (đã nằm trong `.gitignore`) — không chia sẻ file này.
-- Quên mật khẩu đặt trong Cài đặt: tắt tool, mở `data.json`, đặt `passwordHash` thành `""`, chạy lại.
+- Token lưu (đã mã hoá bằng `DATA_KEY`) ở Upstash của bạn; không chia sẻ `DATA_KEY`, token Upstash và file `.env`.
+- Quên mật khẩu đặt trong Cài đặt: đặt biến `APP_PASSWORD` mới rồi chạy lại để đăng nhập, sau đó đổi mật khẩu trong Cài đặt → Bảo mật.
 - Nếu camp dùng CBO (ngân sách ở cấp camp), chỉnh ngân sách ở cấp camp; nhóm QC sẽ không có ngân sách riêng.
